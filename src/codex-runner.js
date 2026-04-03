@@ -1,0 +1,264 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { spawn } from "node:child_process";
+
+const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
+const FORCE_KILL_GRACE_PERIOD_MS = 5_000;
+const HEARTBEAT_INTERVAL_MS = 10_000;
+
+export async function runCodexQuestion({
+  question,
+  model,
+  reasoningEffort,
+  selectedRepos,
+  workspaceRoot,
+  onStatus,
+  timeoutMs = DEFAULT_CODEX_TIMEOUT_MS
+}) {
+  const outputFile = path.join(
+    os.tmpdir(),
+    `archa-codex-${process.pid}-${Date.now()}.txt`
+  );
+  const executionContext = getCodexExecutionContext({ question, selectedRepos, workspaceRoot });
+
+  onStatus?.(
+    `Running Codex in ${executionContext.workingDirectory} with ${model || "default model"} (${reasoningEffort})...`
+  );
+
+  try {
+    await runCodexExec({
+      prompt: executionContext.prompt,
+      model,
+      reasoningEffort,
+      outputFile,
+      workingDirectory: executionContext.workingDirectory,
+      onStatus,
+      timeoutMs
+    });
+
+    return {
+      text: (await fs.readFile(outputFile, "utf8")).trim() || "Codex did not produce a final answer."
+    };
+  } finally {
+    await fs.rm(outputFile, { force: true });
+  }
+}
+
+export function getCodexTimeoutMs(env = process.env) {
+  if (!env.ARCHA_CODEX_TIMEOUT_MS) {
+    return DEFAULT_CODEX_TIMEOUT_MS;
+  }
+
+  const rawTimeoutMs = env.ARCHA_CODEX_TIMEOUT_MS.trim();
+  if (!/^\d+$/u.test(rawTimeoutMs)) {
+    throw new Error(`Invalid ARCHA_CODEX_TIMEOUT_MS: ${env.ARCHA_CODEX_TIMEOUT_MS}. Use a positive integer.`);
+  }
+
+  const timeoutMs = Number.parseInt(rawTimeoutMs, 10);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error(`Invalid ARCHA_CODEX_TIMEOUT_MS: ${env.ARCHA_CODEX_TIMEOUT_MS}. Use a positive integer.`);
+  }
+
+  return timeoutMs;
+}
+
+export function getCodexExecutionContext({ question, selectedRepos, workspaceRoot }) {
+  const workingDirectory = selectedRepos.length === 1 ? selectedRepos[0].directory : workspaceRoot;
+
+  return {
+    workingDirectory,
+    prompt: buildPrompt(question, selectedRepos)
+  };
+}
+
+function buildPrompt(question, selectedRepos) {
+  const repoNames = selectedRepos.map(repo => repo.name).join(", ");
+
+  return [
+    "Answer using the code in the current workspace, but write for someone who does not have access to the codebase.",
+    "Code snippets are allowed when they help explain how to integrate with the service or API.",
+    `These repo candidates look most relevant for answering the question: ${repoNames}.`,
+    "Do not mention file paths or line numbers unless they are necessary.",
+    "Answer the question directly and stop. Do not offer follow-up help or ask whether you should rewrite the answer.",
+    "",
+    "I got the question:",
+    '"""',
+    question,
+    '"""'
+  ].join("\n");
+}
+
+async function runCodexExec({ prompt, model, reasoningEffort, outputFile, workingDirectory, onStatus, timeoutMs }) {
+  const args = [
+    "-c",
+    `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`,
+    "exec",
+    "-C",
+    workingDirectory,
+    "--sandbox",
+    "read-only",
+    "--skip-git-repo-check",
+    "--color",
+    "never",
+    "--output-last-message",
+    outputFile
+  ];
+
+  if (model) {
+    args.push("--model", model);
+  }
+
+  args.push("-");
+
+  const stopHeartbeat = startCodexHeartbeat(onStatus);
+
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn("codex", args, {
+        stdio: ["pipe", "ignore", "pipe"]
+      });
+
+      let stderr = "";
+      let settled = false;
+      let forceKillTimer = null;
+
+      const timeoutTimer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        onStatus?.(`Codex timed out after ${formatTimeoutDuration(timeoutMs)}; stopping...`);
+        child.kill("SIGTERM");
+        forceKillTimer = setTimeout(() => {
+          child.kill("SIGKILL");
+        }, FORCE_KILL_GRACE_PERIOD_MS);
+        cleanupTimedOutChild(child);
+        reject(new Error(formatCodexTimeoutError(timeoutMs, stderr)));
+      }, timeoutMs);
+      timeoutTimer.unref?.();
+
+      child.stdin.write(prompt);
+      child.stdin.end();
+
+      child.stderr.on("data", chunk => {
+        stderr += chunk;
+      });
+      child.on("error", error => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutTimer);
+        clearTimeout(forceKillTimer);
+        reject(error);
+      });
+      child.on("close", code => {
+        clearTimeout(timeoutTimer);
+        clearTimeout(forceKillTimer);
+
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(formatCodexExecError(code, stderr)));
+      });
+    });
+  } finally {
+    stopHeartbeat();
+  }
+}
+
+export function summarizeCodexStderr(stderr) {
+  const lines = stderr
+    .split(/\r?\n/u)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return lines.slice(-8).join("\n");
+}
+
+export function summarizeCodexTimeoutStderr(stderr) {
+  const lines = stderr
+    .split(/\r?\n/u)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => isRelevantTimeoutLine(line));
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return lines.slice(-8).join("\n");
+}
+
+function formatCodexExecError(code, stderr) {
+  const summary = summarizeCodexStderr(stderr);
+  if (!summary) {
+    return `codex exec failed with exit code ${code}`;
+  }
+  return `codex exec failed with exit code ${code}: ${summary}`;
+}
+
+function formatCodexTimeoutError(timeoutMs, stderr) {
+  const summary = summarizeCodexTimeoutStderr(stderr);
+  if (!summary) {
+    return `codex exec timed out after ${formatTimeoutDuration(timeoutMs)}`;
+  }
+
+  return `codex exec timed out after ${formatTimeoutDuration(timeoutMs)}: ${summary}`;
+}
+
+function formatTimeoutDuration(timeoutMs) {
+  if (timeoutMs % 1000 === 0) {
+    return `${timeoutMs / 1000}s`;
+  }
+
+  return `${timeoutMs}ms`;
+}
+
+function cleanupTimedOutChild(child) {
+  child.stdin.destroy?.();
+  child.stderr.destroy?.();
+}
+
+function isRelevantTimeoutLine(line) {
+  return [
+    /^error:/i,
+    /\bwarn\b/i,
+    /\berror\b/i,
+    /^caused by:/i,
+    /\bfailed\b/i,
+    /\boperation not permitted\b/i,
+    /\bexception\b/i
+  ].some(pattern => pattern.test(line));
+}
+
+function startCodexHeartbeat(onStatus) {
+  if (!onStatus) {
+    return () => {};
+  }
+
+  const startedAt = Date.now();
+  const timer = setInterval(() => {
+    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    onStatus(`Still running Codex... (${elapsedSeconds}s elapsed)`);
+  }, HEARTBEAT_INTERVAL_MS);
+
+  timer.unref?.();
+
+  return () => {
+    clearInterval(timer);
+  };
+}

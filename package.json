@@ -1,0 +1,20 @@
+{
+  "name": "archa",
+  "version": "0.1.0",
+  "description": "Your personal code archaeologist for repo-aware engineering Q&A",
+  "type": "module",
+  "bin": {
+    "archa": "./bin/archa.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.2",
+    "vitest": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

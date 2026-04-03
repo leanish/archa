@@ -1,0 +1,420 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  readFile: vi.fn(),
+  rm: vi.fn(),
+  spawn: vi.fn(),
+  tmpdir: vi.fn(() => "/tmp")
+}));
+
+vi.mock("node:fs/promises", () => ({
+  default: {
+    readFile: mocks.readFile,
+    rm: mocks.rm
+  }
+}));
+
+vi.mock("node:child_process", () => ({
+  spawn: mocks.spawn
+}));
+
+vi.mock("node:os", () => ({
+  default: {
+    tmpdir: mocks.tmpdir
+  }
+}));
+
+import {
+  getCodexExecutionContext,
+  getCodexTimeoutMs,
+  runCodexQuestion,
+  summarizeCodexTimeoutStderr,
+  summarizeCodexStderr
+} from "../src/codex-runner.js";
+
+describe("codex-runner", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    mocks.rm.mockResolvedValue();
+    mocks.readFile.mockResolvedValue("Final answer");
+  });
+
+  it("uses the selected repo as the working directory when only one repo is selected", () => {
+    const question = [
+      "For sqs-codec receive-side decoding:",
+      "",
+      "How does x-codec-meta tell the interceptor whether to decompress and validate a message?"
+    ].join("\n");
+    const context = getCodexExecutionContext({
+      question,
+      workspaceRoot: "/workspace/archa/repos",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          description: "SQS execution interceptor with compression and checksum metadata",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "main"
+        }
+      ]
+    });
+
+    expect(context.workingDirectory).toBe("/workspace/archa/repos/sqs-codec");
+    expect(context.prompt).toContain("Answer using the code in the current workspace, but write for someone who does not have access to the codebase.");
+    expect(context.prompt).toContain("Code snippets are allowed when they help explain how to integrate with the service or API.");
+    expect(context.prompt).toContain("These repo candidates look most relevant for answering the question: sqs-codec.");
+    expect(context.prompt).toContain("Do not mention file paths or line numbers unless they are necessary.");
+    expect(context.prompt).toContain("Answer the question directly and stop. Do not offer follow-up help or ask whether you should rewrite the answer.");
+    expect(context.prompt).toContain('I got the question:\n"""\n');
+    expect(context.prompt).toContain(question);
+  });
+
+  it("uses the workspace root when multiple repos are selected", () => {
+    const context = getCodexExecutionContext({
+      question: "How do sqs-codec and java-conventions relate?",
+      workspaceRoot: "/workspace/archa/repos",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          description: "SQS execution interceptor with compression and checksum metadata",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "main"
+        },
+        {
+          name: "java-conventions",
+          description: "Shared Gradle conventions for JDK-based projects",
+          directory: "/workspace/archa/repos/java-conventions",
+          defaultBranch: "main"
+        }
+      ]
+    });
+
+    expect(context.workingDirectory).toBe("/workspace/archa/repos");
+    expect(context.prompt).toContain("These repo candidates look most relevant for answering the question: sqs-codec, java-conventions.");
+  });
+
+  it("runs codex and returns the final answer text", async () => {
+    const child = createChildProcess({ code: 0 });
+    const onStatus = vi.fn();
+    mocks.spawn.mockReturnValue(child);
+    mocks.readFile.mockResolvedValue("  Final answer from Codex  ");
+
+    const result = await runCodexQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "master"
+        }
+      ],
+      workspaceRoot: "/workspace/archa/repos",
+      onStatus
+    });
+
+    expect(result).toEqual({ text: "Final answer from Codex" });
+    expect(onStatus).toHaveBeenCalledWith(
+      "Running Codex in /workspace/archa/repos/sqs-codec with gpt-5.4 (low)..."
+    );
+    expect(child.stdin.write).toHaveBeenCalledWith(expect.stringContaining('I got the question:\n"""\nHow does x-codec-meta work?\n"""'));
+    expect(child.stdin.end).toHaveBeenCalled();
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      "codex",
+      expect.arrayContaining([
+        "-c",
+        'model_reasoning_effort="low"',
+        "exec",
+        "-C",
+        "/workspace/archa/repos/sqs-codec",
+        "--sandbox",
+        "read-only",
+        "--skip-git-repo-check",
+        "--color",
+        "never",
+        "--output-last-message"
+      ]),
+      { stdio: ["pipe", "ignore", "pipe"] }
+    );
+    expect(mocks.readFile).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), "utf8");
+    expect(mocks.rm).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), { force: true });
+  });
+
+  it("returns a fallback message when codex writes an empty final answer", async () => {
+    mocks.spawn.mockReturnValue(createChildProcess({ code: 0 }));
+    mocks.readFile.mockResolvedValue("   ");
+
+    const result = await runCodexQuestion({
+      question: "How does x-codec-meta work?",
+      model: null,
+      reasoningEffort: "low",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "master"
+        }
+      ],
+      workspaceRoot: "/workspace/archa/repos"
+    });
+
+    expect(result).toEqual({ text: "Codex did not produce a final answer." });
+    expect(mocks.spawn.mock.calls[0][1]).not.toContain("--model");
+  });
+
+  it("emits a heartbeat every 10 seconds while codex is still running", async () => {
+    vi.useFakeTimers();
+    const child = createChildProcess({ autoCloseOnEnd: false });
+    const onStatus = vi.fn();
+    mocks.spawn.mockReturnValue(child);
+
+    const resultPromise = runCodexQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "master"
+        }
+      ],
+      workspaceRoot: "/workspace/archa/repos",
+      onStatus
+    });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(onStatus).toHaveBeenCalledWith("Still running Codex... (10s elapsed)");
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(onStatus).toHaveBeenCalledWith("Still running Codex... (20s elapsed)");
+
+    child.close(0);
+
+    await expect(resultPromise).resolves.toEqual({ text: "Final answer" });
+  });
+
+  it("times out codex after the configured deadline", async () => {
+    vi.useFakeTimers();
+    const child = createChildProcess({ autoCloseOnEnd: false });
+    const onStatus = vi.fn();
+    mocks.spawn.mockReturnValue(child);
+
+    const resultPromise = runCodexQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "master"
+        }
+      ],
+      workspaceRoot: "/workspace/archa/repos",
+      onStatus,
+      timeoutMs: 300_000
+    });
+
+    const rejection = expect(resultPromise).rejects.toThrow("codex exec timed out after 300s");
+
+    await vi.advanceTimersByTimeAsync(300_000);
+    await rejection;
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(child.stdin.destroy).toHaveBeenCalled();
+    expect(child.stderr.destroy).toHaveBeenCalled();
+    expect(onStatus).toHaveBeenCalledWith("Codex timed out after 300s; stopping...");
+    expect(mocks.rm).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), { force: true });
+    expect(mocks.readFile).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+  });
+
+  it("summarizes codex stderr to the last meaningful lines", () => {
+    const stderr = [
+      "",
+      "first",
+      "second",
+      "third",
+      "fourth",
+      "fifth",
+      "sixth",
+      "seventh",
+      "eighth",
+      "ninth"
+    ].join("\n");
+
+    expect(summarizeCodexStderr(stderr)).toBe([
+      "second",
+      "third",
+      "fourth",
+      "fifth",
+      "sixth",
+      "seventh",
+      "eighth",
+      "ninth"
+    ].join("\n"));
+  });
+
+  it("returns an empty codex stderr summary when stderr is blank", () => {
+    expect(summarizeCodexStderr("\n  \n")).toBe("");
+  });
+
+  it("filters timeout stderr down to relevant warning and error lines", () => {
+    const stderr = [
+      "public interface CompressionAlgorithm {",
+      "NONE, GZIP, ZSTD",
+      "2026-04-02T20:54:27.662393Z ERROR codex_api::endpoint::responses_websocket: failed to connect",
+      "ERROR: Reconnecting... 4/5",
+      "\"\"\"",
+      "I have the feeling the checksum metadata is missing",
+      "Caused by:",
+      "Operation not permitted (os error 1)"
+    ].join("\n");
+
+    expect(summarizeCodexTimeoutStderr(stderr)).toBe([
+      "2026-04-02T20:54:27.662393Z ERROR codex_api::endpoint::responses_websocket: failed to connect",
+      "ERROR: Reconnecting... 4/5",
+      "Caused by:",
+      "Operation not permitted (os error 1)"
+    ].join("\n"));
+  });
+
+  it("omits timeout stderr when nothing looks like a real warning or error", async () => {
+    vi.useFakeTimers();
+    const child = createChildProcess({
+      autoCloseOnEnd: false,
+      stderrChunks: [
+        "public interface CompressionAlgorithm {\n",
+        "\"\"\"\n",
+        "I have the feeling the checksum metadata is missing\n"
+      ]
+    });
+    mocks.spawn.mockReturnValue(child);
+
+    const resultPromise = runCodexQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "master"
+        }
+      ],
+      workspaceRoot: "/workspace/archa/repos",
+      timeoutMs: 5_000
+    });
+
+    const rejection = expect(resultPromise).rejects.toThrow(/^codex exec timed out after 5s$/);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await rejection;
+  });
+
+  it("returns the default codex timeout when no override is configured", () => {
+    expect(getCodexTimeoutMs({})).toBe(300_000);
+  });
+
+  it("parses a custom codex timeout from the environment", () => {
+    expect(getCodexTimeoutMs({
+      ARCHA_CODEX_TIMEOUT_MS: "45000"
+    })).toBe(45_000);
+  });
+
+  it("rejects invalid codex timeout overrides", () => {
+    expect(() => getCodexTimeoutMs({
+      ARCHA_CODEX_TIMEOUT_MS: "wat"
+    })).toThrow("Invalid ARCHA_CODEX_TIMEOUT_MS: wat. Use a positive integer.");
+  });
+
+  it("rejects malformed codex timeout overrides instead of truncating them", () => {
+    expect(() => getCodexTimeoutMs({
+      ARCHA_CODEX_TIMEOUT_MS: "300s"
+    })).toThrow("Invalid ARCHA_CODEX_TIMEOUT_MS: 300s. Use a positive integer.");
+  });
+
+  it("surfaces a summarized codex error and still cleans up the output file", async () => {
+    mocks.spawn.mockReturnValue(createChildProcess({
+      code: 2,
+      stderrChunks: ["one\n", "two\n", "three\n", "four\n", "five\n", "six\n", "seven\n", "eight\n", "nine\n"]
+    }));
+
+    await expect(runCodexQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      selectedRepos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/archa/repos/sqs-codec",
+          defaultBranch: "master"
+        }
+      ],
+      workspaceRoot: "/workspace/archa/repos"
+    })).rejects.toThrow("codex exec failed with exit code 2: two\nthree\nfour\nfive\nsix\nseven\neight\nnine");
+
+    expect(mocks.rm).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), { force: true });
+    expect(mocks.readFile).not.toHaveBeenCalled();
+  });
+});
+
+function createChildProcess({ code = 0, stderrChunks = [], autoCloseOnEnd = true }) {
+  const stderrHandlers = [];
+  const closeHandlers = [];
+  const errorHandlers = [];
+
+  const child = {
+    stdin: {
+      write: vi.fn(),
+      end: vi.fn(() => {
+        if (!autoCloseOnEnd) {
+          return;
+        }
+        emitResult(code);
+      }),
+      destroy: vi.fn()
+    },
+    kill: vi.fn(),
+    unref: vi.fn(),
+    stderr: {
+      destroy: vi.fn(),
+      on: vi.fn((event, handler) => {
+        if (event === "data") {
+          stderrHandlers.push(handler);
+        }
+      })
+    },
+    on: vi.fn((event, handler) => {
+      if (event === "close") {
+        closeHandlers.push(handler);
+      }
+      if (event === "error") {
+        errorHandlers.push(handler);
+      }
+    })
+  };
+
+  child.close = closeCode => {
+    emitResult(closeCode);
+  };
+
+  return child;
+
+  function emitResult(resultCode) {
+    queueMicrotask(() => {
+      stderrChunks.forEach(chunk => {
+        stderrHandlers.forEach(handler => handler(Buffer.from(chunk)));
+      });
+
+      if (resultCode instanceof Error) {
+        errorHandlers.forEach(handler => handler(resultCode));
+        return;
+      }
+
+      closeHandlers.forEach(handler => handler(resultCode));
+    });
+  }
+}

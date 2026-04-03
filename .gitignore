@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+
+# Other
+.claude/
