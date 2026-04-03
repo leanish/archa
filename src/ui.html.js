@@ -415,16 +415,18 @@ button[type="submit"]:disabled {
     const question = document.getElementById("question").value.trim();
     if (!question) return null;
 
-    const model = document.getElementById("model").value.trim() || null;
-    const reasoningEffort = document.getElementById("reasoning-effort").value.trim() || null;
     const noSync = document.getElementById("no-sync").checked;
 
     const payload = { question };
     const selectedRepoNames = Array.from(repoState.selected);
     if (selectedRepoNames.length > 0) payload.repoNames = selectedRepoNames;
-    if (model) payload.model = model;
-    if (reasoningEffort) payload.reasoningEffort = reasoningEffort;
-    if (noSync) payload.noSync = true;
+    if (!advancedOptions.hidden) {
+      const model = document.getElementById("model").value.trim() || null;
+      const reasoningEffort = document.getElementById("reasoning-effort").value.trim() || null;
+      if (model) payload.model = model;
+      if (reasoningEffort) payload.reasoningEffort = reasoningEffort;
+      if (noSync) payload.noSync = true;
+    }
     return payload;
   }
 

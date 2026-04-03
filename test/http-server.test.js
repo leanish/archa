@@ -205,6 +205,7 @@ describe("http-server", () => {
     expect(htmlResponse.body).toContain("all projects");
     expect(htmlResponse.body).toContain('id="advanced-options" hidden');
     expect(htmlResponse.body).toContain('params.get("admin")');
+    expect(htmlResponse.body).toContain("if (!advancedOptions.hidden)");
     expect(htmlResponse.body).toContain('<option value="gpt-5.4" selected>gpt-5.4</option>');
     expect(htmlResponse.body).toContain('<option value="gpt-5.4-mini">gpt-5.4-mini</option>');
     expect(htmlResponse.body).toContain('<option value="low" selected>low</option>');
