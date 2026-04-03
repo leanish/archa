@@ -262,9 +262,6 @@ button[type="submit"]:disabled {
         <label class="checkbox-field">
           <input type="checkbox" id="no-sync" name="noSync"> Skip repo sync
         </label>
-        <label class="checkbox-field">
-          <input type="checkbox" id="no-synthesis" name="noSynthesis"> Retrieval only
-        </label>
       </div>
     </details>
     <button type="submit" id="submit-btn">Ask</button>
@@ -409,7 +406,6 @@ button[type="submit"]:disabled {
     const model = document.getElementById("model").value.trim() || null;
     const reasoningEffort = document.getElementById("reasoning-effort").value.trim() || null;
     const noSync = document.getElementById("no-sync").checked;
-    const noSynthesis = document.getElementById("no-synthesis").checked;
 
     const payload = { question };
     const selectedRepoNames = Array.from(repoState.selected);
@@ -417,7 +413,6 @@ button[type="submit"]:disabled {
     if (model) payload.model = model;
     if (reasoningEffort) payload.reasoningEffort = reasoningEffort;
     if (noSync) payload.noSync = true;
-    if (noSynthesis) payload.noSynthesis = true;
     return payload;
   }
 

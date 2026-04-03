@@ -205,6 +205,7 @@ describe("http-server", () => {
     expect(htmlResponse.body).toContain("all projects");
     expect(htmlResponse.body).not.toContain("repo-picker-toggle");
     expect(htmlResponse.body).not.toContain("e.g. archa, playcart");
+    expect(htmlResponse.body).not.toContain('id="no-synthesis"');
   });
 
   it("serves JSON at / when the client does not accept text/html", async () => {
