@@ -38,7 +38,7 @@ flowchart LR
 5. Codex runs against either the single selected repo or the managed repos root.
 6. The adapter renders the result:
    - CLI: text to stdout plus status to stderr
-   - HTTP: async job state plus SSE status events
+   - HTTP: async job state plus SSE status events, with the web UI optionally loading the configured repo catalog for picker-style selection
 
 ## HTTP ask flow
 
@@ -95,9 +95,9 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/ask-job-manager.js`
   Maintains in-memory async jobs, per-job event history, and bounded execution concurrency.
 - `src/http-server.js`
-  Exposes the HTTP API, request validation, polling responses, and SSE streams.
+  Exposes the HTTP API, request validation, repo catalog responses, polling responses, and SSE streams.
 - `src/ui.html.js`
-  Self-contained HTML, CSS, and JavaScript for the browser-based question UI, exported as a string constant.
+  Self-contained HTML, CSS, and JavaScript for the browser-based question UI, including the config-backed repo picker, exported as a string constant.
 - `src/render.js`
   Converts results into simple CLI output.
 - `src/status-reporter.js`

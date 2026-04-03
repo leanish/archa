@@ -18,6 +18,7 @@ Archa exposes the same repo-aware question-answering core through a CLI and an o
 - `repos sync` clones or fast-forwards the managed repos
 - asking a question selects likely repos, syncs them, and runs Codex
 - the HTTP adapter exposes the same ask flow as async jobs plus status streams
+- the built-in web UI can load the configured repo catalog and present it as a picker instead of raw comma-separated input
 - when no repo matches heuristically, the first configured repo is used as a fallback
 - output is written for readers without access to the analyzed source code
 

@@ -199,6 +199,8 @@ The response includes a job id plus links:
 }
 ```
 
+When `model` or `reasoningEffort` are omitted from the HTTP request, the server uses the same defaults as the CLI: `gpt-5.4` and `low`.
+
 Poll job state:
 
 ```bash
@@ -214,6 +216,7 @@ curl -sS -N http://127.0.0.1:8787/jobs/<job-id>/events
 Available endpoints:
 
 - `GET /health`
+- `GET /repos`
 - `POST /ask`
 - `POST /jobs`
 - `GET /jobs/:id`
@@ -223,7 +226,7 @@ HTTP jobs keep an in-memory event history, run with bounded concurrency, and sha
 
 ### Web UI
 
-Open `http://127.0.0.1:8787` in a browser to use the built-in web UI. The UI streams job status updates in real time using server-sent events.
+Open `http://127.0.0.1:8787` in a browser to use the built-in web UI. The UI streams job status updates in real time using server-sent events and loads the configured repo catalog so the repo filter can be selected from a searchable multi-select instead of typed manually.
 
 Programmatic clients that do not send `Accept: text/html` continue to receive the JSON endpoint listing at `GET /`.
 

@@ -21,6 +21,25 @@ Returns:
 }
 ```
 
+### `GET /repos`
+
+Returns the configured repo catalog for the built-in web UI repo picker.
+
+Response:
+
+```json
+{
+  "repos": [
+    {
+      "name": "archa",
+      "defaultBranch": "main",
+      "description": "Repo-aware CLI for engineering Q&A with local Codex",
+      "aliases": ["self"]
+    }
+  ]
+}
+```
+
 ### `POST /ask`
 
 Alias of `POST /jobs`.
@@ -49,6 +68,7 @@ Rules:
 - `repos` is accepted as an alias of `repoNames`
 - `repoNames` and `repos` must not be provided together
 - `model` and `reasoningEffort` are optional strings
+- omitted `model` and `reasoningEffort` use the same execution defaults as the CLI: `gpt-5.4` and `low`
 - `noSync` and `noSynthesis` are optional booleans
 
 Response:
@@ -125,3 +145,4 @@ Event types:
 - completed jobs expire after a retention timeout
 - job execution concurrency is bounded per process
 - repo sync coordination is per process and deduplicates overlapping syncs for the same repo directory
+- the built-in web UI loads repo choices from `GET /repos` and falls back to manual repo entry if that request fails

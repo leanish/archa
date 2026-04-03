@@ -106,12 +106,72 @@ describe("http-server", () => {
 
     expect(indexResponse.statusCode).toBe(200);
     expect(JSON.parse(indexResponse.body)).toMatchObject({
-      service: "archa-server"
+      service: "archa-server",
+      endpoints: {
+        listRepos: "GET /repos"
+      }
     });
     expect(healthResponse.statusCode).toBe(200);
     expect(JSON.parse(healthResponse.body)).toEqual({ status: "ok" });
     expect(optionsResponse.statusCode).toBe(204);
     expect(optionsResponse.headers["access-control-allow-methods"]).toContain("POST");
+  });
+
+  it("lists configured repos for the web picker", async () => {
+    const manager = createAskJobManager({
+      answerQuestionFn: async () => ({
+        mode: "answer",
+        question: "ignored",
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: { text: "ignored" }
+      }),
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpHandler({
+      jobManager: manager,
+      loadConfigFn: async () => ({
+        repos: [
+          {
+            name: "archa",
+            defaultBranch: "main",
+            description: "Repo-aware CLI for engineering Q&A with local Codex",
+            aliases: ["self"],
+            directory: "/workspace/archa"
+          },
+          {
+            name: "beanie",
+            defaultBranch: "master",
+            description: "Beanie project",
+            aliases: []
+          }
+        ]
+      })
+    });
+
+    const response = await performRequest(handler, {
+      method: "GET",
+      path: "/repos"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      repos: [
+        {
+          name: "archa",
+          defaultBranch: "main",
+          description: "Repo-aware CLI for engineering Q&A with local Codex",
+          aliases: ["self"]
+        },
+        {
+          name: "beanie",
+          defaultBranch: "master",
+          description: "Beanie project",
+          aliases: []
+        }
+      ]
+    });
   });
 
   it("serves the web UI when the client accepts text/html", async () => {
@@ -140,6 +200,11 @@ describe("http-server", () => {
     expect(htmlResponse.body).toContain("archa");
     expect(htmlResponse.body).toContain("EventSource");
     expect(htmlResponse.body).toContain("/ask");
+    expect(htmlResponse.body).toContain("/repos");
+    expect(htmlResponse.body).toContain("Search configured repos");
+    expect(htmlResponse.body).toContain("all projects");
+    expect(htmlResponse.body).not.toContain("repo-picker-toggle");
+    expect(htmlResponse.body).not.toContain("e.g. archa, playcart");
   });
 
   it("serves JSON at / when the client does not accept text/html", async () => {

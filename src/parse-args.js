@@ -1,3 +1,5 @@
+import { DEFAULT_CODEX_MODEL, DEFAULT_CODEX_REASONING_EFFORT } from "./codex-defaults.js";
+
 export class HelpError extends Error {}
 
 function requireValue(flag, value) {
@@ -22,8 +24,8 @@ export function parseArgs(argv, env) {
 function parseAskCommand(argv, env) {
   let questionParts = [];
   let questionFile = null;
-  let model = env.ARCHA_MODEL || "gpt-5.4";
-  let reasoningEffort = env.ARCHA_REASONING_EFFORT || "low";
+  let model = env.ARCHA_MODEL || DEFAULT_CODEX_MODEL;
+  let reasoningEffort = env.ARCHA_REASONING_EFFORT || DEFAULT_CODEX_REASONING_EFFORT;
   let noSync = false;
   let noSynthesis = false;
   let repoNames = null;

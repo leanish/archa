@@ -1,5 +1,6 @@
 import http from "node:http";
 
+import { loadConfig } from "./config.js";
 import { createAskJobManager } from "./ask-job-manager.js";
 import { HTML_UI } from "./ui.html.js";
 
@@ -36,6 +37,7 @@ export async function startHttpServer({
   });
   const handler = createHttpHandler({
     bodyLimitBytes: resolvedBodyLimitBytes,
+    env,
     jobManager: resolvedJobManager
   });
   const sockets = new Set();
@@ -78,18 +80,25 @@ export async function startHttpServer({
   };
 }
 
-export function createHttpHandler({ jobManager, bodyLimitBytes = DEFAULT_BODY_LIMIT_BYTES }) {
+export function createHttpHandler({
+  jobManager,
+  bodyLimitBytes = DEFAULT_BODY_LIMIT_BYTES,
+  env = process.env,
+  loadConfigFn = loadConfig
+}) {
   return async function handleHttpRequest(request, response) {
     await handleRequest({
       request,
       response,
       jobManager,
-      bodyLimitBytes
+      bodyLimitBytes,
+      env,
+      loadConfigFn
     });
   };
 }
 
-async function handleRequest({ request, response, jobManager, bodyLimitBytes }) {
+async function handleRequest({ request, response, jobManager, bodyLimitBytes, env, loadConfigFn }) {
   setCorsHeaders(response);
 
   if (request.method === "OPTIONS") {
@@ -117,6 +126,7 @@ async function handleRequest({ request, response, jobManager, bodyLimitBytes }) 
           createJob: "POST /ask",
           createJobAlias: "POST /jobs",
           getJob: "GET /jobs/:id",
+          listRepos: "GET /repos",
           streamJob: "GET /jobs/:id/events",
           health: "GET /health"
         }
@@ -126,6 +136,14 @@ async function handleRequest({ request, response, jobManager, bodyLimitBytes }) 
 
     if (request.method === "GET" && url.pathname === "/health") {
       writeJson(response, 200, { status: "ok" });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/repos") {
+      const config = await loadConfigFn(env);
+      writeJson(response, 200, {
+        repos: config.repos.map(serializeRepoSummary)
+      });
       return;
     }
 
@@ -380,6 +398,15 @@ function withJobLinks(job) {
       self: `/jobs/${encodeURIComponent(job.id)}`,
       events: `/jobs/${encodeURIComponent(job.id)}/events`
     }
+  };
+}
+
+function serializeRepoSummary(repo) {
+  return {
+    name: repo.name,
+    defaultBranch: repo.defaultBranch,
+    description: repo.description,
+    aliases: repo.aliases
   };
 }
 

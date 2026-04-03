@@ -141,14 +141,15 @@ describe("codex-runner", () => {
     expect(mocks.rm).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), { force: true });
   });
 
-  it("returns a fallback message when codex writes an empty final answer", async () => {
+  it("uses default codex settings when model and reasoning effort are omitted", async () => {
     mocks.spawn.mockReturnValue(createChildProcess({ code: 0 }));
     mocks.readFile.mockResolvedValue("   ");
+    const onStatus = vi.fn();
 
     const result = await runCodexQuestion({
       question: "How does x-codec-meta work?",
       model: null,
-      reasoningEffort: "low",
+      reasoningEffort: null,
       selectedRepos: [
         {
           name: "sqs-codec",
@@ -156,11 +157,24 @@ describe("codex-runner", () => {
           defaultBranch: "master"
         }
       ],
-      workspaceRoot: "/workspace/archa/repos"
+      workspaceRoot: "/workspace/archa/repos",
+      onStatus
     });
 
     expect(result).toEqual({ text: "Codex did not produce a final answer." });
-    expect(mocks.spawn.mock.calls[0][1]).not.toContain("--model");
+    expect(onStatus).toHaveBeenCalledWith(
+      "Running Codex in /workspace/archa/repos/sqs-codec with gpt-5.4 (low)..."
+    );
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      "codex",
+      expect.arrayContaining([
+        "-c",
+        'model_reasoning_effort="low"',
+        "--model",
+        "gpt-5.4"
+      ]),
+      { stdio: ["pipe", "ignore", "pipe"] }
+    );
   });
 
   it("emits a heartbeat every 10 seconds while codex is still running", async () => {

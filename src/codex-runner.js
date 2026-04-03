@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
+import { DEFAULT_CODEX_MODEL, DEFAULT_CODEX_REASONING_EFFORT } from "./codex-defaults.js";
+
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
 const FORCE_KILL_GRACE_PERIOD_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -21,16 +23,18 @@ export async function runCodexQuestion({
     `archa-codex-${process.pid}-${Date.now()}.txt`
   );
   const executionContext = getCodexExecutionContext({ question, selectedRepos, workspaceRoot });
+  const resolvedModel = model || DEFAULT_CODEX_MODEL;
+  const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
 
   onStatus?.(
-    `Running Codex in ${executionContext.workingDirectory} with ${model || "default model"} (${reasoningEffort})...`
+    `Running Codex in ${executionContext.workingDirectory} with ${resolvedModel} (${resolvedReasoningEffort})...`
   );
 
   try {
     await runCodexExec({
       prompt: executionContext.prompt,
-      model,
-      reasoningEffort,
+      model: resolvedModel,
+      reasoningEffort: resolvedReasoningEffort,
       outputFile,
       workingDirectory: executionContext.workingDirectory,
       onStatus,
@@ -105,9 +109,7 @@ async function runCodexExec({ prompt, model, reasoningEffort, outputFile, workin
     outputFile
   ];
 
-  if (model) {
-    args.push("--model", model);
-  }
+  args.push("--model", model);
 
   args.push("-");
 

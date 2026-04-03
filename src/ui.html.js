@@ -56,6 +56,87 @@ textarea {
   min-height: 5rem;
 }
 .field { margin-bottom: 0.75rem; }
+.field-hint {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: #7d8590;
+}
+.repo-picker {
+  display: grid;
+  gap: 0.5rem;
+}
+.repo-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.repo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  background: #161b22;
+  color: #c9d1d9;
+  font-size: 0.75rem;
+}
+.repo-chip-muted {
+  color: #7d8590;
+}
+.repo-chip-remove {
+  border: 0;
+  background: transparent;
+  color: #7d8590;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.repo-options {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.5rem;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0f1117;
+}
+.repo-options[hidden] {
+  display: none;
+}
+.repo-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: start;
+  padding: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #161b22;
+  cursor: pointer;
+}
+.repo-option:hover {
+  border-color: #30363d;
+}
+.repo-option input {
+  margin-top: 0.15rem;
+  accent-color: #58a6ff;
+}
+.repo-option-text {
+  display: grid;
+  gap: 0.15rem;
+}
+.repo-option-name {
+  color: #e6edf3;
+  font-size: 0.88rem;
+}
+.repo-option-meta,
+.repo-option-description,
+.repo-options-empty {
+  color: #7d8590;
+  font-size: 0.75rem;
+}
 details {
   margin-bottom: 0.75rem;
 }
@@ -157,8 +238,15 @@ button[type="submit"]:disabled {
       <textarea id="question" name="question" rows="4" placeholder="Ask your codebase a question..." required></textarea>
     </div>
     <div class="field">
-      <label for="repo-names">Repos <span style="color:#484f58">(optional, comma-separated)</span></label>
-      <input type="text" id="repo-names" name="repoNames" placeholder="e.g. archa, playcart">
+      <label for="repo-filter">Repos <span style="color:#484f58">(optional)</span></label>
+      <div id="repo-picker" class="repo-picker">
+        <div id="repo-selected" class="repo-selected" aria-live="polite"></div>
+        <input type="text" id="repo-filter" placeholder="Loading configured repos..." disabled>
+        <div id="repo-options" class="repo-options" role="listbox" aria-multiselectable="true" hidden></div>
+      </div>
+      <div id="repo-help" class="field-hint">
+        Leave it on <code>all projects</code> to let Archa choose likely repos, or search to narrow the scope.
+      </div>
     </div>
     <details>
       <summary>Advanced options</summary>
@@ -197,8 +285,92 @@ button[type="submit"]:disabled {
   const statusLog = document.getElementById("status-log");
   const answerBox = document.getElementById("answer");
   const errorBox = document.getElementById("error-box");
+  const repoSelected = document.getElementById("repo-selected");
+  const repoOptions = document.getElementById("repo-options");
+  const repoFilter = document.getElementById("repo-filter");
+  const repoHelp = document.getElementById("repo-help");
+
+  const repoState = {
+    available: [],
+    selected: new Set(),
+    ready: false,
+    isSearchActive: false
+  };
 
   let eventSource = null;
+
+  renderRepoPicker();
+  void initializeRepoPicker();
+
+  repoFilter.addEventListener("input", () => {
+    renderRepoOptions();
+  });
+
+  repoFilter.addEventListener("focus", () => {
+    repoState.isSearchActive = true;
+    renderRepoOptions();
+  });
+
+  repoFilter.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (document.activeElement === repoFilter) {
+        return;
+      }
+
+      repoState.isSearchActive = false;
+      renderRepoOptions();
+    }, 0);
+  });
+
+  repoOptions.addEventListener("mousedown", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.closest(".repo-option")) {
+      return;
+    }
+
+    event.preventDefault();
+  });
+
+  repoOptions.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") {
+      return;
+    }
+
+    const repoName = target.getAttribute("data-repo-name");
+    if (!repoName) {
+      return;
+    }
+
+    if (target.checked) {
+      repoState.selected.add(repoName);
+    } else {
+      repoState.selected.delete(repoName);
+    }
+
+    repoFilter.focus({ preventScroll: true });
+    renderRepoPicker();
+  });
+
+  repoSelected.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const button = target.closest("button[data-repo-name]");
+    if (!button) {
+      return;
+    }
+
+    const repoName = button.getAttribute("data-repo-name");
+    if (!repoName) {
+      return;
+    }
+
+    repoState.selected.delete(repoName);
+    renderRepoPicker();
+  });
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -234,19 +406,173 @@ button[type="submit"]:disabled {
     const question = document.getElementById("question").value.trim();
     if (!question) return null;
 
-    const repoNamesRaw = document.getElementById("repo-names").value.trim();
     const model = document.getElementById("model").value.trim() || null;
     const reasoningEffort = document.getElementById("reasoning-effort").value.trim() || null;
     const noSync = document.getElementById("no-sync").checked;
     const noSynthesis = document.getElementById("no-synthesis").checked;
 
     const payload = { question };
-    if (repoNamesRaw) payload.repoNames = repoNamesRaw;
+    const selectedRepoNames = Array.from(repoState.selected);
+    if (selectedRepoNames.length > 0) payload.repoNames = selectedRepoNames;
     if (model) payload.model = model;
     if (reasoningEffort) payload.reasoningEffort = reasoningEffort;
     if (noSync) payload.noSync = true;
     if (noSynthesis) payload.noSynthesis = true;
     return payload;
+  }
+
+  async function initializeRepoPicker() {
+    try {
+      const response = await fetch("/repos", {
+        headers: { Accept: "application/json" }
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to load configured repos.");
+      }
+
+      const repos = Array.isArray(payload.repos)
+        ? payload.repos.filter(repo => repo && typeof repo.name === "string")
+        : [];
+      if (repos.length === 0) {
+        repoFilter.disabled = true;
+        repoFilter.placeholder = "No configured repos available";
+        repoHelp.textContent = "No configured repos available. Archa will search all projects.";
+        renderRepoPicker();
+        return;
+      }
+
+      repoState.available = repos.sort((left, right) => left.name.localeCompare(right.name));
+      repoState.ready = true;
+      repoFilter.disabled = false;
+      repoFilter.placeholder = "Search configured repos";
+      repoHelp.textContent = "Leave it on all projects to let Archa auto-select, or search to narrow to specific repos.";
+      renderRepoPicker();
+    } catch (error) {
+      repoFilter.disabled = true;
+      repoFilter.placeholder = "Configured repos unavailable";
+      repoHelp.textContent = "Configured repo list unavailable. Archa will search all projects.";
+      renderRepoPicker();
+    }
+  }
+
+  function renderRepoPicker() {
+    renderSelectedRepos();
+    renderRepoOptions();
+  }
+
+  function renderSelectedRepos() {
+    repoSelected.textContent = "";
+
+    const selectedNames = Array.from(repoState.selected);
+    if (selectedNames.length === 0) {
+      const chip = document.createElement("span");
+      chip.className = "repo-chip repo-chip-muted";
+      chip.textContent = "all projects";
+      repoSelected.append(chip);
+      return;
+    }
+
+    for (const repoName of selectedNames) {
+      const chip = document.createElement("span");
+      chip.className = "repo-chip";
+      chip.append(document.createTextNode(repoName));
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "repo-chip-remove";
+      removeButton.setAttribute("data-repo-name", repoName);
+      removeButton.setAttribute("aria-label", "Remove " + repoName);
+      removeButton.textContent = "x";
+      chip.append(removeButton);
+
+      repoSelected.append(chip);
+    }
+  }
+
+  function renderRepoOptions() {
+    repoOptions.textContent = "";
+
+    if (!repoState.ready) {
+      repoOptions.hidden = true;
+      return;
+    }
+
+    if (!repoState.isSearchActive) {
+      repoOptions.hidden = true;
+      return;
+    }
+
+    const filter = repoFilter.value.trim().toLowerCase();
+    const matchingRepos = filter
+      ? repoState.available.filter(repo => matchesRepoFilter(repo, filter))
+      : repoState.available;
+    repoOptions.hidden = false;
+    if (matchingRepos.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "repo-options-empty";
+      empty.textContent = "No configured repos match this filter.";
+      repoOptions.append(empty);
+      return;
+    }
+
+    for (const repo of matchingRepos) {
+      const option = document.createElement("label");
+      option.className = "repo-option";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = repoState.selected.has(repo.name);
+      checkbox.setAttribute("data-repo-name", repo.name);
+      option.append(checkbox);
+
+      const text = document.createElement("span");
+      text.className = "repo-option-text";
+
+      const name = document.createElement("span");
+      name.className = "repo-option-name";
+      name.textContent = repo.name;
+      text.append(name);
+
+      const meta = document.createElement("span");
+      meta.className = "repo-option-meta";
+      meta.textContent = formatRepoMeta(repo);
+      text.append(meta);
+
+      if (repo.description) {
+        const description = document.createElement("span");
+        description.className = "repo-option-description";
+        description.textContent = repo.description;
+        text.append(description);
+      }
+
+      option.append(text);
+      repoOptions.append(option);
+    }
+  }
+
+  function matchesRepoFilter(repo, filter) {
+    if (!filter) {
+      return true;
+    }
+
+    const aliases = Array.isArray(repo.aliases) ? repo.aliases : [];
+    return [repo.name, repo.description || "", repo.defaultBranch || ""]
+      .concat(aliases)
+      .some(value => String(value).toLowerCase().includes(filter));
+  }
+
+  function formatRepoMeta(repo) {
+    const parts = [];
+    if (repo.defaultBranch) {
+      parts.push(repo.defaultBranch);
+    }
+
+    if (Array.isArray(repo.aliases) && repo.aliases.length > 0) {
+      parts.push("aliases: " + repo.aliases.join(", "));
+    }
+
+    return parts.join(" · ");
   }
 
   function connectSSE(eventsUrl) {
