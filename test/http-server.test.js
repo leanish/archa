@@ -480,6 +480,71 @@ describe("http-server", () => {
     expect(unsubscribe).toHaveBeenCalled();
   });
 
+  it("cleans up the SSE subscription when the terminal snapshot cannot be written", async () => {
+    let listener;
+    const unsubscribe = vi.fn();
+    const jobManager = {
+      createJob: vi.fn(),
+      getJob: vi.fn(() => ({
+        id: "job-1",
+        status: "running",
+        request: {
+          question: "ignored",
+          repoNames: null,
+          model: null,
+          reasoningEffort: null,
+          noSync: false,
+          noSynthesis: false
+        },
+        createdAt: "2026-04-03T00:00:00.000Z",
+        startedAt: "2026-04-03T00:00:00.000Z",
+        finishedAt: "2026-04-03T00:00:01.000Z",
+        error: null,
+        result: {
+          mode: "answer",
+          question: "ignored",
+          selectedRepos: [],
+          syncReport: [],
+          synthesis: {
+            text: "done"
+          }
+        },
+        events: []
+      })),
+      subscribe: vi.fn((jobId, callback) => {
+        listener = callback;
+        return unsubscribe;
+      })
+    };
+    const request = createManualRequest({
+      method: "GET",
+      path: "/jobs/job-1/events"
+    });
+    const response = createMockResponse();
+    const originalWrite = response.write.bind(response);
+    response.write = vi.fn(chunk => {
+      const text = chunk.toString("utf8");
+      const result = originalWrite(chunk);
+
+      if (text.startsWith("event: completed")) {
+        response.destroyed = true;
+      }
+
+      return result;
+    });
+    void createHttpHandler({ jobManager })(request, response);
+
+    listener({
+      sequence: 2,
+      type: "completed",
+      message: "done",
+      timestamp: "2026-04-03T00:00:01.000Z"
+    });
+
+    expect(unsubscribe).toHaveBeenCalled();
+    expect(response.body).toContain("event: completed");
+  });
+
   it("does not parse truncated bodies after the request was already rejected for size", async () => {
     const parseSpy = vi.spyOn(JSON, "parse");
     const jobManager = {
@@ -670,6 +735,7 @@ function createMockResponse() {
   response.on("finish", () => {
     response.emit("close");
   });
+  response.destroyed = false;
 
   return response;
 }

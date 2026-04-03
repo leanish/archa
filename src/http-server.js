@@ -200,7 +200,7 @@ async function streamJobEvents(response, jobManager, jobId) {
 
     const currentJob = jobManager.getJob(jobId);
     if (currentJob && !writeSseEvent(response, "snapshot", withJobLinks(currentJob), () => streamClosed)) {
-      cleanupStream();
+      endSseStream(response, cleanupStream, () => streamClosed);
       return;
     }
 

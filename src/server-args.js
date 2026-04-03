@@ -31,11 +31,15 @@ export function parseServerArgs(argv, env = process.env) {
 }
 
 function requireValue(flag, value) {
-  if (!value) {
+  if (!value || looksLikeFlag(value)) {
     throw new Error(`Missing value for ${flag}`);
   }
 
   return value;
+}
+
+function looksLikeFlag(value) {
+  return value.startsWith("-");
 }
 
 function parsePort(value, label) {
