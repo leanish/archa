@@ -13,11 +13,17 @@ Content-negotiated:
 
 ### `GET /health`
 
-Returns:
+Returns the server status along with job counts by state:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "jobs": {
+    "queued": 0,
+    "running": 0,
+    "completed": 0,
+    "failed": 0
+  }
 }
 ```
 

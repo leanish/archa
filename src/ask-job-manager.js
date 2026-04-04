@@ -30,6 +30,7 @@ export function createAskJobManager({
   return {
     createJob,
     getJob,
+    getStats,
     subscribe,
     close
   };
@@ -64,6 +65,24 @@ export function createAskJobManager({
   function getJob(jobId) {
     const job = jobs.get(jobId);
     return job ? snapshotJob(job) : null;
+  }
+
+  function getStats() {
+    let queued = 0;
+    let running = 0;
+    let completed = 0;
+    let failed = 0;
+
+    for (const job of jobs.values()) {
+      switch (job.status) {
+        case "queued": queued += 1; break;
+        case "running": running += 1; break;
+        case "completed": completed += 1; break;
+        case "failed": failed += 1; break;
+      }
+    }
+
+    return { queued, running, completed, failed };
   }
 
   function subscribe(jobId, listener) {
