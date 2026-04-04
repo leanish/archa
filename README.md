@@ -123,7 +123,7 @@ Ask a question. By default `archa` will:
 
 By default, answers target a general engineering reader. When the reader can inspect the repositories directly, use `--audience codebase` to get a more implementation-oriented answer.
 
-While it runs, `archa` prints only high-level stage updates to `stderr`, including a heartbeat every 10 seconds during long Codex runs. Raw nested Codex logs are suppressed unless the command fails.
+While it runs, `archa` keeps progress reporting high-level, including a heartbeat every 10 seconds during long Codex runs. Raw nested Codex logs stay hidden unless the command fails.
 
 Managed repos are synced only against their default trunk branch, currently limited to `main` or `master`.
 If no repo scores positively for a question, `archa` falls back to the first configured repo.
