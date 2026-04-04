@@ -46,10 +46,10 @@ describe("selectRepos", () => {
     expect(() => selectRepos(config, "anything", ["missing-repo"])).toThrow(/Unknown managed repo/);
   });
 
-  it("falls back to sqs-codec when no repo scores positively", () => {
+  it("falls back to all configured repos when no repo scores positively", () => {
     const repos = selectRepos(config, "totally unrelated question", null);
 
-    expect(repos.map(repo => repo.name)).toEqual(["sqs-codec"]);
+    expect(repos.map(repo => repo.name)).toEqual(["sqs-codec", "archa", "java-conventions"]);
   });
 
   it("limits automatically selected repos to positively scored matches", () => {
@@ -58,7 +58,7 @@ describe("selectRepos", () => {
     expect(repos.map(repo => repo.name)).toEqual(["java-conventions"]);
   });
 
-  it("falls back to the first configured repo instead of a hardcoded repo name", () => {
+  it("preserves configured repo order when falling back to all repos", () => {
     const repos = selectRepos({
       repos: [
         {
@@ -74,6 +74,6 @@ describe("selectRepos", () => {
       ]
     }, "totally unrelated question", null);
 
-    expect(repos.map(repo => repo.name)).toEqual(["java-conventions"]);
+    expect(repos.map(repo => repo.name)).toEqual(["java-conventions", "archa"]);
   });
 });

@@ -126,7 +126,7 @@ By default, answers target a general engineering reader. When the reader can ins
 While it runs, `archa` keeps progress reporting high-level, including a heartbeat every 10 seconds during long Codex runs. Raw nested Codex logs stay hidden unless the command fails.
 
 Managed repos are synced only against their default trunk branch, currently limited to `main` or `master`.
-If no repo scores positively for a question, `archa` falls back to the first configured repo.
+If no repo scores positively for a question, `archa` falls back to all configured repos.
 
 A few example questions against public `leanish` repos:
 

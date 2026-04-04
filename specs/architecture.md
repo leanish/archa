@@ -85,7 +85,7 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/question-answering.js`
   Implements the transport-agnostic ask flow and accepts injectable adapters such as status reporters and sync functions.
 - `src/repo-selection.js`
-  Performs lightweight token-based repo scoring and alias matching, then falls back to the first configured repo.
+  Performs lightweight token-based repo scoring and alias matching, then falls back to all configured repos when nothing scores positively.
 - `src/repo-sync.js`
   Clones missing repos and fast-forwards existing repos to `main` or `master`.
 - `src/repo-sync-coordinator.js`

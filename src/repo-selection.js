@@ -30,7 +30,7 @@ export function selectRepos(config, question, requestedRepoNames) {
     return scoredRepos;
   }
 
-  return config.repos.slice(0, 1);
+  return [...config.repos];
 }
 
 function scoreRepo(repo, questionTokens) {
