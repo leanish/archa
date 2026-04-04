@@ -75,7 +75,7 @@ Example using a few public `leanish` repos:
 }
 ```
 
-Repos may also set `"alwaysSelect": true` to stay in scope during automatic repo selection. This is useful for foundational repos that should always be available when Archa narrows to likely matches.
+Repos may also set `"alwaysSelect": true` to stay in scope during automatic repo selection. This is useful for foundational repos that should always be available when Archa narrows to likely matches. If nothing scores positively, Archa still falls back to all configured repos.
 
 Bootstrap an empty config:
 
@@ -120,6 +120,7 @@ archa repos sync sqs-codec,java-conventions
 Ask a question. By default `archa` will:
 
 1. choose likely repos from the configured repo list, while keeping any repos marked with `"alwaysSelect": true` in scope
+   If nothing scores positively, all configured repos are used.
 2. clone or pull them
 3. run `codex exec` with `gpt-5.4` and `low` reasoning effort
 

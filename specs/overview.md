@@ -19,7 +19,7 @@ Archa exposes the same repo-aware question-answering core through a CLI and an o
 - asking a question uses automatic repo selection by default, or an explicit repo subset when provided, then syncs them and runs Codex
 - the HTTP adapter exposes the same ask flow as async jobs plus status streams
 - the built-in web UI can load the configured repo catalog and present it as a picker instead of raw comma-separated input
-- repos can be pinned into automatic selection with `alwaysSelect`
+- repos can be pinned into automatic selection with `alwaysSelect`, and automatic selection still falls back to all configured repos when nothing scores positively
 - answers default to a general engineering audience and can optionally target codebase-aware readers
 
 ## Non-goals
