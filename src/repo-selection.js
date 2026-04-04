@@ -1,7 +1,3 @@
-function tokenize(text) {
-  return (text.toLowerCase().match(/[a-z0-9-]+/g) || []).filter(token => token.length >= 3);
-}
-
 export function selectRepos(config, question, requestedRepoNames) {
   if (requestedRepoNames && requestedRepoNames.length > 0) {
     const requested = new Set(requestedRepoNames.map(name => name.toLowerCase()));
@@ -15,42 +11,8 @@ export function selectRepos(config, question, requestedRepoNames) {
     return selectedRepos;
   }
 
-  const questionTokens = tokenize(question);
-  const scoredRepos = config.repos
-    .map(repo => ({
-      repo,
-      score: scoreRepo(repo, questionTokens)
-    }))
-    .filter(entry => entry.score > 0)
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 4)
-    .map(entry => entry.repo);
-
-  if (scoredRepos.length > 0) {
-    return scoredRepos;
-  }
-
+  void question;
   return [...config.repos];
-}
-
-function scoreRepo(repo, questionTokens) {
-  const haystackTokens = new Set(tokenize([
-    repo.name,
-    repo.description,
-    ...(repo.topics || [])
-  ].join(" ")));
-
-  let score = 0;
-  for (const token of questionTokens) {
-    if (haystackTokens.has(token)) {
-      score += 3;
-    }
-    if (repo.name.toLowerCase().includes(token)) {
-      score += 4;
-    }
-  }
-
-  return score;
 }
 
 function repoMatchesName(repo, name) {

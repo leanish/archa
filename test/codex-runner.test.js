@@ -64,7 +64,7 @@ describe("codex-runner", () => {
     expect(context.prompt).toContain("Answer using the code in the current workspace.");
     expect(context.prompt).toContain("Write for a general engineering reader. Keep the answer self-contained and do not assume the reader can inspect this workspace.");
     expect(context.prompt).toContain("Use code snippets only when they help explain integration or behavior.");
-    expect(context.prompt).toContain("These repo candidates look most relevant for answering the question: sqs-codec.");
+    expect(context.prompt).toContain("These repos are in scope for answering the question: sqs-codec.");
     expect(context.prompt).toContain("Mention file paths or line numbers only when they are necessary.");
     expect(context.prompt).toContain("Answer the question directly and stop. Do not offer follow-up help or ask whether you should rewrite the answer.");
     expect(context.prompt).toContain('I got the question:\n"""\n');
@@ -95,7 +95,7 @@ describe("codex-runner", () => {
     expect(context.workingDirectory).toBe("/workspace/archa/repos");
     expect(context.prompt).toContain("Write for an engineer who can inspect this workspace. Be concrete about the implementation and mention relevant files, symbols, and execution flow when useful.");
     expect(context.prompt).toContain("Use code snippets when they help explain behavior or where to make changes.");
-    expect(context.prompt).toContain("These repo candidates look most relevant for answering the question: sqs-codec, java-conventions.");
+    expect(context.prompt).toContain("These repos are in scope for answering the question: sqs-codec, java-conventions.");
   });
 
   it("runs codex and returns the final answer text", async () => {

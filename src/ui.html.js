@@ -244,7 +244,7 @@ button[type="submit"]:disabled {
         <div id="repo-options" class="repo-options" role="listbox" aria-multiselectable="true" hidden></div>
       </div>
       <div id="repo-help" class="field-hint">
-        Leave it on <code>all projects</code> to let Archa choose likely repos, or search to narrow the scope.
+        Leave it on <code>all projects</code> to use every configured repo, or search to narrow the scope.
       </div>
     </div>
     <details id="advanced-options" hidden>
@@ -462,7 +462,7 @@ button[type="submit"]:disabled {
       if (repos.length === 0) {
         repoFilter.disabled = true;
         repoFilter.placeholder = "No configured repos available";
-        repoHelp.textContent = "No configured repos available. Archa will search all projects.";
+        repoHelp.textContent = "No configured repos available. Archa will use all projects.";
         renderRepoPicker();
         return;
       }
@@ -471,12 +471,12 @@ button[type="submit"]:disabled {
       repoState.ready = true;
       repoFilter.disabled = false;
       repoFilter.placeholder = "Search configured repos";
-      repoHelp.textContent = "Leave it on all projects to let Archa auto-select, or search to narrow to specific repos.";
+      repoHelp.textContent = "Leave it on all projects to use every configured repo, or search to narrow to specific repos.";
       renderRepoPicker();
     } catch (error) {
       repoFilter.disabled = true;
       repoFilter.placeholder = "Configured repos unavailable";
-      repoHelp.textContent = "Configured repo list unavailable. Archa will search all projects.";
+      repoHelp.textContent = "Configured repo list unavailable. Archa will use all projects.";
       renderRepoPicker();
     }
   }

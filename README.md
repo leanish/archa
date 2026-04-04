@@ -117,7 +117,7 @@ archa repos sync sqs-codec,java-conventions
 
 Ask a question. By default `archa` will:
 
-1. choose likely repos from the configured repo list
+1. use all configured repos unless you narrow the scope with `--repo`
 2. clone or pull them
 3. run `codex exec` with `gpt-5.4` and `low` reasoning effort
 
@@ -126,7 +126,6 @@ By default, answers target a general engineering reader. When the reader can ins
 While it runs, `archa` keeps progress reporting high-level, including a heartbeat every 10 seconds during long Codex runs. Raw nested Codex logs stay hidden unless the command fails.
 
 Managed repos are synced only against their default trunk branch, currently limited to `main` or `master`.
-If no repo scores positively for a question, `archa` falls back to all configured repos.
 
 A few example questions against public `leanish` repos:
 
@@ -292,7 +291,7 @@ GitHub Actions CI runs `npm ci` and `npm test -- --coverage` on pull requests an
 
 ## Current limits
 
-- repo selection is still heuristic, based on repo names, descriptions, and topics
+- large managed repo sets may benefit from explicit narrowing with `--repo`
 - syncing assumes the managed clones can fast-forward cleanly
 - the configured repo set is explicit and must be maintained in local config
 - HTTP job state is in-memory only and is lost when the server process restarts

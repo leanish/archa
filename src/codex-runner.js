@@ -95,7 +95,7 @@ function buildPrompt(question, selectedRepos, audience) {
   return [
     "Answer using the code in the current workspace.",
     ...getAudiencePromptLines(resolvedAudience),
-    `These repo candidates look most relevant for answering the question: ${repoNames}.`,
+    `These repos are in scope for answering the question: ${repoNames}.`,
     "Answer the question directly and stop. Do not offer follow-up help or ask whether you should rewrite the answer.",
     "",
     "I got the question:",

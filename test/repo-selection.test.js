@@ -24,12 +24,6 @@ const config = {
 };
 
 describe("selectRepos", () => {
-  it("prefers matching topics", () => {
-    const repos = selectRepos(config, "How does SQS compression metadata work?", null);
-
-    expect(repos[0].name).toBe("sqs-codec");
-  });
-
   it("honors explicit repo names", () => {
     const repos = selectRepos(config, "anything", ["archa"]);
 
@@ -46,19 +40,13 @@ describe("selectRepos", () => {
     expect(() => selectRepos(config, "anything", ["missing-repo"])).toThrow(/Unknown managed repo/);
   });
 
-  it("falls back to all configured repos when no repo scores positively", () => {
+  it("uses all configured repos when no explicit repo names are provided", () => {
     const repos = selectRepos(config, "totally unrelated question", null);
 
     expect(repos.map(repo => repo.name)).toEqual(["sqs-codec", "archa", "java-conventions"]);
   });
 
-  it("limits automatically selected repos to positively scored matches", () => {
-    const repos = selectRepos(config, "Need build defaults details", null);
-
-    expect(repos.map(repo => repo.name)).toEqual(["java-conventions"]);
-  });
-
-  it("preserves configured repo order when falling back to all repos", () => {
+  it("preserves configured repo order when using all repos by default", () => {
     const repos = selectRepos({
       repos: [
         {
