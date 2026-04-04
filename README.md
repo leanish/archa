@@ -172,11 +172,19 @@ archa --repo sqs-codec,java-conventions --no-synthesis "Which repo defines the d
 
 ## HTTP server
 
-Start the optional HTTP adapter:
+Start the optional HTTP adapter with explicit flags:
 
 ```bash
 archa-server --host 127.0.0.1 --port 8787
 ```
+
+You can also configure the bind host and port with environment variables:
+
+```bash
+ARCHA_SERVER_HOST=127.0.0.1 ARCHA_SERVER_PORT=8787 archa-server
+```
+
+When both are provided, command-line flags override the environment values.
 
 The server exposes async jobs over HTTP. `POST /ask` and `POST /jobs` are equivalent.
 
@@ -250,10 +258,16 @@ Programmatic clients that do not send `Accept: text/html` continue to receive th
 - `ARCHA_SERVER_MAX_CONCURRENT_JOBS`: overrides the max concurrent HTTP jobs (`1`)
 - `ARCHA_SERVER_JOB_RETENTION_MS`: overrides how long completed HTTP jobs stay in memory (`3600000`)
 
-You can also override them on the command line:
+You can also override ask settings on the command line:
 
 ```bash
 archa --audience codebase --model gpt-5.4 --reasoning-effort low "..."
+```
+
+For the HTTP server, the equivalent command-line overrides are:
+
+```bash
+archa-server --host 127.0.0.1 --port 8787
 ```
 
 ## Install locally
