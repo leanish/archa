@@ -20,6 +20,7 @@ export async function startHttpServer({
   bodyLimitBytes = null,
   jobManager = null,
   answerQuestionFn = null,
+  loadConfigFn = loadConfig,
   maxConcurrentJobs = null,
   jobRetentionMs = null
 } = {}) {
@@ -34,6 +35,7 @@ export async function startHttpServer({
   const resolvedJobRetentionMs = jobRetentionMs
     ?? getOptionalPositiveInteger(env.ARCHA_SERVER_JOB_RETENTION_MS, "ARCHA_SERVER_JOB_RETENTION_MS")
     ?? undefined;
+  await loadConfigFn(env);
   const resolvedJobManager = jobManager || createAskJobManager({
     env,
     answerQuestionFn: answerQuestionFn || undefined,
@@ -43,7 +45,8 @@ export async function startHttpServer({
   const handler = createHttpHandler({
     bodyLimitBytes: resolvedBodyLimitBytes,
     env,
-    jobManager: resolvedJobManager
+    jobManager: resolvedJobManager,
+    loadConfigFn
   });
   const sockets = new Set();
   const server = http.createServer((request, response) => {

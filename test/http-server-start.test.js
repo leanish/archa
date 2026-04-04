@@ -35,6 +35,7 @@ describe("http-server startup", () => {
       host: "::1",
       port: 43123,
       bodyLimitBytes: 1024,
+      loadConfigFn: async () => ({ repos: [] }),
       jobManager
     });
 
@@ -59,6 +60,7 @@ describe("http-server startup", () => {
     mocks.createServer.mockReturnValue(server);
 
     const handle = await startHttpServer({
+      loadConfigFn: async () => ({ repos: [] }),
       jobManager: {
         close: vi.fn()
       }
@@ -78,6 +80,7 @@ describe("http-server startup", () => {
       env: {
         ARCHA_SERVER_PORT: "wat"
       },
+      loadConfigFn: async () => ({ repos: [] }),
       jobManager
     })).rejects.toThrow("Invalid ARCHA_SERVER_PORT: wat. Use a TCP port between 0 and 65535.");
 
@@ -85,6 +88,7 @@ describe("http-server startup", () => {
       env: {
         ARCHA_SERVER_BODY_LIMIT_BYTES: "wat"
       },
+      loadConfigFn: async () => ({ repos: [] }),
       jobManager
     })).rejects.toThrow("Invalid ARCHA_SERVER_BODY_LIMIT_BYTES: wat. Use a positive integer.");
 
@@ -92,6 +96,7 @@ describe("http-server startup", () => {
       env: {
         ARCHA_SERVER_MAX_CONCURRENT_JOBS: "wat"
       },
+      loadConfigFn: async () => ({ repos: [] }),
       jobManager
     })).rejects.toThrow("Invalid ARCHA_SERVER_MAX_CONCURRENT_JOBS: wat. Use a positive integer.");
 
@@ -99,6 +104,7 @@ describe("http-server startup", () => {
       env: {
         ARCHA_SERVER_JOB_RETENTION_MS: "wat"
       },
+      loadConfigFn: async () => ({ repos: [] }),
       jobManager
     })).rejects.toThrow("Invalid ARCHA_SERVER_JOB_RETENTION_MS: wat. Use a positive integer.");
   });
@@ -120,12 +126,35 @@ describe("http-server startup", () => {
       env: {
         ARCHA_SERVER_PORT: "0"
       },
+      loadConfigFn: async () => ({ repos: [] }),
       jobManager
     });
 
     expect(server.listen).toHaveBeenCalledWith(0, "127.0.0.1", expect.any(Function));
 
     await handle.close();
+  });
+
+  it("fails fast when config loading fails before binding the server", async () => {
+    const server = createServerDouble({
+      addressValue: {
+        family: "IPv4",
+        address: "127.0.0.1",
+        port: 8787
+      }
+    });
+    mocks.createServer.mockReturnValue(server);
+
+    await expect(startHttpServer({
+      loadConfigFn: async () => {
+        throw new Error("Invalid Archa config at /tmp/config.json: bad value");
+      },
+      jobManager: {
+        close: vi.fn()
+      }
+    })).rejects.toThrow("Invalid Archa config at /tmp/config.json: bad value");
+
+    expect(mocks.createServer).not.toHaveBeenCalled();
   });
 });
 
