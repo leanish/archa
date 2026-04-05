@@ -35,7 +35,7 @@ export async function startHttpServer({
   const resolvedJobRetentionMs = jobRetentionMs
     ?? getOptionalPositiveInteger(env.ARCHA_SERVER_JOB_RETENTION_MS, "ARCHA_SERVER_JOB_RETENTION_MS")
     ?? undefined;
-  await loadConfigFn(env);
+  const loadedConfig = await loadConfigFn(env);
   const resolvedJobManager = jobManager || createAskJobManager({
     env,
     answerQuestionFn: answerQuestionFn || undefined,
@@ -72,6 +72,8 @@ export async function startHttpServer({
     jobManager: resolvedJobManager,
     server,
     url: formatServerUrl(server),
+    configuredRepoCount: loadedConfig.repos.length,
+    configPath: loadedConfig.configPath || null,
     async close() {
       resolvedJobManager.close();
 
@@ -149,7 +151,8 @@ async function handleRequest({ request, response, jobManager, bodyLimitBytes, en
     if (request.method === "GET" && url.pathname === "/repos") {
       const config = await loadConfigFn(env);
       writeJson(response, 200, {
-        repos: config.repos.map(serializeRepoSummary)
+        repos: config.repos.map(serializeRepoSummary),
+        setupHint: config.repos.length === 0 ? getEmptyConfigSetupHint() : null
       });
       return;
     }
@@ -437,6 +440,10 @@ function serializeRepoSummary(repo) {
     description: repo.description,
     aliases: repo.aliases
   };
+}
+
+function getEmptyConfigSetupHint() {
+  return 'No configured repos available. Try "archa config discover-github --owner <github-user-or-org> --apply" to discover and add repos.';
 }
 
 function setCorsHeaders(response) {

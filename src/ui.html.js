@@ -532,12 +532,13 @@ button[type="submit"]:disabled {
         ? payload.repos.filter(repo => repo && typeof repo.name === "string")
         : [];
       if (repos.length === 0) {
+        const setupHint = typeof payload.setupHint === "string" && payload.setupHint.trim()
+          ? payload.setupHint.trim()
+          : 'No configured repos available. Try "archa config discover-github --owner <github-user-or-org> --apply" to discover and add repos.';
         repoFilter.disabled = true;
         repoFilter.placeholder = "No configured repos available";
-        repoHelp.textContent = 'No configured repos available. Run "archa config discover-github --owner <github-user-or-org> --apply" to add repos.';
-        setSetupHint(
-          'No configured repos available.\nRun "archa config discover-github --owner <github-user-or-org> --apply" to discover and add repos.'
-        );
+        repoHelp.textContent = setupHint;
+        setSetupHint(setupHint);
         renderRepoPicker();
         return;
       }
