@@ -69,7 +69,7 @@ export async function discoverGithubOwnerRepos({
   env = process.env,
   fetchFn = globalThis.fetch,
   inspectRepoFn = inspectRepoMetadata,
-  curateWithCodex = false,
+  curateWithCodex = true,
   includeForks = true,
   includeArchived = false
 }) {

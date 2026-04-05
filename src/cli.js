@@ -84,7 +84,7 @@ export async function main(argv) {
 
 function commandRequiresCodex(options) {
   return (options.command === "ask" && !options.noSynthesis)
-    || (options.command === "config-discover-github" && options.apply);
+    || options.command === "config-discover-github";
 }
 
 function filterRepos(repos, requestedNames) {
@@ -170,7 +170,7 @@ async function runGithubDiscovery(options, config = null) {
   const discovery = await discoverGithubOwnerRepos({
     owner: options.owner,
     env: process.env,
-    curateWithCodex: options.apply,
+    curateWithCodex: true,
     includeForks: options.includeForks,
     includeArchived: options.includeArchived
   });

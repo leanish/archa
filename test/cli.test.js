@@ -359,10 +359,10 @@ describe("cli", () => {
     expect(stdout.join("")).toContain("archa [new]");
     expect(stdout.join("")).toContain("Run: archa config discover-github --owner leanish --apply");
     expect(mocks.applyGithubDiscoveryToConfig).not.toHaveBeenCalled();
-    expect(mocks.ensureCodexInstalled).not.toHaveBeenCalled();
+    expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
   });
 
-  it("requires Codex before applying GitHub discovery", async () => {
+  it("requires Codex before GitHub discovery", async () => {
     mocks.discoverGithubOwnerRepos.mockResolvedValue({
       owner: "leanish",
       ownerType: "User",
@@ -371,7 +371,7 @@ describe("cli", () => {
       repos: []
     });
 
-    await main(["config", "discover-github", "--owner", "leanish", "--apply"]);
+    await main(["config", "discover-github", "--owner", "leanish"]);
 
     expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
   });

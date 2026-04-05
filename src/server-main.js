@@ -48,7 +48,7 @@ async function runServerGithubDiscovery(options) {
   const discovery = await discoverGithubOwnerRepos({
     owner: options.owner,
     env: process.env,
-    curateWithCodex: options.apply,
+    curateWithCodex: true,
     includeForks: options.includeForks,
     includeArchived: options.includeArchived
   });
