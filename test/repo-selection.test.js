@@ -112,6 +112,27 @@ describe("selectRepos", () => {
     expect(repos[0].name).toBe("platform-api");
   });
 
+  it("scores repo names directly without needing duplicated topics", () => {
+    const repos = selectRepos({
+      repos: [
+        {
+          name: "java-conventions",
+          description: "Shared Gradle defaults",
+          topics: ["gradle"],
+          classifications: ["infra"]
+        },
+        {
+          name: "build-logic",
+          description: "Shared Gradle defaults",
+          topics: ["gradle"],
+          classifications: ["infra"]
+        }
+      ]
+    }, "Which repo owns the conventions defaults?", null);
+
+    expect(repos[0].name).toBe("java-conventions");
+  });
+
   it("falls back to all configured repos when nothing scores positively", () => {
     const repos = selectRepos(config, "totally unrelated question", null);
 

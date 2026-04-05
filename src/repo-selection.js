@@ -14,6 +14,12 @@ function tokenize(text) {
   return (text.toLowerCase().match(/[a-z0-9-]+/g) || []).filter(token => token.length >= 3);
 }
 
+function tokenizeRepoName(name) {
+  return Array.from(new Set(
+    tokenize(name).flatMap(token => token.includes("-") ? [token, ...token.split("-")] : [token])
+  ));
+}
+
 export function selectRepos(config, question, requestedRepoNames) {
   if (requestedRepoNames && requestedRepoNames.length > 0) {
     const requested = new Set(requestedRepoNames.map(name => name.toLowerCase()));
@@ -60,8 +66,8 @@ function repoMatchesAnyName(repo, requestedNames) {
 }
 
 function scoreRepo(repo, questionTokens) {
-  const haystackTokens = new Set(tokenize([
-    repo.name,
+  const repoNameTokens = new Set(tokenizeRepoName(repo.name));
+  const metadataTokens = new Set(tokenize([
     repo.description,
     ...(repo.topics || [])
   ].join(" ")));
@@ -71,7 +77,10 @@ function scoreRepo(repo, questionTokens) {
 
   let score = 0;
   for (const token of questionTokens) {
-    if (haystackTokens.has(token)) {
+    if (repoNameTokens.has(token)) {
+      score += 5;
+    }
+    if (metadataTokens.has(token)) {
       score += 3;
     }
     if (classificationTokens.has(token)) {

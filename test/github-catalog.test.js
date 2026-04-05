@@ -76,7 +76,7 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa", "archa"],
+          topics: ["cli", "codex", "qa"],
           classifications: ["cli"]
         },
         {
@@ -84,7 +84,7 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/forked-repo.git",
           defaultBranch: "main",
           description: "",
-          topics: ["fork", "customized", "forked"],
+          topics: ["fork", "customized"],
           classifications: []
         }
       ],
@@ -131,7 +131,7 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/archa.git",
         defaultBranch: "main",
         description: "Repo-aware CLI for engineering Q&A with local Codex",
-        topics: ["cli", "codex", "qa", "archa"],
+        topics: ["cli", "codex", "qa"],
         classifications: ["cli"]
       }
     ]);
@@ -182,7 +182,7 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/java-conventions.git",
         defaultBranch: "main",
         description: "Shared Gradle conventions for JDK-based projects",
-        topics: ["java-conventions", "java", "conventions", "gradle", "jdk"],
+        topics: ["gradle", "conventions", "jdk"],
         classifications: ["infra"]
       }
     ]);
@@ -232,7 +232,7 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/tiny-cli.git",
         defaultBranch: "main",
         description: "Tiny command line helper for demos",
-        topics: ["tiny-cli", "tiny", "cli"],
+        topics: ["tiny", "command", "line"],
         classifications: ["cli"]
       }
     ]);
@@ -278,7 +278,7 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/shop-app.git",
         defaultBranch: "main",
         description: "Storefront frontend",
-        topics: ["commerce", "shop", "app", "storefront"],
+        topics: ["commerce", "storefront", "frontend"],
         classifications: ["external", "frontend"]
       }
     ]);
@@ -327,7 +327,7 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/billing-service.git",
         defaultBranch: "main",
         description: "Billing microservice GraphQL API",
-        topics: ["payments", "billing", "service", "microservice", "graphql", "api"],
+        topics: ["payments", "billing", "microservice", "graphql", "api"],
         classifications: ["microservice", "external", "backend"]
       }
     ]);
@@ -379,7 +379,7 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/billing-platform.git",
         defaultBranch: "main",
         description: "Billing GraphQL API",
-        topics: ["billing-platform", "billing", "platform", "graphql", "api"],
+        topics: ["billing", "graphql", "api"],
         classifications: ["backend", "internal"]
       }
     ]);

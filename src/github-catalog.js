@@ -344,21 +344,14 @@ function normalizeTopicList(value, repo, sizeKb) {
 
   return mergeTopicLists(
     githubTopics,
-    inferRepoTopics(repo, {
-      includeCompoundRepoNames: githubTopics.length === 0,
-      sizeKb
-    })
+    inferRepoTopics(repo, { sizeKb })
   );
 }
 
-function inferRepoTopics(repo, { includeCompoundRepoNames, sizeKb }) {
+function inferRepoTopics(repo, { sizeKb }) {
   const topics = [];
   const seen = new Set();
   const maxTopics = getMaxInferredTopics(sizeKb);
-
-  for (const token of tokenizeRepoName(repo.name, { includeCompoundRepoNames })) {
-    addTopicToken(token, topics, seen, maxTopics);
-  }
 
   for (const token of tokenizeDescription(repo.description)) {
     addTopicToken(token, topics, seen, maxTopics);
