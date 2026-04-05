@@ -1,11 +1,48 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  startHttpServer: vi.fn()
+  startHttpServer: vi.fn(),
+  ensureInteractiveConfigSetup: vi.fn(),
+  ensureCodexInstalled: vi.fn(),
+  loadConfig: vi.fn(),
+  applyGithubDiscoveryToConfig: vi.fn(),
+  discoverGithubOwnerRepos: vi.fn(),
+  mergeGithubDiscoveryResults: vi.fn(),
+  planGithubRepoDiscovery: vi.fn(),
+  promptGithubDiscoverySelection: vi.fn(),
+  renderGithubDiscovery: vi.fn()
 }));
 
 vi.mock("../src/http-server.js", () => ({
   startHttpServer: mocks.startHttpServer
+}));
+
+vi.mock("../src/cli-bootstrap.js", () => ({
+  ensureInteractiveConfigSetup: mocks.ensureInteractiveConfigSetup
+}));
+
+vi.mock("../src/config.js", () => ({
+  loadConfig: mocks.loadConfig,
+  initializeConfig: vi.fn(),
+  applyGithubDiscoveryToConfig: mocks.applyGithubDiscoveryToConfig
+}));
+
+vi.mock("../src/codex-installation.js", () => ({
+  ensureCodexInstalled: mocks.ensureCodexInstalled
+}));
+
+vi.mock("../src/github-catalog.js", () => ({
+  discoverGithubOwnerRepos: mocks.discoverGithubOwnerRepos,
+  mergeGithubDiscoveryResults: mocks.mergeGithubDiscoveryResults,
+  planGithubRepoDiscovery: mocks.planGithubRepoDiscovery
+}));
+
+vi.mock("../src/github-discovery-selection.js", () => ({
+  promptGithubDiscoverySelection: mocks.promptGithubDiscoverySelection
+}));
+
+vi.mock("../src/render.js", () => ({
+  renderGithubDiscovery: mocks.renderGithubDiscovery
 }));
 
 import { main, setupShutdownHandlers } from "../src/server-main.js";
@@ -30,6 +67,51 @@ describe("server-main", () => {
       stderr.push(chunk);
       return true;
     });
+    mocks.ensureCodexInstalled.mockImplementation(() => {});
+    mocks.ensureInteractiveConfigSetup.mockResolvedValue(true);
+    mocks.loadConfig.mockResolvedValue({
+      configPath: "/tmp/archa-config.json",
+      repos: []
+    });
+    mocks.discoverGithubOwnerRepos.mockResolvedValue({
+      owner: "leanish",
+      ownerType: "User",
+      repos: [],
+      skippedForks: 0,
+      skippedArchived: 0
+    });
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      entries: [],
+      reposToAdd: [],
+      counts: {
+        discovered: 0,
+        configured: 0,
+        new: 0,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+    mocks.mergeGithubDiscoveryResults.mockImplementation((baseDiscovery, refinedDiscovery) => ({
+      ...baseDiscovery,
+      repos: baseDiscovery.repos.map(repo => {
+        const refinedRepo = refinedDiscovery.repos.find(candidate => candidate.name === repo.name);
+        return refinedRepo || repo;
+      })
+    }));
+    mocks.promptGithubDiscoverySelection.mockResolvedValue({
+      reposToAdd: [],
+      reposToOverride: []
+    });
+    mocks.applyGithubDiscoveryToConfig.mockResolvedValue({
+      configPath: "/tmp/archa-config.json",
+      addedCount: 0,
+      overriddenCount: 0
+    });
+    mocks.renderGithubDiscovery.mockReturnValue("discovery summary");
   });
 
   afterEach(() => {
@@ -47,6 +129,8 @@ describe("server-main", () => {
     const result = await main([]);
 
     expect(result).toBe(serverHandle);
+    expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
+    expect(mocks.ensureInteractiveConfigSetup).toHaveBeenCalled();
     expect(stdout.join("")).toBe("Archa server listening on http://127.0.0.1:8787\n");
     expect(stderr.join("")).toContain('Suggestion: run "archa config discover-github --owner <github-user-or-org> --apply".');
   });
@@ -60,6 +144,70 @@ describe("server-main", () => {
     await main([]);
 
     expect(stderr.join("")).toBe("");
+  });
+
+  it("does not start the server when interactive setup is declined", async () => {
+    mocks.ensureInteractiveConfigSetup.mockResolvedValue(false);
+
+    const result = await main([]);
+
+    expect(result).toBeNull();
+    expect(mocks.startHttpServer).not.toHaveBeenCalled();
+  });
+
+  it("shows discovery progress during interactive server bootstrap", async () => {
+    mocks.discoverGithubOwnerRepos.mockImplementation(async ({ onProgress }) => {
+      onProgress?.({
+        type: "discovery-listed",
+        owner: "leanish",
+        discoveredCount: 2,
+        eligibleCount: 1,
+        skippedForks: 1,
+        skippedArchived: 0
+      });
+      onProgress?.({
+        type: "repo-processed",
+        owner: "leanish",
+        repoName: "archa",
+        processedCount: 1,
+        totalCount: 1
+      });
+
+      return {
+        owner: "leanish",
+        ownerType: "User",
+        repos: [],
+        skippedForks: 1,
+        skippedArchived: 0
+      };
+    });
+    mocks.ensureInteractiveConfigSetup.mockImplementation(async ({ runDiscoveryFn }) => {
+      await runDiscoveryFn({
+        owner: "leanish",
+        includeForks: true,
+        includeArchived: false
+      });
+      return false;
+    });
+
+    const result = await main([]);
+
+    expect(result).toBeNull();
+    expect(stderr.join("")).toContain("Discovering GitHub repos for leanish...");
+    expect(stderr.join("")).toContain("Found 2 repo(s); loading GitHub metadata for 1 eligible repo(s)...");
+    expect(stderr.join("")).toContain("Loading repos: 1/1 (archa)");
+    expect(stdout.join("")).toContain("discovery summary");
+    expect(mocks.startHttpServer).not.toHaveBeenCalled();
+  });
+
+  it("fails before setup when Codex is missing", async () => {
+    mocks.ensureCodexInstalled.mockImplementation(() => {
+      throw new Error("Codex CLI is required but was not found on PATH.");
+    });
+
+    await expect(main([])).rejects.toThrow("Codex CLI is required but was not found on PATH.");
+    expect(mocks.ensureInteractiveConfigSetup).not.toHaveBeenCalled();
+    expect(mocks.startHttpServer).not.toHaveBeenCalled();
   });
 });
 

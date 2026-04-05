@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
 import {
@@ -8,6 +9,7 @@ import {
   resolveAnswerAudience,
   SUPPORTED_ANSWER_AUDIENCES
 } from "./answer-audience.js";
+import { normalizeCodexExecutionError } from "./codex-installation.js";
 import { DEFAULT_CODEX_MODEL, DEFAULT_CODEX_REASONING_EFFORT } from "./codex-defaults.js";
 
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
@@ -24,10 +26,6 @@ export async function runCodexQuestion({
   onStatus,
   timeoutMs = DEFAULT_CODEX_TIMEOUT_MS
 }) {
-  const outputFile = path.join(
-    os.tmpdir(),
-    `archa-codex-${process.pid}-${Date.now()}.txt`
-  );
   const executionContext = getCodexExecutionContext({ question, audience, selectedRepos, workspaceRoot });
   const resolvedModel = model || DEFAULT_CODEX_MODEL;
   const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
@@ -36,23 +34,54 @@ export async function runCodexQuestion({
     `Running Codex in ${executionContext.workingDirectory} with ${resolvedModel} (${resolvedReasoningEffort})...`
   );
 
+  return runCodexPrompt({
+    prompt: executionContext.prompt,
+    model: resolvedModel,
+    reasoningEffort: resolvedReasoningEffort,
+    workingDirectory: executionContext.workingDirectory,
+    onStatus,
+    timeoutMs,
+    emptyOutputText: "Codex did not produce a final answer."
+  });
+}
+
+export async function runCodexPrompt({
+  prompt,
+  model,
+  reasoningEffort,
+  workingDirectory,
+  onStatus,
+  timeoutMs = DEFAULT_CODEX_TIMEOUT_MS,
+  emptyOutputText = "Codex did not produce a final answer."
+}) {
+  const outputFile = createCodexOutputFilePath();
+  const resolvedModel = model || DEFAULT_CODEX_MODEL;
+  const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
+
   try {
     await runCodexExec({
-      prompt: executionContext.prompt,
+      prompt,
       model: resolvedModel,
       reasoningEffort: resolvedReasoningEffort,
       outputFile,
-      workingDirectory: executionContext.workingDirectory,
+      workingDirectory,
       onStatus,
       timeoutMs
     });
 
     return {
-      text: (await fs.readFile(outputFile, "utf8")).trim() || "Codex did not produce a final answer."
+      text: (await fs.readFile(outputFile, "utf8")).trim() || emptyOutputText
     };
   } finally {
     await fs.rm(outputFile, { force: true });
   }
+}
+
+function createCodexOutputFilePath() {
+  return path.join(
+    os.tmpdir(),
+    `archa-codex-${process.pid}-${Date.now()}-${randomUUID()}.txt`
+  );
 }
 
 export function getCodexTimeoutMs(env = process.env) {
@@ -182,7 +211,7 @@ async function runCodexExec({ prompt, model, reasoningEffort, outputFile, workin
         settled = true;
         clearTimeout(timeoutTimer);
         clearTimeout(forceKillTimer);
-        reject(error);
+        reject(normalizeCodexExecutionError(error));
       });
       child.on("close", code => {
         clearTimeout(timeoutTimer);

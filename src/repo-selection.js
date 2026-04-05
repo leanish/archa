@@ -1,7 +1,23 @@
 const MAX_AUTOMATIC_REPOS = 4;
+const CLASSIFICATION_ALIASES = new Map([
+  ["infra", ["infra", "infrastructure", "ops", "devops"]],
+  ["library", ["library", "lib", "sdk", "module", "package"]],
+  ["internal", ["internal", "private", "proprietary"]],
+  ["microservice", ["microservice", "worker", "daemon"]],
+  ["external", ["external", "customer-facing", "user-facing", "merchant-facing", "partner-facing", "checkout", "storefront", "onboarding", "pricing", "public"]],
+  ["frontend", ["frontend", "ui", "browser", "web"]],
+  ["backend", ["backend", "server", "api", "graphql", "rest"]],
+  ["cli", ["cli", "terminal", "command"]]
+]);
 
 function tokenize(text) {
   return (text.toLowerCase().match(/[a-z0-9-]+/g) || []).filter(token => token.length >= 3);
+}
+
+function tokenizeRepoName(name) {
+  return Array.from(new Set(
+    tokenize(name).flatMap(token => token.includes("-") ? [token, ...token.split("-")] : [token])
+  ));
 }
 
 export function selectRepos(config, question, requestedRepoNames) {
@@ -50,16 +66,25 @@ function repoMatchesAnyName(repo, requestedNames) {
 }
 
 function scoreRepo(repo, questionTokens) {
-  const haystackTokens = new Set(tokenize([
-    repo.name,
+  const repoNameTokens = new Set(tokenizeRepoName(repo.name));
+  const metadataTokens = new Set(tokenize([
     repo.description,
     ...(repo.topics || [])
   ].join(" ")));
+  const classificationTokens = new Set(
+    (repo.classifications || []).flatMap(classification => CLASSIFICATION_ALIASES.get(classification) || [classification])
+  );
 
   let score = 0;
   for (const token of questionTokens) {
-    if (haystackTokens.has(token)) {
+    if (repoNameTokens.has(token)) {
+      score += 5;
+    }
+    if (metadataTokens.has(token)) {
       score += 3;
+    }
+    if (classificationTokens.has(token)) {
+      score += 6;
     }
     if (repo.name.toLowerCase().includes(token)) {
       score += 4;

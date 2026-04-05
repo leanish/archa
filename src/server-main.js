@@ -1,10 +1,36 @@
 import process from "node:process";
 
+import { applyGithubDiscoveryToConfig, initializeConfig, loadConfig } from "./config.js";
+import { ensureCodexInstalled } from "./codex-installation.js";
+import { getConfigPath } from "./config-paths.js";
+import { ensureInteractiveConfigSetup } from "./cli-bootstrap.js";
+import {
+  discoverGithubOwnerRepos,
+  mergeGithubDiscoveryResults,
+  planGithubRepoDiscovery
+} from "./github-catalog.js";
+import { createGithubDiscoveryProgressReporter } from "./github-discovery-progress.js";
+import { promptGithubDiscoverySelection } from "./github-discovery-selection.js";
 import { startHttpServer } from "./http-server.js";
+import { renderGithubDiscovery } from "./render.js";
 import { HelpError, parseServerArgs } from "./server-args.js";
 
 export async function main(argv) {
   const options = parseServerArgs(argv, process.env);
+  ensureCodexInstalled();
+  const shouldContinue = await ensureInteractiveConfigSetup({
+    env: process.env,
+    loadConfigFn: loadConfig,
+    initializeConfigFn: initializeConfig,
+    getConfigPathFn: getConfigPath,
+    runDiscoveryFn: discoveryOptions => runServerGithubDiscovery(discoveryOptions),
+    allowProceedWithoutRepos: false
+  });
+
+  if (!shouldContinue) {
+    return null;
+  }
+
   const serverHandle = await startHttpServer({
     env: process.env,
     host: options.host,
@@ -20,6 +46,86 @@ export async function main(argv) {
 
   setupShutdownHandlers(serverHandle);
   return serverHandle;
+}
+
+async function runServerGithubDiscovery(options) {
+  const config = await loadConfig(process.env);
+  const progressReporter = createGithubDiscoveryProgressReporter();
+  progressReporter.start(options.owner);
+  let discovery;
+  try {
+    discovery = await discoverGithubOwnerRepos({
+      owner: options.owner,
+      env: process.env,
+      curateWithCodex: false,
+      inspectRepos: false,
+      onProgress: event => progressReporter.onProgress(event),
+      includeForks: options.includeForks,
+      includeArchived: options.includeArchived
+    });
+  } finally {
+    progressReporter.finish();
+  }
+  let plan = planGithubRepoDiscovery(config, discovery);
+  const initialSelection = await promptGithubDiscoverySelection(plan, {
+    input: process.stdin,
+    output: process.stdout
+  });
+  const selectedRepoNames = [
+    ...initialSelection.reposToAdd.map(repo => repo.name),
+    ...initialSelection.reposToOverride.map(repo => repo.name)
+  ];
+
+  if (selectedRepoNames.length > 0) {
+    progressReporter.startCuration(selectedRepoNames.length);
+    let refinedDiscovery;
+    try {
+      refinedDiscovery = await discoverGithubOwnerRepos({
+        owner: options.owner,
+        env: process.env,
+        curateWithCodex: true,
+        inspectRepos: true,
+        includeDiscoverySummary: false,
+        selectedRepoNames,
+        onProgress: event => progressReporter.onProgress(event),
+        includeForks: options.includeForks,
+        includeArchived: options.includeArchived
+      });
+    } finally {
+      progressReporter.finish();
+    }
+
+    discovery = mergeGithubDiscoveryResults(discovery, refinedDiscovery);
+    plan = planGithubRepoDiscovery(config, discovery);
+  }
+
+  const selection = {
+    reposToAdd: plan.entries
+      .filter(entry => entry.status === "new" && initialSelection.reposToAdd.some(repo => repo.name === entry.repo.name))
+      .map(entry => entry.repo),
+    reposToOverride: plan.entries
+      .filter(entry => entry.status === "configured" && initialSelection.reposToOverride.some(repo => repo.name === entry.repo.name))
+      .map(entry => entry.repo)
+  };
+  const applyResult = selection.reposToAdd.length > 0 || selection.reposToOverride.length > 0
+    ? await applyGithubDiscoveryToConfig({
+        env: process.env,
+        reposToAdd: selection.reposToAdd,
+        reposToOverride: selection.reposToOverride
+      })
+    : {
+        configPath: config.configPath,
+        addedCount: 0,
+        overriddenCount: 0
+      };
+
+  process.stdout.write(`${renderGithubDiscovery({
+    ...plan,
+    applied: true,
+    configPath: applyResult.configPath,
+    addedCount: applyResult.addedCount,
+    overriddenCount: applyResult.overriddenCount
+  })}\n`);
 }
 
 export function setupShutdownHandlers(serverHandle, { processRef = process } = {}) {
