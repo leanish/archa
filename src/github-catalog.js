@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+
 import { inspectRepoMetadata } from "./repo-classification-inspector.js";
 
 const GITHUB_API_URL = "https://api.github.com";
@@ -82,6 +84,7 @@ export async function discoverGithubOwnerRepos({
   env = process.env,
   fetchFn = globalThis.fetch,
   inspectRepoFn = inspectRepoMetadata,
+  resolveGithubAuthTokenFn = readGithubCliAuthToken,
   curateWithCodex = true,
   onProgress = null,
   includeForks = true,
@@ -96,9 +99,13 @@ export async function discoverGithubOwnerRepos({
     throw new Error("GitHub discovery requires a fetch implementation.");
   }
 
+  const githubToken = await resolveGithubAuthToken({
+    env,
+    resolveGithubAuthTokenFn
+  });
   const ownerSummary = await fetchGithubJson({
     fetchFn,
-    env,
+    token: githubToken,
     path: `/users/${encodeURIComponent(normalizedOwner)}`,
     notFoundMessage: `GitHub owner not found: ${normalizedOwner}.`
   });
@@ -106,8 +113,8 @@ export async function discoverGithubOwnerRepos({
   const reposPath = await resolveReposPath({
     ownerType,
     owner: normalizedOwner,
-    env,
-    fetchFn
+    fetchFn,
+    token: githubToken
   });
   const discoveredRepos = [];
   let page = 1;
@@ -115,7 +122,7 @@ export async function discoverGithubOwnerRepos({
   while (true) {
     const reposPage = await fetchGithubJson({
       fetchFn,
-      env,
+      token: githubToken,
       path: formatPagedReposPath(reposPath, page)
     });
 
@@ -174,6 +181,7 @@ export async function discoverGithubOwnerRepos({
         repo,
         env,
         fetchFn,
+        token: githubToken,
         inspectRepoFn,
         curateWithCodex,
         inspectRepos
@@ -281,18 +289,18 @@ function normalizeOwner(owner) {
   return owner.trim();
 }
 
-async function resolveReposPath({ ownerType, owner, env, fetchFn }) {
+async function resolveReposPath({ ownerType, owner, fetchFn, token }) {
   if (ownerType === "Organization") {
     return `/orgs/${encodeURIComponent(owner)}/repos?sort=full_name&type=all`;
   }
 
-  if (!hasGithubToken(env)) {
+  if (!token) {
     return `/users/${encodeURIComponent(owner)}/repos?sort=full_name&type=owner`;
   }
 
   const authenticatedUser = await fetchGithubJson({
     fetchFn,
-    env,
+    token,
     path: "/user"
   });
   const authenticatedLogin = typeof authenticatedUser?.login === "string"
@@ -312,13 +320,9 @@ function formatPagedReposPath(basePath, page) {
   return `${path}?per_page=${PAGE_SIZE}&page=${page}${querySuffix}`;
 }
 
-function hasGithubToken(env) {
-  return Boolean(env.GH_TOKEN || env.GITHUB_TOKEN);
-}
-
-async function fetchGithubJson({ fetchFn, env, path, notFoundMessage = null }) {
+async function fetchGithubJson({ fetchFn, token, path, notFoundMessage = null }) {
   const response = await fetchFn(`${GITHUB_API_URL}${path}`, {
-    headers: buildGithubHeaders(env)
+    headers: buildGithubHeaders(token)
   });
 
   if (response.status === 404 && notFoundMessage) {
@@ -333,12 +337,11 @@ async function fetchGithubJson({ fetchFn, env, path, notFoundMessage = null }) {
   return response.json();
 }
 
-function buildGithubHeaders(env) {
+function buildGithubHeaders(token) {
   const headers = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28"
   };
-  const token = env.GH_TOKEN || env.GITHUB_TOKEN;
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -356,11 +359,57 @@ async function safeReadResponseText(response) {
 }
 
 function formatGithubError(path, status, detail) {
+  if (isGithubRateLimitError(status, detail)) {
+    return `GitHub API rate limit exceeded while requesting ${path}. Authenticate discovery with GH_TOKEN or GITHUB_TOKEN, or retry later.`;
+  }
+
   if (!detail) {
     return `GitHub API request failed (${status}) for ${path}.`;
   }
 
   return `GitHub API request failed (${status}) for ${path}: ${detail}`;
+}
+
+function isGithubRateLimitError(status, detail) {
+  if ((status !== 403 && status !== 429) || !detail) {
+    return false;
+  }
+
+  return detail.toLowerCase().includes("rate limit exceeded");
+}
+
+async function resolveGithubAuthToken({ env, resolveGithubAuthTokenFn }) {
+  const envToken = env.GH_TOKEN || env.GITHUB_TOKEN;
+
+  if (typeof envToken === "string" && envToken.trim() !== "") {
+    return envToken.trim();
+  }
+
+  if (typeof resolveGithubAuthTokenFn !== "function") {
+    return null;
+  }
+
+  try {
+    const resolvedToken = await resolveGithubAuthTokenFn();
+    return typeof resolvedToken === "string" && resolvedToken.trim() !== ""
+      ? resolvedToken.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function readGithubCliAuthToken({ spawnSyncFn = spawnSync } = {}) {
+  const result = spawnSyncFn("gh", ["auth", "token"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+
+  if (result.error || result.status !== 0) {
+    return null;
+  }
+
+  return typeof result.stdout === "string" ? result.stdout.trim() : null;
 }
 
 function normalizeGithubRepo(repo) {
@@ -374,7 +423,7 @@ function normalizeGithubRepo(repo) {
   };
 }
 
-async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoFn, curateWithCodex, inspectRepos }) {
+async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, token, inspectRepoFn, curateWithCodex, inspectRepos }) {
   const normalizedRepo = normalizeGithubRepo(repo);
   const inspectedMetadata = inspectRepos
     ? await safeInspectMetadata(inspectRepoFn, {
@@ -414,7 +463,7 @@ async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoF
 
   const topicsResponse = await fetchGithubJson({
     fetchFn,
-    env,
+    token,
     path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo.name)}/topics`
   });
 

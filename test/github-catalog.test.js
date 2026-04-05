@@ -170,6 +170,46 @@ describe("github-catalog", () => {
     );
   });
 
+  it("falls back to gh auth when env tokens are absent", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
+    const resolveGithubAuthTokenFn = vi.fn(async () => "gh-token");
+    const fetchFn = vi.fn(async (url, options) => {
+      if (url === "https://api.github.com/users/leanish") {
+        expect(options.headers.Authorization).toBe("Bearer gh-token");
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/user") {
+        expect(options.headers.Authorization).toBe("Bearer gh-token");
+        return createJsonResponse(200, {
+          login: "leanish"
+        });
+      }
+
+      if (url === "https://api.github.com/user/repos?per_page=100&page=1&sort=full_name&affiliation=owner&visibility=all") {
+        expect(options.headers.Authorization).toBe("Bearer gh-token");
+        return createJsonResponse(200, []);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      env: {},
+      fetchFn,
+      inspectRepoFn,
+      resolveGithubAuthTokenFn
+    });
+
+    expect(resolveGithubAuthTokenFn).toHaveBeenCalledTimes(1);
+    expect(result.ownerType).toBe("User");
+    expect(result.repos).toEqual([]);
+  });
+
   it("emits progress updates while discovery inspects eligible repos", async () => {
     const inspectRepoFn = vi.fn(async () => []);
     const onProgress = vi.fn();
@@ -823,6 +863,21 @@ describe("github-catalog", () => {
       fetchFn,
       inspectRepoFn
     })).rejects.toThrow("GitHub owner not found: missing-owner.");
+  });
+
+  it("throws an actionable error when GitHub rate limits discovery", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
+    const fetchFn = vi.fn(async () => createJsonResponse(403, {
+      message: "API rate limit exceeded for 84.251.57.8."
+    }));
+
+    await expect(discoverGithubOwnerRepos({
+      owner: "nosto",
+      fetchFn,
+      inspectRepoFn
+    })).rejects.toThrow(
+      "GitHub API rate limit exceeded while requesting /users/nosto. Authenticate discovery with GH_TOKEN or GITHUB_TOKEN, or retry later."
+    );
   });
 
   it("plans additions, conflicts, and metadata suggestions against the current config", () => {
