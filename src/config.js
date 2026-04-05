@@ -51,6 +51,96 @@ export async function initializeConfig({
   };
 }
 
+export async function appendReposToConfig({
+  env = process.env,
+  repos
+}) {
+  if (!Array.isArray(repos)) {
+    throw new Error('appendReposToConfig requires a "repos" array.');
+  }
+
+  const configPath = getConfigPath(env);
+  const raw = await readConfigFile(configPath);
+  const parsed = parseConfigJson(configPath, raw);
+
+  if (!Array.isArray(parsed.repos)) {
+    throw new Error(`Invalid Archa config at ${configPath}: "repos" must be an array.`);
+  }
+
+  const normalizedExistingRepos = normalizeRepoDefinitions(parsed.repos, configPath);
+  const normalizedNewRepos = normalizeRepoDefinitions(repos, configPath);
+  const nextRepos = [...normalizedExistingRepos, ...normalizedNewRepos];
+  validateUniqueRepoIdentifiers(nextRepos, configPath);
+
+  parsed.repos = nextRepos;
+  await fs.writeFile(configPath, JSON.stringify(parsed, null, 2) + "\n");
+
+  return {
+    configPath,
+    addedCount: normalizedNewRepos.length,
+    totalCount: nextRepos.length
+  };
+}
+
+export async function applyGithubDiscoveryToConfig({
+  env = process.env,
+  reposToAdd = [],
+  reposToOverride = []
+}) {
+  if (!Array.isArray(reposToAdd)) {
+    throw new Error('applyGithubDiscoveryToConfig requires a "reposToAdd" array.');
+  }
+
+  if (!Array.isArray(reposToOverride)) {
+    throw new Error('applyGithubDiscoveryToConfig requires a "reposToOverride" array.');
+  }
+
+  const configPath = getConfigPath(env);
+  const raw = await readConfigFile(configPath);
+  const parsed = parseConfigJson(configPath, raw);
+
+  if (!Array.isArray(parsed.repos)) {
+    throw new Error(`Invalid Archa config at ${configPath}: "repos" must be an array.`);
+  }
+
+  const normalizedExistingRepos = normalizeRepoDefinitions(parsed.repos, configPath);
+  const normalizedAdditions = normalizeRepoDefinitions(reposToAdd, configPath);
+  const normalizedOverrides = normalizeRepoDefinitions(reposToOverride, configPath);
+  const overridesByName = new Map(
+    normalizedOverrides.map(repo => [repo.name.toLowerCase(), repo])
+  );
+
+  for (const repoToOverride of normalizedOverrides) {
+    if (!normalizedExistingRepos.some(existingRepo => existingRepo.name.toLowerCase() === repoToOverride.name.toLowerCase())) {
+      throw new Error(`Cannot override missing repo "${repoToOverride.name}" in ${configPath}.`);
+    }
+  }
+
+  const nextRepos = normalizedExistingRepos.map(existingRepo => {
+    const overrideRepo = overridesByName.get(existingRepo.name.toLowerCase());
+
+    if (!overrideRepo) {
+      return existingRepo;
+    }
+
+    return mergeDiscoveredRepo(existingRepo, overrideRepo);
+  });
+
+  nextRepos.push(...normalizedAdditions);
+
+  validateUniqueRepoIdentifiers(nextRepos, configPath);
+
+  parsed.repos = nextRepos;
+  await fs.writeFile(configPath, JSON.stringify(parsed, null, 2) + "\n");
+
+  return {
+    configPath,
+    addedCount: normalizedAdditions.length,
+    overriddenCount: normalizedOverrides.length,
+    totalCount: nextRepos.length
+  };
+}
+
 async function readConfigFile(configPath) {
   try {
     return await fs.readFile(configPath, "utf8");
@@ -105,6 +195,20 @@ function normalizeRepoDefinition(repo, index, sourcePath) {
     topics: Array.isArray(repo.topics) ? repo.topics : [],
     aliases: normalizeAliases(repo.aliases, repo.name, sourcePath),
     alwaysSelect: repo.alwaysSelect === true
+  };
+}
+
+function normalizeRepoDefinitions(repos, sourcePath) {
+  return repos.map((repo, index) => normalizeRepoDefinition(repo, index, sourcePath));
+}
+
+function mergeDiscoveredRepo(existingRepo, discoveredRepo) {
+  return {
+    ...existingRepo,
+    url: discoveredRepo.url,
+    defaultBranch: discoveredRepo.defaultBranch,
+    description: discoveredRepo.description,
+    topics: discoveredRepo.topics
   };
 }
 

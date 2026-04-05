@@ -1,11 +1,19 @@
 import fs from "node:fs/promises";
 import process from "node:process";
 
-import { loadConfig, initializeConfig } from "./config.js";
+import { applyGithubDiscoveryToConfig, loadConfig, initializeConfig } from "./config.js";
 import { getConfigPath } from "./config-paths.js";
+import { discoverGithubOwnerRepos, planGithubRepoDiscovery } from "./github-catalog.js";
+import { promptGithubDiscoverySelection, selectGithubDiscoveryRepos } from "./github-discovery-selection.js";
 import { parseArgs } from "./parse-args.js";
 import { answerQuestion } from "./question-answering.js";
-import { renderAnswer, renderRepoList, renderRetrievalOnly, renderSyncReport } from "./render.js";
+import {
+  renderAnswer,
+  renderGithubDiscovery,
+  renderRepoList,
+  renderRetrievalOnly,
+  renderSyncReport
+} from "./render.js";
 import { syncRepos } from "./repo-sync.js";
 import { createStreamStatusReporter } from "./status-reporter.js";
 
@@ -24,6 +32,53 @@ export async function main(argv) {
         force: options.force
       });
       process.stdout.write(`${renderConfigInit(result)}\n`);
+      return;
+    }
+    case "config-discover-github": {
+      const config = await loadConfig(process.env);
+      const discovery = await discoverGithubOwnerRepos({
+        owner: options.owner,
+        env: process.env,
+        includeForks: options.includeForks,
+        includeArchived: options.includeArchived
+      });
+      const plan = planGithubRepoDiscovery(config, discovery);
+
+      if (!options.apply) {
+        process.stdout.write(`${renderGithubDiscovery({
+          ...plan,
+          applied: false
+        })}\n`);
+        return;
+      }
+
+      const selection = hasExplicitGithubDiscoverySelection(options)
+        ? selectGithubDiscoveryRepos(plan, {
+            addRepoNames: options.addRepoNames,
+            overrideRepoNames: options.overrideRepoNames
+          })
+        : await promptGithubDiscoverySelection(plan, {
+            input: process.stdin,
+            output: process.stdout
+          });
+      const applyResult = selection.reposToAdd.length > 0 || selection.reposToOverride.length > 0
+        ? await applyGithubDiscoveryToConfig({
+            env: process.env,
+            reposToAdd: selection.reposToAdd,
+            reposToOverride: selection.reposToOverride
+          })
+        : {
+            configPath: config.configPath,
+            addedCount: 0,
+            overriddenCount: 0
+          };
+      process.stdout.write(`${renderGithubDiscovery({
+        ...plan,
+        applied: true,
+        configPath: applyResult.configPath,
+        addedCount: applyResult.addedCount,
+        overriddenCount: applyResult.overriddenCount
+      })}\n`);
       return;
     }
     case "repos-list": {
@@ -121,4 +176,8 @@ function failOnSyncFailures(report) {
 
 function formatSyncFailure(item) {
   return item.detail ? `${item.name} (${item.detail})` : item.name;
+}
+
+function hasExplicitGithubDiscoverySelection(options) {
+  return options.addRepoNames.length > 0 || options.overrideRepoNames.length > 0;
 }

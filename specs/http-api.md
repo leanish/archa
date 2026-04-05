@@ -48,9 +48,15 @@ Response:
       "description": "Repo-aware CLI for engineering Q&A with local Codex",
       "aliases": ["self"]
     }
-  ]
+  ],
+  "setupHint": null
 }
 ```
+
+Notes:
+
+- `setupHint` is `null` during normal operation
+- when the configured repo list is empty, `setupHint` contains a suggested `discover-github --apply` command for bootstrapping config
 
 ### `POST /ask`
 

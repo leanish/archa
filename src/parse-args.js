@@ -153,6 +153,8 @@ function parseConfigCommand(argv) {
       };
     case "init":
       return parseConfigInitCommand(argv.slice(1));
+    case "discover-github":
+      return parseConfigDiscoverGithubCommand(argv.slice(1));
     case "-h":
     case "--help":
     case undefined:
@@ -198,6 +200,69 @@ function parseConfigInitCommand(argv) {
   };
 }
 
+function parseConfigDiscoverGithubCommand(argv) {
+  let owner = null;
+  let apply = false;
+  let includeForks = true;
+  let includeArchived = false;
+  let addRepoNames = [];
+  let overrideRepoNames = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    switch (arg) {
+      case "--owner":
+        owner = requireValue(arg, argv[index + 1]);
+        index += 1;
+        break;
+      case "--apply":
+        apply = true;
+        break;
+      case "--add":
+        addRepoNames = splitRepoNames(requireValue(arg, argv[index + 1]));
+        index += 1;
+        break;
+      case "--override":
+        overrideRepoNames = splitRepoNames(requireValue(arg, argv[index + 1]));
+        index += 1;
+        break;
+      case "--include-forks":
+        includeForks = true;
+        break;
+      case "--exclude-forks":
+        includeForks = false;
+        break;
+      case "--include-archived":
+        includeArchived = true;
+        break;
+      case "-h":
+      case "--help":
+        throw new HelpError(helpText());
+      default:
+        throw new Error(`Unknown config discover-github option: ${arg}\n\n${helpText()}`);
+    }
+  }
+
+  if (!owner) {
+    throw new Error('Missing value for --owner');
+  }
+
+  if (!apply && (addRepoNames.length > 0 || overrideRepoNames.length > 0)) {
+    throw new Error("Use --apply when passing --add or --override.");
+  }
+
+  return {
+    command: "config-discover-github",
+    owner,
+    apply,
+    includeForks,
+    includeArchived,
+    addRepoNames,
+    overrideRepoNames
+  };
+}
+
 function splitRepoNames(value) {
   return value
     .split(",")
@@ -230,6 +295,7 @@ function helpText() {
     "  archa repos sync [repo1,repo2,...]",
     "  archa config path",
     "  archa config init [--catalog <path>] [--managed-repos-root <path>] [--force]",
+    "  archa config discover-github --owner <name> [--apply] [--add <names>] [--override <names>] [--exclude-forks] [--include-archived]",
     "",
     "Ask Options:",
     "  --repo <names>                Limit to managed repo names",
@@ -240,6 +306,14 @@ function helpText() {
     "  --no-sync                     Skip clone/pull before asking",
     "  --no-synthesis                Show selected repos and sync results only",
     "  --                            Stop parsing options for the question text",
+    "",
+    "Config Discovery:",
+    "  --owner <name>                GitHub user or org to inspect",
+    "  --apply                       Interactively select repos to add or override",
+    "  --add <names>                 Non-interactive add selection (comma-separated or *)",
+    "  --override <names>            Non-interactive override selection (comma-separated or *)",
+    "  --exclude-forks               Skip forks during discovery",
+    "  --include-archived            Include archived repos during discovery",
     "",
     "Config:",
     "  ARCHA_CONFIG_PATH             Override config file location",

@@ -37,7 +37,12 @@ import { answerQuestion } from "../src/question-answering.js";
 describe("answerQuestion", () => {
   const config = {
     managedReposRoot: "/workspace/repos",
-    repos: []
+    repos: [
+      {
+        name: "sqs-codec",
+        directory: "/workspace/repos/sqs-codec"
+      }
+    ]
   };
   const selectedRepos = [
     {
@@ -211,7 +216,12 @@ describe("answerQuestion", () => {
     };
     const loadConfigFn = vi.fn().mockResolvedValue({
       managedReposRoot: "/workspace/repos",
-      repos: []
+      repos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/repos/sqs-codec"
+        }
+      ]
     });
     const selectReposFn = vi.fn().mockReturnValue(selectedRepos);
     const syncReposFn = vi.fn(async (repos, callbacks) => {

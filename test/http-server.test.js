@@ -258,7 +258,39 @@ describe("http-server", () => {
           description: "Beanie project",
           aliases: []
         }
-      ]
+      ],
+      setupHint: null
+    });
+  });
+
+  it("includes a setup hint when the configured repo list is empty", async () => {
+    const manager = createAskJobManager({
+      answerQuestionFn: async () => ({
+        mode: "answer",
+        question: "ignored",
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: { text: "ignored" }
+      }),
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpHandler({
+      jobManager: manager,
+      loadConfigFn: async () => ({
+        repos: []
+      })
+    });
+
+    const response = await performRequest(handler, {
+      method: "GET",
+      path: "/repos"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      repos: [],
+      setupHint: 'No configured repos available. Try "archa config discover-github --owner <github-user-or-org> --apply" to discover and add repos.'
     });
   });
 
@@ -290,6 +322,8 @@ describe("http-server", () => {
     expect(htmlResponse.body).toContain("/ask");
     expect(htmlResponse.body).toContain("/repos");
     expect(htmlResponse.body).toContain("Search configured repos");
+    expect(htmlResponse.body).toContain('id="setup-hint"');
+    expect(htmlResponse.body).toContain('archa config discover-github --owner <github-user-or-org> --apply');
     expect(htmlResponse.body).toContain("automatic");
     expect(htmlResponse.body).toContain('id="advanced-options" hidden');
     expect(htmlResponse.body).toContain('params.get("admin")');

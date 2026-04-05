@@ -93,6 +93,24 @@ archa config init \
   --managed-repos-root /Users/leandro.aguiar/.local/share/archa/repos
 ```
 
+Discover repos from a GitHub user or org and preview what could be added or overridden:
+
+```bash
+archa config discover-github --owner leanish
+```
+
+Selectively apply additions or overrides from that owner into the active config:
+
+```bash
+archa config discover-github --owner leanish --apply
+```
+
+When `--apply` runs in a terminal, Archa prompts for which new repos to add and which configured repos to override from GitHub metadata. For scripted use, pass `--add <names>` and `--override <names>` alongside `--apply`, or use `*` to select all repos of that kind.
+
+By default, GitHub discovery includes forks and skips archived repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. Imported repos reuse GitHub `description`, `topics`, and `default_branch` so repo selection starts with sensible metadata. Overrides update the configured repo's URL, default branch, description, and topics while preserving local-only fields such as aliases and `alwaysSelect`.
+
+If the active config has zero repos, `archa-server` startup, repo-listing output, and the web UI empty state suggest `archa config discover-github --owner <github-user-or-org> --apply` as the quickest recovery path.
+
 Print the active config path:
 
 ```bash
@@ -259,6 +277,7 @@ Programmatic clients that do not send `Accept: text/html` continue to receive th
 - `ARCHA_DEFAULT_MODEL`: overrides the default Codex model (`gpt-5.4`)
 - `ARCHA_DEFAULT_REASONING_EFFORT`: overrides the default reasoning effort (`low`)
 - `ARCHA_CODEX_TIMEOUT_MS`: overrides the Codex execution timeout (default `300000`)
+- `GH_TOKEN` / `GITHUB_TOKEN`: authenticates GitHub repo discovery when private or rate-limited repo metadata is needed
 - `ARCHA_SERVER_HOST`: overrides the HTTP bind host (`127.0.0.1`)
 - `ARCHA_SERVER_PORT`: overrides the HTTP bind port (`8787`)
 - `ARCHA_SERVER_BODY_LIMIT_BYTES`: overrides the max HTTP request body size (`65536`)
