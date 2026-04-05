@@ -41,6 +41,8 @@ The config file contains:
 - `managedReposRoot`: where local clones live
 - `repos`: the curated repo list, including URL, branch, description, topics, and optional aliases
 
+Repo names and aliases must be unique case-insensitively. Aliases must be non-empty strings.
+
 Example using a few public `leanish` repos:
 
 ```json

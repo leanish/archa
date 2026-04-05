@@ -266,4 +266,85 @@ describe("config", () => {
 
     await expect(loadConfig(env)).rejects.toThrow(/non-boolean "alwaysSelect"/);
   });
+
+  it("rejects aliases that are not arrays of non-empty strings", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          aliases: ["shared", 7]
+        }
+      ]
+    }));
+
+    await expect(loadConfig(env)).rejects.toThrow(/non-string or empty aliases/);
+  });
+
+  it("rejects duplicate repo names case-insensitively", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git"
+        },
+        {
+          name: "Foundation",
+          url: "https://github.com/leanish/foundation-2.git"
+        }
+      ]
+    }));
+
+    await expect(loadConfig(env)).rejects.toThrow(/duplicate repo identifier "Foundation"/);
+  });
+
+  it("rejects alias collisions with another repo name", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          aliases: ["shared"]
+        },
+        {
+          name: "shared",
+          url: "https://github.com/leanish/shared.git"
+        }
+      ]
+    }));
+
+    await expect(loadConfig(env)).rejects.toThrow(/duplicate repo identifier "shared"/);
+  });
+
+  it("rejects imported catalogs with duplicate aliases before writing config", async () => {
+    const catalogPath = path.join(tempRoot, "catalog.json");
+    const configPath = getConfigPath(env);
+    await fs.writeFile(catalogPath, JSON.stringify({
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          aliases: ["shared"]
+        },
+        {
+          name: "platform",
+          url: "https://github.com/leanish/platform.git",
+          aliases: ["Shared"]
+        }
+      ]
+    }));
+
+    await expect(initializeConfig({
+      env,
+      catalogPath
+    })).rejects.toThrow(/duplicate repo identifier "Shared"/);
+
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
 });
