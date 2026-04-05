@@ -91,6 +91,8 @@ When `config init` creates a config with zero repos, it immediately suggests:
 archa config discover-github --owner <github-user-or-org> --apply
 ```
 
+That flow pre-populates each selected repo with GitHub `description`, `topics`, and `default_branch` metadata.
+
 Initialize config from an existing catalog file:
 
 ```bash

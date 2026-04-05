@@ -222,6 +222,9 @@ describe("cli", () => {
     expect(stdout.join("")).toContain(
       "Next step: archa config discover-github --owner <github-user-or-org> --apply"
     );
+    expect(stdout.join("")).toContain(
+      "That imports GitHub description, topics, and default branch metadata into your config."
+    );
   });
 
   it("prints the repo list", async () => {
