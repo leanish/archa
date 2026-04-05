@@ -1,5 +1,56 @@
 const GITHUB_API_URL = "https://api.github.com";
 const PAGE_SIZE = 100;
+const SMALL_REPO_MAX_INFERRED_TOPICS = 3;
+const MEDIUM_REPO_MAX_INFERRED_TOPICS = 5;
+const LARGE_REPO_MAX_INFERRED_TOPICS = 8;
+const STOP_WORDS = new Set([
+  "about",
+  "after",
+  "against",
+  "along",
+  "also",
+  "among",
+  "and",
+  "answer",
+  "answering",
+  "answers",
+  "around",
+  "because",
+  "based",
+  "before",
+  "between",
+  "code",
+  "does",
+  "engineering",
+  "from",
+  "for",
+  "have",
+  "into",
+  "local",
+  "over",
+  "project",
+  "projects",
+  "repo",
+  "repository",
+  "shared",
+  "aware",
+  "that",
+  "their",
+  "them",
+  "there",
+  "these",
+  "this",
+  "through",
+  "tool",
+  "tools",
+  "using",
+  "what",
+  "when",
+  "which",
+  "while",
+  "with",
+  "your"
+]);
 
 export async function discoverGithubOwnerRepos({
   owner,
@@ -218,7 +269,10 @@ async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn }) {
   const normalizedRepo = normalizeGithubRepo(repo);
 
   if (normalizedRepo.topics.length > 0) {
-    return normalizedRepo;
+    return {
+      ...normalizedRepo,
+      topics: normalizeTopicList(normalizedRepo.topics, normalizedRepo, repo.size)
+    };
   }
 
   const topicsResponse = await fetchGithubJson({
@@ -229,8 +283,124 @@ async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn }) {
 
   return {
     ...normalizedRepo,
-    topics: Array.isArray(topicsResponse?.names) ? topicsResponse.names : []
+    topics: normalizeTopicList(topicsResponse?.names, normalizedRepo, repo.size)
   };
+}
+
+function normalizeTopicList(value, repo, sizeKb) {
+  const githubTopics = Array.isArray(value)
+    ? value.filter(topic => typeof topic === "string" && topic.trim() !== "")
+    : [];
+
+  return mergeTopicLists(
+    githubTopics,
+    inferRepoTopics(repo, {
+      includeCompoundRepoNames: githubTopics.length === 0,
+      sizeKb
+    })
+  );
+}
+
+function inferRepoTopics(repo, { includeCompoundRepoNames, sizeKb }) {
+  const topics = [];
+  const seen = new Set();
+  const maxTopics = getMaxInferredTopics(sizeKb);
+
+  for (const token of tokenizeRepoName(repo.name, { includeCompoundRepoNames })) {
+    addTopicToken(token, topics, seen, maxTopics);
+  }
+
+  for (const token of tokenizeDescription(repo.description)) {
+    addTopicToken(token, topics, seen, maxTopics);
+  }
+
+  return topics.slice(0, maxTopics);
+}
+
+function mergeTopicLists(primaryTopics, secondaryTopics) {
+  const topics = [];
+  const seen = new Set();
+
+  for (const topic of primaryTopics) {
+    addExistingTopic(topic, topics, seen);
+  }
+
+  for (const topic of secondaryTopics) {
+    addTopicToken(topic, topics, seen, Number.POSITIVE_INFINITY);
+  }
+
+  return topics;
+}
+
+function tokenizeRepoName(text, { includeCompoundRepoNames }) {
+  const tokens = [];
+
+  for (const rawToken of tokenizeRaw(text)) {
+    if (includeCompoundRepoNames || !rawToken.includes("-")) {
+      tokens.push(rawToken);
+    }
+    if (rawToken.includes("-")) {
+      tokens.push(...rawToken.split("-"));
+    }
+  }
+
+  return tokens;
+}
+
+function tokenizeDescription(text) {
+  const tokens = [];
+
+  for (const rawToken of tokenizeRaw(text)) {
+    tokens.push(...rawToken.split("-"));
+  }
+
+  return tokens;
+}
+
+function tokenizeRaw(text) {
+  return (text.toLowerCase().match(/[a-z0-9-]+/g) || []);
+}
+
+function addTopicToken(token, topics, seen, maxTopics) {
+  if (topics.length >= maxTopics) {
+    return;
+  }
+
+  const normalizedToken = token.trim().toLowerCase();
+
+  if (normalizedToken.length < 3 || STOP_WORDS.has(normalizedToken) || /^\d+$/.test(normalizedToken) || seen.has(normalizedToken)) {
+    return;
+  }
+
+  seen.add(normalizedToken);
+  topics.push(normalizedToken);
+}
+
+function addExistingTopic(token, topics, seen) {
+  const normalizedToken = token.trim().toLowerCase();
+
+  if (normalizedToken === "" || seen.has(normalizedToken)) {
+    return;
+  }
+
+  seen.add(normalizedToken);
+  topics.push(normalizedToken);
+}
+
+function getMaxInferredTopics(sizeKb) {
+  if (typeof sizeKb !== "number" || Number.isNaN(sizeKb)) {
+    return MEDIUM_REPO_MAX_INFERRED_TOPICS;
+  }
+
+  if (sizeKb < 512) {
+    return SMALL_REPO_MAX_INFERRED_TOPICS;
+  }
+
+  if (sizeKb < 5_000) {
+    return MEDIUM_REPO_MAX_INFERRED_TOPICS;
+  }
+
+  return LARGE_REPO_MAX_INFERRED_TOPICS;
 }
 
 function buildRepoSuggestions(configuredRepo, githubRepo) {

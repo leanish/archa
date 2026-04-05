@@ -20,6 +20,7 @@ describe("github-catalog", () => {
             default_branch: "main",
             description: "Repo-aware CLI for engineering Q&A with local Codex",
             topics: [],
+            size: 6400,
             fork: false,
             archived: false
           },
@@ -29,6 +30,7 @@ describe("github-catalog", () => {
             default_branch: "main",
             description: "",
             topics: [],
+            size: 20,
             fork: false,
             archived: true
           },
@@ -38,6 +40,7 @@ describe("github-catalog", () => {
             default_branch: "main",
             description: "",
             topics: [],
+            size: 32,
             fork: true,
             archived: false
           }
@@ -73,14 +76,14 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"]
+          topics: ["cli", "codex", "qa", "archa"]
         },
         {
           name: "forked-repo",
           url: "https://github.com/leanish/forked-repo.git",
           defaultBranch: "main",
           description: "",
-          topics: ["fork", "customized"]
+          topics: ["fork", "customized", "forked"]
         }
       ],
       skippedForks: 0,
@@ -105,6 +108,7 @@ describe("github-catalog", () => {
             default_branch: "main",
             description: "Repo-aware CLI for engineering Q&A with local Codex",
             topics: ["cli", "codex", "qa"],
+            size: 6400,
             fork: false,
             archived: false
           }
@@ -125,10 +129,108 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/archa.git",
         defaultBranch: "main",
         description: "Repo-aware CLI for engineering Q&A with local Codex",
-        topics: ["cli", "codex", "qa"]
+        topics: ["cli", "codex", "qa", "archa"]
       }
     ]);
     expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("infers fallback topics from repo metadata when GitHub topics are empty", async () => {
+    const fetchFn = vi.fn(async url => {
+      if (url === "https://api.github.com/users/leanish") {
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
+        return createJsonResponse(200, [
+          {
+            name: "java-conventions",
+            clone_url: "https://github.com/leanish/java-conventions.git",
+            default_branch: "main",
+            description: "Shared Gradle conventions for JDK-based projects",
+            topics: [],
+            size: 1800,
+            fork: false,
+            archived: false
+          }
+        ]);
+      }
+
+      if (url === "https://api.github.com/repos/leanish/java-conventions/topics") {
+        return createJsonResponse(200, {
+          names: []
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      fetchFn
+    });
+
+    expect(result.repos).toEqual([
+      {
+        name: "java-conventions",
+        url: "https://github.com/leanish/java-conventions.git",
+        defaultBranch: "main",
+        description: "Shared Gradle conventions for JDK-based projects",
+        topics: ["java-conventions", "java", "conventions", "gradle", "jdk"]
+      }
+    ]);
+  });
+
+  it("uses fewer inferred topics for smaller repos", async () => {
+    const fetchFn = vi.fn(async url => {
+      if (url === "https://api.github.com/users/leanish") {
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
+        return createJsonResponse(200, [
+          {
+            name: "tiny-cli",
+            clone_url: "https://github.com/leanish/tiny-cli.git",
+            default_branch: "main",
+            description: "Tiny command line helper for demos",
+            topics: [],
+            size: 40,
+            fork: false,
+            archived: false
+          }
+        ]);
+      }
+
+      if (url === "https://api.github.com/repos/leanish/tiny-cli/topics") {
+        return createJsonResponse(200, {
+          names: []
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      fetchFn
+    });
+
+    expect(result.repos).toEqual([
+      {
+        name: "tiny-cli",
+        url: "https://github.com/leanish/tiny-cli.git",
+        defaultBranch: "main",
+        description: "Tiny command line helper for demos",
+        topics: ["tiny-cli", "tiny", "cli"]
+      }
+    ]);
   });
 
   it("uses organization repo listing and forwards GitHub auth headers", async () => {

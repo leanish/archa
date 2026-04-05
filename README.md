@@ -91,7 +91,7 @@ When `config init` creates a config with zero repos, it immediately suggests:
 archa config discover-github --owner <github-user-or-org> --apply
 ```
 
-That flow pre-populates each selected repo with GitHub `description`, `topics`, and `default_branch` metadata.
+That flow pre-populates each selected repo with GitHub `description`, `topics`, and `default_branch` metadata. Archa keeps GitHub topics first and then supplements them with a locally inferred topic set from the repo name and description, scaling the inferred topic count with project size.
 
 Initialize config from an existing catalog file:
 
@@ -115,7 +115,7 @@ archa config discover-github --owner leanish --apply
 
 When `--apply` runs in a terminal, Archa prompts for which new repos to add and which configured repos to override from GitHub metadata. For scripted use, pass `--add <names>` and `--override <names>` alongside `--apply`, or use `*` to select all repos of that kind.
 
-By default, GitHub discovery includes forks and skips archived repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. Imported repos reuse GitHub `description`, `topics`, and `default_branch` so repo selection starts with sensible metadata. Overrides update the configured repo's URL, default branch, description, and topics while preserving local-only fields such as aliases and `alwaysSelect`.
+By default, GitHub discovery includes forks and skips archived repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. Imported repos reuse GitHub `description`, `topics`, and `default_branch` so repo selection starts with sensible metadata. Archa keeps any GitHub topics that exist and appends locally inferred topics from the repo name and description, with a smaller inferred set for small repos and a broader one for larger repos. Overrides update the configured repo's URL, default branch, description, and topics while preserving local-only fields such as aliases and `alwaysSelect`.
 
 If the active config has zero repos, `config init`, `archa-server` startup, repo-listing output, and the web UI empty state suggest `archa config discover-github --owner <github-user-or-org> --apply` as the quickest recovery path.
 

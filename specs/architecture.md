@@ -83,7 +83,7 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/config.js`
   Loads and validates config, bootstraps a config file from scratch or from an imported catalog, and applies selected GitHub discovery additions or overrides into the active config.
 - `src/github-catalog.js`
-  Discovers repos from a GitHub user or org, normalizes them into repo definitions, and compares them with the current config to classify additions, conflicts, and metadata review suggestions.
+  Discovers repos from a GitHub user or org, normalizes them into repo definitions, enriches topics from repo name and description after GitHub metadata is loaded with a size-aware topic budget, and compares them with the current config to classify additions, conflicts, and metadata review suggestions.
 - `src/github-discovery-selection.js`
   Resolves explicit or interactive discovery selections so GitHub imports can add only chosen repos and override only chosen configured repos.
 - `src/question-answering.js`
