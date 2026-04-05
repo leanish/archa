@@ -63,6 +63,35 @@ describe("github-discovery-progress", () => {
     expect(output.write).toHaveBeenNthCalledWith(3, "\n");
   });
 
+  it("clears leftover characters when a shorter repo name overwrites a longer one", () => {
+    const output = {
+      write: vi.fn(),
+      isTTY: true
+    };
+    const reporter = createGithubDiscoveryProgressReporter({
+      output,
+      isInteractive: true
+    });
+    const firstMessage = "Loading repos: 1/2 (java-conventions)";
+    const finalMessage = "Loading repos: 2/2 (terminator)";
+
+    reporter.onProgress({
+      type: "repo-processed",
+      processedCount: 1,
+      totalCount: 2,
+      repoName: "java-conventions"
+    });
+    reporter.onProgress({
+      type: "repo-processed",
+      processedCount: 2,
+      totalCount: 2,
+      repoName: "terminator"
+    });
+
+    expect(output.write).toHaveBeenNthCalledWith(1, `\r${firstMessage}`);
+    expect(output.write).toHaveBeenNthCalledWith(2, `\r${finalMessage.padEnd(firstMessage.length)}\n`);
+  });
+
   it("shows a separate refinement phase for selected repos", () => {
     const output = {
       write: vi.fn(),

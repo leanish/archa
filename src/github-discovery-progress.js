@@ -5,6 +5,14 @@ export function createGithubDiscoveryProgressReporter({
   isInteractive = Boolean(output?.isTTY)
 } = {}) {
   let hasActiveInlineProgress = false;
+  let lastInlineMessageLength = 0;
+
+  function writeInlineProgress(message, isFinalMessage) {
+    const paddedMessage = message.padEnd(lastInlineMessageLength);
+    output.write(`\r${paddedMessage}${isFinalMessage ? "\n" : ""}`);
+    lastInlineMessageLength = isFinalMessage ? 0 : paddedMessage.length;
+    hasActiveInlineProgress = !isFinalMessage;
+  }
 
   return {
     start(owner) {
@@ -28,8 +36,7 @@ export function createGithubDiscoveryProgressReporter({
       if (event.type === "repo-processed") {
         const message = `Loading repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`;
         if (isInteractive) {
-          hasActiveInlineProgress = event.processedCount < event.totalCount;
-          output.write(`\r${message}${event.processedCount === event.totalCount ? "\n" : ""}`);
+          writeInlineProgress(message, event.processedCount === event.totalCount);
           return;
         }
 
@@ -40,8 +47,7 @@ export function createGithubDiscoveryProgressReporter({
       if (event.type === "repo-curated") {
         const message = `Refining repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`;
         if (isInteractive) {
-          hasActiveInlineProgress = event.processedCount < event.totalCount;
-          output.write(`\r${message}${event.processedCount === event.totalCount ? "\n" : ""}`);
+          writeInlineProgress(message, event.processedCount === event.totalCount);
           return;
         }
 
@@ -54,6 +60,7 @@ export function createGithubDiscoveryProgressReporter({
       }
 
       hasActiveInlineProgress = false;
+      lastInlineMessageLength = 0;
       output.write("\n");
     }
   };
