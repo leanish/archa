@@ -14,6 +14,7 @@ Archa exposes the same repo-aware question-answering core through a CLI and an o
 ## Core behavior
 
 - user-level config defines the managed repo set and clone root
+- repo names and aliases are validated eagerly and must be unique case-insensitively
 - `repos list` shows configured repos and whether they are cloned locally
 - `repos sync` clones or fast-forwards the managed repos
 - asking a question uses automatic repo selection by default, or an explicit repo subset when provided, then syncs them and runs Codex

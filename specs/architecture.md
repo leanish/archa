@@ -120,6 +120,8 @@ Repo definitions include:
 - optional `aliases`
 - optional `alwaysSelect`
 
+Repo names and aliases are validated eagerly and must be unique case-insensitively.
+
 ## HTTP runtime model
 
 - jobs are kept in memory only
