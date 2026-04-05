@@ -91,6 +91,27 @@ describe("selectRepos", () => {
     expect(repos[0].name).toBe("shared-lib");
   });
 
+  it("matches external-facing cues more strongly than generic topics", () => {
+    const repos = selectRepos({
+      repos: [
+        {
+          name: "platform-api",
+          description: "Platform GraphQL API",
+          topics: ["commerce"],
+          classifications: ["external", "backend"]
+        },
+        {
+          name: "internal-admin",
+          description: "Backoffice tooling",
+          topics: ["commerce"],
+          classifications: ["internal"]
+        }
+      ]
+    }, "Which external graphql service owns the commerce API?", null);
+
+    expect(repos[0].name).toBe("platform-api");
+  });
+
   it("falls back to all configured repos when nothing scores positively", () => {
     const repos = selectRepos(config, "totally unrelated question", null);
 

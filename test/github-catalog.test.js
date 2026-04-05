@@ -238,6 +238,57 @@ describe("github-catalog", () => {
     ]);
   });
 
+  it("merges classifications discovered from repository inspection", async () => {
+    const fetchFn = vi.fn(async url => {
+      if (url === "https://api.github.com/users/leanish") {
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
+        return createJsonResponse(200, [
+          {
+            name: "shop-app",
+            clone_url: "https://github.com/leanish/shop-app.git",
+            default_branch: "main",
+            description: "Storefront frontend",
+            topics: ["commerce"],
+            size: 500,
+            fork: false,
+            archived: false
+          }
+        ]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const inspectRepoFn = vi.fn(async () => ["frontend", "external"]);
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      fetchFn,
+      inspectRepoFn
+    });
+
+    expect(result.repos).toEqual([
+      {
+        name: "shop-app",
+        url: "https://github.com/leanish/shop-app.git",
+        defaultBranch: "main",
+        description: "Storefront frontend",
+        topics: ["commerce", "shop", "app", "storefront"],
+        classifications: ["external", "frontend"]
+      }
+    ]);
+    expect(inspectRepoFn).toHaveBeenCalledWith(expect.objectContaining({
+      repo: expect.objectContaining({
+        name: "shop-app"
+      })
+    }));
+  });
+
   it("infers high-signal classifications separately from generic topics", async () => {
     const fetchFn = vi.fn(async url => {
       if (url === "https://api.github.com/users/leanish") {
@@ -253,10 +304,9 @@ describe("github-catalog", () => {
             name: "billing-service",
             clone_url: "https://github.com/leanish/billing-service.git",
             default_branch: "main",
-            description: "Internal billing microservice API",
+            description: "Billing microservice GraphQL API",
             topics: ["payments"],
             size: 800,
-            private: true,
             fork: false,
             archived: false
           }
@@ -276,9 +326,61 @@ describe("github-catalog", () => {
         name: "billing-service",
         url: "https://github.com/leanish/billing-service.git",
         defaultBranch: "main",
-        description: "Internal billing microservice API",
-        topics: ["payments", "billing", "service", "internal", "microservice", "api"],
-        classifications: ["internal", "microservice", "backend"]
+        description: "Billing microservice GraphQL API",
+        topics: ["payments", "billing", "service", "microservice", "graphql", "api"],
+        classifications: ["microservice", "external", "backend"]
+      }
+    ]);
+  });
+
+  it("lets internal source inspection override outward-facing metadata cues", async () => {
+    const fetchFn = vi.fn(async url => {
+      if (url === "https://api.github.com/users/leanish") {
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
+        return createJsonResponse(200, [
+          {
+            name: "billing-platform",
+            clone_url: "https://github.com/leanish/billing-platform.git",
+            default_branch: "main",
+            description: "Billing GraphQL API",
+            topics: [],
+            size: 800,
+            fork: false,
+            archived: false
+          }
+        ]);
+      }
+
+      if (url === "https://api.github.com/repos/leanish/billing-platform/topics") {
+        return createJsonResponse(200, {
+          names: []
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const inspectRepoFn = vi.fn(async () => ["internal", "backend"]);
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      fetchFn,
+      inspectRepoFn
+    });
+
+    expect(result.repos).toEqual([
+      {
+        name: "billing-platform",
+        url: "https://github.com/leanish/billing-platform.git",
+        defaultBranch: "main",
+        description: "Billing GraphQL API",
+        topics: ["billing-platform", "billing", "platform", "graphql", "api"],
+        classifications: ["backend", "internal"]
       }
     ]);
   });

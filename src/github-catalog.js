@@ -1,13 +1,16 @@
+import { inspectRepoClassifications } from "./repo-classification-inspector.js";
+
 const GITHUB_API_URL = "https://api.github.com";
 const PAGE_SIZE = 100;
 const SMALL_REPO_MAX_INFERRED_TOPICS = 3;
 const MEDIUM_REPO_MAX_INFERRED_TOPICS = 5;
 const LARGE_REPO_MAX_INFERRED_TOPICS = 8;
 const CLASSIFICATION_KEYWORDS = new Map([
-  ["infra", ["infra", "infrastructure", "terraform", "helm", "kubernetes", "k8s", "platform", "ansible", "devops", "ops", "gradle", "build"]],
+  ["infra", ["infra", "infrastructure", "terraform", "helm", "kubernetes", "k8s", "ansible", "devops", "ops", "gradle", "build"]],
   ["library", ["library", "lib", "sdk", "module", "plugin", "package"]],
   ["internal", ["internal", "private", "proprietary"]],
   ["microservice", ["microservice", "service", "worker", "daemon"]],
+  ["external", ["external", "customer-facing", "product", "public", "user-facing", "customer", "shopper", "checkout", "storefront", "onboarding", "pricing", "api", "graphql", "rest"]],
   ["frontend", ["frontend", "ui", "browser", "react", "vue", "nextjs", "next"]],
   ["backend", ["backend", "server", "api", "graphql", "rest"]],
   ["cli", ["cli", "terminal", "command"]]
@@ -65,6 +68,7 @@ export async function discoverGithubOwnerRepos({
   owner,
   env = process.env,
   fetchFn = globalThis.fetch,
+  inspectRepoFn = inspectRepoClassifications,
   includeForks = true,
   includeArchived = false
 }) {
@@ -127,7 +131,8 @@ export async function discoverGithubOwnerRepos({
       owner: normalizedOwner,
       repo,
       env,
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     }))
   );
   repos.sort((left, right) => left.name.localeCompare(right.name));
@@ -275,19 +280,30 @@ function normalizeGithubRepo(repo) {
   };
 }
 
-async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn }) {
+async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoFn }) {
   const normalizedRepo = normalizeGithubRepo(repo);
 
   if (normalizedRepo.topics.length > 0) {
     const topics = normalizeTopicList(normalizedRepo.topics, normalizedRepo, repo.size);
-    return {
-      ...normalizedRepo,
-      topics,
-      classifications: inferRepoClassifications({
+    const classifications = mergeClassifications(
+      inferRepoClassifications({
         repo: normalizedRepo,
         sourceRepo: repo,
         topics
+      }),
+      await safeInspectClassifications(inspectRepoFn, {
+        repo: {
+          ...normalizedRepo,
+          topics
+        },
+        sourceRepo: repo,
+        env
       })
+    );
+    return {
+      ...normalizedRepo,
+      topics,
+      classifications
     };
   }
 
@@ -298,15 +314,26 @@ async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn }) {
   });
 
   const topics = normalizeTopicList(topicsResponse?.names, normalizedRepo, repo.size);
+  const classifications = mergeClassifications(
+    inferRepoClassifications({
+      repo: normalizedRepo,
+      sourceRepo: repo,
+      topics
+    }),
+    await safeInspectClassifications(inspectRepoFn, {
+      repo: {
+        ...normalizedRepo,
+        topics
+      },
+      sourceRepo: repo,
+      env
+    })
+  );
 
   return {
     ...normalizedRepo,
     topics,
-    classifications: inferRepoClassifications({
-      repo: normalizedRepo,
-      sourceRepo: repo,
-      topics
-    })
+    classifications
   };
 }
 
@@ -430,9 +457,7 @@ function inferRepoClassifications({ repo, sourceRepo, topics }) {
   const signals = new Set([
     ...tokenizeRepoName(repo.name, { includeCompoundRepoNames: true }),
     ...tokenizeDescription(repo.description),
-    ...topics.flatMap(topic => tokenizeRaw(topic)),
-    sourceRepo.private === true ? "private" : "",
-    typeof sourceRepo.visibility === "string" ? sourceRepo.visibility.toLowerCase() : ""
+    ...topics.flatMap(topic => tokenizeRaw(topic))
   ].filter(Boolean));
 
   const classifications = [];
@@ -442,7 +467,32 @@ function inferRepoClassifications({ repo, sourceRepo, topics }) {
     }
   }
 
+  return pruneConflictingClassifications(classifications);
+}
+
+function pruneConflictingClassifications(classifications) {
+  if (classifications.includes("internal")) {
+    return classifications.filter(classification => classification !== "external");
+  }
+
   return classifications;
+}
+
+function mergeClassifications(primary, secondary) {
+  return pruneConflictingClassifications(Array.from(new Set([...(primary || []), ...(secondary || [])])));
+}
+
+async function safeInspectClassifications(inspectRepoFn, context) {
+  if (typeof inspectRepoFn !== "function") {
+    return [];
+  }
+
+  try {
+    const classifications = await inspectRepoFn(context);
+    return Array.isArray(classifications) ? classifications : [];
+  } catch {
+    return [];
+  }
 }
 
 function buildRepoSuggestions(configuredRepo, githubRepo) {
