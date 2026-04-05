@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   readFile: vi.fn(),
   loadConfig: vi.fn(),
   initializeConfig: vi.fn(),
+  appendReposToConfig: vi.fn(),
+  discoverGithubOwnerRepos: vi.fn(),
+  planGithubRepoDiscovery: vi.fn(),
   answerQuestion: vi.fn(),
   syncRepos: vi.fn(),
   getConfigPath: vi.fn()
@@ -17,11 +20,17 @@ vi.mock("node:fs/promises", () => ({
 
 vi.mock("../src/config.js", () => ({
   loadConfig: mocks.loadConfig,
-  initializeConfig: mocks.initializeConfig
+  initializeConfig: mocks.initializeConfig,
+  appendReposToConfig: mocks.appendReposToConfig
 }));
 
 vi.mock("../src/config-paths.js", () => ({
   getConfigPath: mocks.getConfigPath
+}));
+
+vi.mock("../src/github-catalog.js", () => ({
+  discoverGithubOwnerRepos: mocks.discoverGithubOwnerRepos,
+  planGithubRepoDiscovery: mocks.planGithubRepoDiscovery
 }));
 
 vi.mock("../src/question-answering.js", () => ({
@@ -73,6 +82,33 @@ describe("cli", () => {
         detail: "main"
       }
     ]);
+    mocks.discoverGithubOwnerRepos.mockResolvedValue({
+      owner: "leanish",
+      ownerType: "User",
+      repos: [],
+      skippedForks: 0,
+      skippedArchived: 0
+    });
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      entries: [],
+      reposToAdd: [],
+      counts: {
+        discovered: 0,
+        configured: 0,
+        new: 0,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+    mocks.appendReposToConfig.mockResolvedValue({
+      configPath: "/tmp/archa-config.json",
+      addedCount: 0,
+      totalCount: 1
+    });
     mocks.answerQuestion.mockResolvedValue({
       mode: "answer",
       selectedRepos: [
@@ -160,6 +196,115 @@ describe("cli", () => {
 
     expect(stdout.join("")).toContain("Managed repos:");
     expect(stdout.join("")).toContain("sqs-codec [missing] main: aliases=codec SQS execution interceptor with compression and checksum metadata");
+  });
+
+  it("prints a GitHub discovery preview without changing config", async () => {
+    mocks.discoverGithubOwnerRepos.mockResolvedValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 1,
+      skippedArchived: 0,
+      repos: [
+        {
+          name: "archa",
+          url: "https://github.com/leanish/archa.git",
+          defaultBranch: "main",
+          description: "Repo-aware CLI for engineering Q&A with local Codex",
+          topics: ["cli", "codex", "qa"]
+        }
+      ]
+    });
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 1,
+      skippedArchived: 0,
+      entries: [
+        {
+          status: "new",
+          repo: {
+            name: "archa",
+            topics: ["cli", "codex", "qa"],
+            description: "Repo-aware CLI for engineering Q&A with local Codex"
+          },
+          suggestions: []
+        }
+      ],
+      reposToAdd: [
+        {
+          name: "archa",
+          url: "https://github.com/leanish/archa.git",
+          defaultBranch: "main",
+          description: "Repo-aware CLI for engineering Q&A with local Codex",
+          topics: ["cli", "codex", "qa"]
+        }
+      ],
+      counts: {
+        discovered: 1,
+        configured: 0,
+        new: 1,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+
+    await main(["config", "discover-github", "--owner", "leanish"]);
+
+    expect(stdout.join("")).toContain("GitHub repo discovery for leanish (User):");
+    expect(stdout.join("")).toContain("archa [new]");
+    expect(stdout.join("")).toContain("Run: archa config discover-github --owner leanish --apply");
+    expect(mocks.appendReposToConfig).not.toHaveBeenCalled();
+  });
+
+  it("applies discovered repos when requested", async () => {
+    const reposToAdd = [
+      {
+        name: "java-conventions",
+        url: "https://github.com/leanish/java-conventions.git",
+        defaultBranch: "main",
+        description: "Shared Gradle conventions for JDK-based projects",
+        topics: ["gradle", "java"]
+      }
+    ];
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "leanish",
+      ownerType: "Organization",
+      skippedForks: 0,
+      skippedArchived: 0,
+      entries: [
+        {
+          status: "new",
+          repo: {
+            name: "java-conventions",
+            topics: ["gradle", "java"],
+            description: "Shared Gradle conventions for JDK-based projects"
+          },
+          suggestions: []
+        }
+      ],
+      reposToAdd,
+      counts: {
+        discovered: 1,
+        configured: 0,
+        new: 1,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+    mocks.appendReposToConfig.mockResolvedValue({
+      configPath: "/tmp/archa-config.json",
+      addedCount: 1,
+      totalCount: 2
+    });
+
+    await main(["config", "discover-github", "--owner", "leanish", "--apply"]);
+
+    expect(mocks.appendReposToConfig).toHaveBeenCalledWith({
+      env: process.env,
+      repos: reposToAdd
+    });
+    expect(stdout.join("")).toContain("Config updated: /tmp/archa-config.json");
+    expect(stdout.join("")).toContain("Repos added: 1");
   });
 
   it("throws for unknown requested repos during sync", async () => {

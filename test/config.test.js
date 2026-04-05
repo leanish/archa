@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initializeConfig, loadConfig } from "../src/config.js";
+import { appendReposToConfig, initializeConfig, loadConfig } from "../src/config.js";
 import { getConfigPath, getDefaultManagedReposRoot } from "../src/config-paths.js";
 
 describe("config", () => {
@@ -265,5 +265,43 @@ describe("config", () => {
     }));
 
     await expect(loadConfig(env)).rejects.toThrow(/non-boolean "alwaysSelect"/);
+  });
+
+  it("appends discovered repos to an existing config", async () => {
+    await initializeConfig({
+      env,
+      managedReposRoot: "/workspace/repos"
+    });
+
+    const result = await appendReposToConfig({
+      env,
+      repos: [
+        {
+          name: "archa",
+          url: "https://github.com/leanish/archa.git",
+          defaultBranch: "main",
+          description: "Repo-aware CLI for engineering Q&A with local Codex",
+          topics: ["cli", "codex", "qa"]
+        }
+      ]
+    });
+
+    expect(result).toEqual({
+      configPath: path.join(tempRoot, "config", "archa", "config.json"),
+      addedCount: 1,
+      totalCount: 1
+    });
+    await expect(loadConfig(env)).resolves.toMatchObject({
+      managedReposRoot: "/workspace/repos",
+      repos: [
+        {
+          name: "archa",
+          url: "https://github.com/leanish/archa.git",
+          defaultBranch: "main",
+          description: "Repo-aware CLI for engineering Q&A with local Codex",
+          topics: ["cli", "codex", "qa"]
+        }
+      ]
+    });
   });
 });

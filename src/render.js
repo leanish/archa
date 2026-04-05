@@ -42,3 +42,53 @@ export function renderAnswer(result) {
     renderSyncReport(result.syncReport)
   ].join("\n");
 }
+
+export function renderGithubDiscovery(result) {
+  const lines = [
+    `GitHub repo discovery for ${result.owner} (${result.ownerType}):`
+  ];
+
+  for (const entry of result.entries) {
+    const status = formatDiscoveryStatus(entry);
+    const topics = entry.repo.topics.length > 0 ? ` topics=${entry.repo.topics.join(",")}` : "";
+    const description = entry.repo.description ? ` ${entry.repo.description}` : "";
+    const suggestions = entry.suggestions.length > 0 ? ` review=${entry.suggestions.join("; ")}` : "";
+    lines.push(`- ${entry.repo.name} [${status}]${topics}${suggestions}${description}`);
+  }
+
+  lines.push("");
+  lines.push(`Repos discovered: ${result.counts.discovered}`);
+  lines.push(`Already configured: ${result.counts.configured}`);
+  lines.push(`Ready to add: ${result.counts.new}`);
+  lines.push(`Identifier conflicts: ${result.counts.conflicts}`);
+
+  if (result.skippedForks > 0) {
+    lines.push(`Skipped forks: ${result.skippedForks}`);
+  }
+
+  if (result.skippedArchived > 0) {
+    lines.push(`Skipped archived repos: ${result.skippedArchived}`);
+  }
+
+  if (result.applied) {
+    lines.push(`${result.addedCount > 0 ? "Config updated" : "Config unchanged"}: ${result.configPath}`);
+    lines.push(`Repos added: ${result.addedCount}`);
+    return lines.join("\n");
+  }
+
+  if (result.counts.new > 0) {
+    lines.push(`Run: archa config discover-github --owner ${result.owner} --apply`);
+  } else {
+    lines.push("No new repos to add.");
+  }
+
+  return lines.join("\n");
+}
+
+function formatDiscoveryStatus(entry) {
+  if (entry.status === "conflict") {
+    return `conflict:${entry.configuredRepo.name}`;
+  }
+
+  return entry.status;
+}

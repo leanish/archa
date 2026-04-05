@@ -49,6 +49,39 @@ export async function initializeConfig({
   };
 }
 
+export async function appendReposToConfig({
+  env = process.env,
+  repos
+}) {
+  if (!Array.isArray(repos)) {
+    throw new Error('appendReposToConfig requires a "repos" array.');
+  }
+
+  const configPath = getConfigPath(env);
+  const raw = await readConfigFile(configPath);
+  const parsed = parseConfigJson(configPath, raw);
+
+  if (!Array.isArray(parsed.repos)) {
+    throw new Error(`Invalid Archa config at ${configPath}: "repos" must be an array.`);
+  }
+
+  const normalizedNewRepos = repos.map((repo, index) => normalizeRepoDefinition(repo, index, configPath));
+  const nextRepos = [...parsed.repos, ...normalizedNewRepos];
+  validateUniqueRepoIdentifiers(
+    nextRepos.map((repo, index) => normalizeRepoDefinition(repo, index, configPath)),
+    configPath
+  );
+
+  parsed.repos = nextRepos;
+  await fs.writeFile(configPath, JSON.stringify(parsed, null, 2) + "\n");
+
+  return {
+    configPath,
+    addedCount: normalizedNewRepos.length,
+    totalCount: nextRepos.length
+  };
+}
+
 async function readConfigFile(configPath) {
   try {
     return await fs.readFile(configPath, "utf8");
@@ -127,6 +160,25 @@ async function importCatalog(catalogPath) {
       alwaysSelect: normalizedRepo.alwaysSelect
     };
   });
+}
+
+function validateUniqueRepoIdentifiers(repos, sourcePath) {
+  const seenIdentifiers = new Map();
+
+  for (const repo of repos) {
+    for (const identifier of [repo.name, ...(repo.aliases || [])]) {
+      const normalizedIdentifier = identifier.toLowerCase();
+      const existingOwner = seenIdentifiers.get(normalizedIdentifier);
+
+      if (existingOwner) {
+        throw new Error(
+          `Invalid Archa config at ${sourcePath}: duplicate repo identifier "${identifier}" for "${existingOwner}" and "${repo.name}". Repo names and aliases must be unique case-insensitively.`
+        );
+      }
+
+      seenIdentifiers.set(normalizedIdentifier, repo.name);
+    }
+  }
 }
 
 async function exists(targetPath) {

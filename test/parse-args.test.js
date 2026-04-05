@@ -20,7 +20,7 @@ describe("parseArgs", () => {
     expect(parsed.repoNames).toEqual(["sqs-codec", "java-conventions"]);
   });
 
-  it("supports config path and init subcommands", () => {
+  it("supports config path, init, and discover-github subcommands", () => {
     expect(parseArgs(["config", "path"], {})).toEqual({ command: "config-path" });
     expect(parseArgs(["config", "init", "--catalog", "/tmp/catalog.json", "--managed-repos-root", "/tmp/repos", "--force"], {}))
       .toEqual({
@@ -28,6 +28,14 @@ describe("parseArgs", () => {
         catalogPath: "/tmp/catalog.json",
         managedReposRoot: "/tmp/repos",
         force: true
+      });
+    expect(parseArgs(["config", "discover-github", "--owner", "leanish", "--apply"], {}))
+      .toEqual({
+        command: "config-discover-github",
+        owner: "leanish",
+        apply: true,
+        includeForks: false,
+        includeArchived: false
       });
   });
 
@@ -170,6 +178,19 @@ describe("parseArgs", () => {
 
   it("throws for unknown config init options", () => {
     expect(() => parseArgs(["config", "init", "--wat"], {})).toThrow(/Unknown config init option: --wat/);
+  });
+
+  it("throws help text for config discover-github help flag", () => {
+    expect(() => parseArgs(["config", "discover-github", "--help"], {})).toThrow(HelpError);
+  });
+
+  it("throws for missing config discover-github owner", () => {
+    expect(() => parseArgs(["config", "discover-github"], {})).toThrow("Missing value for --owner");
+  });
+
+  it("throws for unknown config discover-github options", () => {
+    expect(() => parseArgs(["config", "discover-github", "--owner", "leanish", "--wat"], {}))
+      .toThrow(/Unknown config discover-github option: --wat/);
   });
 
 });

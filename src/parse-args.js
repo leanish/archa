@@ -153,6 +153,8 @@ function parseConfigCommand(argv) {
       };
     case "init":
       return parseConfigInitCommand(argv.slice(1));
+    case "discover-github":
+      return parseConfigDiscoverGithubCommand(argv.slice(1));
     case "-h":
     case "--help":
     case undefined:
@@ -198,6 +200,50 @@ function parseConfigInitCommand(argv) {
   };
 }
 
+function parseConfigDiscoverGithubCommand(argv) {
+  let owner = null;
+  let apply = false;
+  let includeForks = false;
+  let includeArchived = false;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    switch (arg) {
+      case "--owner":
+        owner = requireValue(arg, argv[index + 1]);
+        index += 1;
+        break;
+      case "--apply":
+        apply = true;
+        break;
+      case "--include-forks":
+        includeForks = true;
+        break;
+      case "--include-archived":
+        includeArchived = true;
+        break;
+      case "-h":
+      case "--help":
+        throw new HelpError(helpText());
+      default:
+        throw new Error(`Unknown config discover-github option: ${arg}\n\n${helpText()}`);
+    }
+  }
+
+  if (!owner) {
+    throw new Error('Missing value for --owner');
+  }
+
+  return {
+    command: "config-discover-github",
+    owner,
+    apply,
+    includeForks,
+    includeArchived
+  };
+}
+
 function splitRepoNames(value) {
   return value
     .split(",")
@@ -230,6 +276,7 @@ function helpText() {
     "  archa repos sync [repo1,repo2,...]",
     "  archa config path",
     "  archa config init [--catalog <path>] [--managed-repos-root <path>] [--force]",
+    "  archa config discover-github --owner <name> [--apply] [--include-forks] [--include-archived]",
     "",
     "Ask Options:",
     "  --repo <names>                Limit to managed repo names",

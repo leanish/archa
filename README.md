@@ -91,6 +91,20 @@ archa config init \
   --managed-repos-root /Users/leandro.aguiar/.local/share/archa/repos
 ```
 
+Discover repos from a GitHub user or org and preview what could be added:
+
+```bash
+archa config discover-github --owner leanish
+```
+
+Append the missing repos from that owner into the active config:
+
+```bash
+archa config discover-github --owner leanish --apply
+```
+
+By default, GitHub discovery skips forks and archived repos. Use `--include-forks` and `--include-archived` to keep them in scope. Imported repos reuse GitHub `description`, `topics`, and `default_branch` so repo selection starts with sensible metadata. Existing repos are not rewritten, but the preview points out when GitHub metadata suggests the configured description, topics, URL, or default branch should be reviewed.
+
 Print the active config path:
 
 ```bash
@@ -254,6 +268,7 @@ Programmatic clients that do not send `Accept: text/html` continue to receive th
 - `ARCHA_DEFAULT_MODEL`: overrides the default Codex model (`gpt-5.4`)
 - `ARCHA_DEFAULT_REASONING_EFFORT`: overrides the default reasoning effort (`low`)
 - `ARCHA_CODEX_TIMEOUT_MS`: overrides the Codex execution timeout (default `300000`)
+- `GH_TOKEN` / `GITHUB_TOKEN`: authenticates GitHub repo discovery when private or rate-limited repo metadata is needed
 - `ARCHA_SERVER_HOST`: overrides the HTTP bind host (`127.0.0.1`)
 - `ARCHA_SERVER_PORT`: overrides the HTTP bind port (`8787`)
 - `ARCHA_SERVER_BODY_LIMIT_BYTES`: overrides the max HTTP request body size (`65536`)

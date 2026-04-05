@@ -1,11 +1,18 @@
 import fs from "node:fs/promises";
 import process from "node:process";
 
-import { loadConfig, initializeConfig } from "./config.js";
+import { appendReposToConfig, loadConfig, initializeConfig } from "./config.js";
 import { getConfigPath } from "./config-paths.js";
+import { discoverGithubOwnerRepos, planGithubRepoDiscovery } from "./github-catalog.js";
 import { parseArgs } from "./parse-args.js";
 import { answerQuestion } from "./question-answering.js";
-import { renderAnswer, renderRepoList, renderRetrievalOnly, renderSyncReport } from "./render.js";
+import {
+  renderAnswer,
+  renderGithubDiscovery,
+  renderRepoList,
+  renderRetrievalOnly,
+  renderSyncReport
+} from "./render.js";
 import { syncRepos } from "./repo-sync.js";
 import { createStreamStatusReporter } from "./status-reporter.js";
 
@@ -24,6 +31,41 @@ export async function main(argv) {
         force: options.force
       });
       process.stdout.write(`${renderConfigInit(result)}\n`);
+      return;
+    }
+    case "config-discover-github": {
+      const config = await loadConfig(process.env);
+      const discovery = await discoverGithubOwnerRepos({
+        owner: options.owner,
+        env: process.env,
+        includeForks: options.includeForks,
+        includeArchived: options.includeArchived
+      });
+      const plan = planGithubRepoDiscovery(config, discovery);
+
+      if (!options.apply) {
+        process.stdout.write(`${renderGithubDiscovery({
+          ...plan,
+          applied: false
+        })}\n`);
+        return;
+      }
+
+      const appendResult = plan.reposToAdd.length > 0
+        ? await appendReposToConfig({
+            env: process.env,
+            repos: plan.reposToAdd
+          })
+        : {
+            configPath: config.configPath,
+            addedCount: 0
+          };
+      process.stdout.write(`${renderGithubDiscovery({
+        ...plan,
+        applied: true,
+        configPath: appendResult.configPath,
+        addedCount: appendResult.addedCount
+      })}\n`);
       return;
     }
     case "repos-list": {
