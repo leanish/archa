@@ -4,6 +4,7 @@ import { discoverGithubOwnerRepos, planGithubRepoDiscovery } from "../src/github
 
 describe("github-catalog", () => {
   it("discovers user repos, keeping forks and filtering archived repos by default", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async url => {
       if (url === "https://api.github.com/users/leanish") {
         return createJsonResponse(200, {
@@ -64,7 +65,8 @@ describe("github-catalog", () => {
 
     const result = await discoverGithubOwnerRepos({
       owner: "leanish",
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     });
 
     expect(result).toEqual({
@@ -94,6 +96,7 @@ describe("github-catalog", () => {
   });
 
   it("keeps inline repo topics without an extra topics request", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async url => {
       if (url === "https://api.github.com/users/leanish") {
         return createJsonResponse(200, {
@@ -122,7 +125,8 @@ describe("github-catalog", () => {
 
     const result = await discoverGithubOwnerRepos({
       owner: "leanish",
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     });
 
     expect(result.repos).toEqual([
@@ -139,6 +143,7 @@ describe("github-catalog", () => {
   });
 
   it("infers fallback topics from repo metadata when GitHub topics are empty", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async url => {
       if (url === "https://api.github.com/users/leanish") {
         return createJsonResponse(200, {
@@ -173,7 +178,8 @@ describe("github-catalog", () => {
 
     const result = await discoverGithubOwnerRepos({
       owner: "leanish",
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     });
 
     expect(result.repos).toEqual([
@@ -189,6 +195,7 @@ describe("github-catalog", () => {
   });
 
   it("uses fewer inferred topics for smaller repos", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async url => {
       if (url === "https://api.github.com/users/leanish") {
         return createJsonResponse(200, {
@@ -223,7 +230,8 @@ describe("github-catalog", () => {
 
     const result = await discoverGithubOwnerRepos({
       owner: "leanish",
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     });
 
     expect(result.repos).toEqual([
@@ -290,6 +298,7 @@ describe("github-catalog", () => {
   });
 
   it("infers high-signal classifications separately from generic topics", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async url => {
       if (url === "https://api.github.com/users/leanish") {
         return createJsonResponse(200, {
@@ -318,7 +327,8 @@ describe("github-catalog", () => {
 
     const result = await discoverGithubOwnerRepos({
       owner: "leanish",
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     });
 
     expect(result.repos).toEqual([
@@ -386,6 +396,7 @@ describe("github-catalog", () => {
   });
 
   it("uses organization repo listing and forwards GitHub auth headers", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async (url, options) => {
       if (url === "https://api.github.com/users/openai") {
         expect(options.headers.Authorization).toBe("Bearer secret-token");
@@ -403,7 +414,8 @@ describe("github-catalog", () => {
     const result = await discoverGithubOwnerRepos({
       owner: "openai",
       env: { GH_TOKEN: "secret-token" },
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     });
 
     expect(result.ownerType).toBe("Organization");
@@ -411,13 +423,15 @@ describe("github-catalog", () => {
   });
 
   it("throws a clear error when the owner does not exist", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async () => createJsonResponse(404, {
       message: "Not Found"
     }));
 
     await expect(discoverGithubOwnerRepos({
       owner: "missing-owner",
-      fetchFn
+      fetchFn,
+      inspectRepoFn
     })).rejects.toThrow("GitHub owner not found: missing-owner.");
   });
 
