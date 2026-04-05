@@ -65,12 +65,10 @@ export async function appendReposToConfig({
     throw new Error(`Invalid Archa config at ${configPath}: "repos" must be an array.`);
   }
 
-  const normalizedNewRepos = repos.map((repo, index) => normalizeRepoDefinition(repo, index, configPath));
-  const nextRepos = [...parsed.repos, ...normalizedNewRepos];
-  validateUniqueRepoIdentifiers(
-    nextRepos.map((repo, index) => normalizeRepoDefinition(repo, index, configPath)),
-    configPath
-  );
+  const normalizedExistingRepos = normalizeRepoDefinitions(parsed.repos, configPath);
+  const normalizedNewRepos = normalizeRepoDefinitions(repos, configPath);
+  const nextRepos = [...normalizedExistingRepos, ...normalizedNewRepos];
+  validateUniqueRepoIdentifiers(nextRepos, configPath);
 
   parsed.repos = nextRepos;
   await fs.writeFile(configPath, JSON.stringify(parsed, null, 2) + "\n");
@@ -103,12 +101,12 @@ export async function applyGithubDiscoveryToConfig({
     throw new Error(`Invalid Archa config at ${configPath}: "repos" must be an array.`);
   }
 
-  const normalizedAdditions = reposToAdd.map((repo, index) => normalizeRepoDefinition(repo, index, configPath));
-  const normalizedOverrides = reposToOverride.map((repo, index) => normalizeRepoDefinition(repo, index, configPath));
+  const normalizedExistingRepos = normalizeRepoDefinitions(parsed.repos, configPath);
+  const normalizedAdditions = normalizeRepoDefinitions(reposToAdd, configPath);
+  const normalizedOverrides = normalizeRepoDefinitions(reposToOverride, configPath);
   const overridesByName = new Map(
     normalizedOverrides.map(repo => [repo.name.toLowerCase(), repo])
   );
-  const normalizedExistingRepos = parsed.repos.map((repo, index) => normalizeRepoDefinition(repo, index, configPath));
 
   for (const repoToOverride of normalizedOverrides) {
     if (!normalizedExistingRepos.some(existingRepo => existingRepo.name.toLowerCase() === repoToOverride.name.toLowerCase())) {
@@ -116,23 +114,19 @@ export async function applyGithubDiscoveryToConfig({
     }
   }
 
-  const nextRepos = parsed.repos.map((repo, index) => {
-    const normalizedExistingRepo = normalizedExistingRepos[index];
-    const overrideRepo = overridesByName.get(normalizedExistingRepo.name.toLowerCase());
+  const nextRepos = normalizedExistingRepos.map(existingRepo => {
+    const overrideRepo = overridesByName.get(existingRepo.name.toLowerCase());
 
     if (!overrideRepo) {
-      return repo;
+      return existingRepo;
     }
 
-    return mergeDiscoveredRepo(repo, normalizedExistingRepo, overrideRepo);
+    return mergeDiscoveredRepo(existingRepo, overrideRepo);
   });
 
   nextRepos.push(...normalizedAdditions);
 
-  validateUniqueRepoIdentifiers(
-    nextRepos.map((repo, index) => normalizeRepoDefinition(repo, index, configPath)),
-    configPath
-  );
+  validateUniqueRepoIdentifiers(nextRepos, configPath);
 
   parsed.repos = nextRepos;
   await fs.writeFile(configPath, JSON.stringify(parsed, null, 2) + "\n");
@@ -202,15 +196,13 @@ function normalizeRepoDefinition(repo, index, sourcePath) {
   };
 }
 
-function mergeDiscoveredRepo(rawRepo, existingRepo, discoveredRepo) {
-  const {
-    branch: _branch,
-    ...preservedFields
-  } = rawRepo;
+function normalizeRepoDefinitions(repos, sourcePath) {
+  return repos.map((repo, index) => normalizeRepoDefinition(repo, index, sourcePath));
+}
 
+function mergeDiscoveredRepo(existingRepo, discoveredRepo) {
   return {
-    ...preservedFields,
-    name: existingRepo.name,
+    ...existingRepo,
     url: discoveredRepo.url,
     defaultBranch: discoveredRepo.defaultBranch,
     description: discoveredRepo.description,

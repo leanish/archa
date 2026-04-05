@@ -305,6 +305,58 @@ describe("config", () => {
     });
   });
 
+  it("normalizes existing repo definitions when appending discovered repos", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      managedReposRoot: "/workspace/repos",
+      repos: [
+        {
+          name: "legacy-repo",
+          url: "https://github.com/leanish/legacy-repo.git",
+          branch: "master"
+        }
+      ]
+    }, null, 2));
+
+    await appendReposToConfig({
+      env,
+      repos: [
+        {
+          name: "archa",
+          url: "https://github.com/leanish/archa.git",
+          defaultBranch: "main",
+          description: "Repo-aware CLI for engineering Q&A with local Codex",
+          topics: ["cli", "codex", "qa"]
+        }
+      ]
+    });
+
+    expect(JSON.parse(await fs.readFile(configPath, "utf8"))).toEqual({
+      managedReposRoot: "/workspace/repos",
+      repos: [
+        {
+          name: "legacy-repo",
+          url: "https://github.com/leanish/legacy-repo.git",
+          defaultBranch: "master",
+          description: "",
+          topics: [],
+          aliases: [],
+          alwaysSelect: false
+        },
+        {
+          name: "archa",
+          url: "https://github.com/leanish/archa.git",
+          defaultBranch: "main",
+          description: "Repo-aware CLI for engineering Q&A with local Codex",
+          topics: ["cli", "codex", "qa"],
+          aliases: [],
+          alwaysSelect: false
+        }
+      ]
+    });
+  });
+
   it("applies selected GitHub discovery additions and overrides", async () => {
     await initializeConfig({
       env,
@@ -371,6 +423,66 @@ describe("config", () => {
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
           topics: ["cli", "codex", "qa"]
+        }
+      ]
+    });
+  });
+
+  it("normalizes untouched repo definitions when applying GitHub discovery changes", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      managedReposRoot: "/workspace/repos",
+      repos: [
+        {
+          name: "legacy-repo",
+          url: "https://github.com/leanish/legacy-repo.git",
+          branch: "master",
+          aliases: ["legacy"]
+        },
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          branch: "main",
+          alwaysSelect: true
+        }
+      ]
+    }, null, 2));
+
+    await applyGithubDiscoveryToConfig({
+      env,
+      reposToAdd: [],
+      reposToOverride: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation-updated.git",
+          defaultBranch: "trunk",
+          description: "Shared base functionality",
+          topics: ["java", "gradle"]
+        }
+      ]
+    });
+
+    expect(JSON.parse(await fs.readFile(configPath, "utf8"))).toEqual({
+      managedReposRoot: "/workspace/repos",
+      repos: [
+        {
+          name: "legacy-repo",
+          url: "https://github.com/leanish/legacy-repo.git",
+          defaultBranch: "master",
+          description: "",
+          topics: [],
+          aliases: ["legacy"],
+          alwaysSelect: false
+        },
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation-updated.git",
+          defaultBranch: "trunk",
+          description: "Shared base functionality",
+          topics: ["java", "gradle"],
+          aliases: [],
+          alwaysSelect: true
         }
       ]
     });
