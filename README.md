@@ -16,7 +16,7 @@ The project is intentionally split in two:
 
 This keeps the tool reusable while still letting each installation decide which repos to manage.
 
-Archa requires the local `codex` CLI on `PATH` for asking questions, starting `archa-server`, and running `config discover-github`. Install it with:
+Archa requires the local `codex` CLI on `PATH` for asking questions, starting `archa-server`, and refining selected repos during `config discover-github --apply`. Install it with:
 
 ```bash
 brew install codex
@@ -119,7 +119,7 @@ Discover repos from a GitHub user or org and preview what could be added or over
 archa config discover-github --owner leanish
 ```
 
-While discovery runs, Archa prints progress updates so long repo inspection does not look stuck.
+While discovery runs, Archa prints progress updates so the command does not look stuck.
 
 Selectively apply additions or overrides from that owner into the active config:
 
@@ -129,7 +129,7 @@ archa config discover-github --owner leanish --apply
 
 When `--apply` runs in a terminal, Archa prompts for which new repos to add and which configured repos to override from GitHub metadata. For scripted use, pass `--add <names>` and `--override <names>` alongside `--apply`, or use `*` to select all repos of that kind.
 
-By default, GitHub discovery includes forks and skips archived repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. Imported repos reuse GitHub `description`, `topics`, and `default_branch` so repo selection starts with sensible metadata. When GitHub leaves descriptions or topics empty, Archa can fill them from README/source inspection. It keeps any GitHub topics that exist and otherwise derives topics from repo descriptions or inspected repo content, with a smaller inferred set for small repos and a broader one for larger repos. Repo names are handled separately during selection instead of being copied into `topics`. It also derives separate `classifications` like `infra`, `library`, `internal`, `external`, `frontend`, `backend`, and `microservice` so those high-signal repo roles can influence automatic selection more strongly than generic topics. After that heuristic draft is assembled, discovery runs a Codex cleanup pass in the inspected repo checkout to refine the final description, topics, and classifications, whether you are previewing or applying the result. When a repo is already cloned under the managed repos root, discovery inspects that local checkout; otherwise it can shallow-clone the repo temporarily to inspect and curate metadata from source structure and README cues. Overrides update the configured repo's URL, default branch, description, topics, and classifications while preserving local-only fields such as aliases and `alwaysSelect`.
+By default, GitHub discovery includes forks and skips archived repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. Imported repos reuse GitHub `description`, `topics`, and `default_branch` so repo selection starts with sensible metadata. The initial preview stays lightweight: it uses GitHub metadata plus description-based heuristics to show candidate repos and let you choose which ones to add or override. Once you select a subset in `--apply`, Archa inspects only those selected repos, fills blank descriptions or topics from README/source inspection when needed, derives additional topics with a size-aware topic budget, derives separate `classifications` like `infra`, `library`, `internal`, `external`, `frontend`, `backend`, and `microservice`, and then runs a Codex cleanup pass over just that selected subset before writing config. Repo names are handled separately during selection instead of being copied into `topics`. When a selected repo is already cloned under the managed repos root, discovery inspects that local checkout; otherwise it can shallow-clone the repo temporarily to inspect and curate metadata from source structure and README cues. Overrides update the configured repo's URL, default branch, description, topics, and classifications while preserving local-only fields such as aliases and `alwaysSelect`.
 
 When either `archa` or `archa-server` starts with no `config.json` and stdin/stdout are attached to a TTY, Archa prompts to initialize the config instead of only failing with a command suggestion. If that new config still has zero repos, it can then prompt to continue directly into `discover-github`, ask for the GitHub owner, and resume the original command after discovery. Outside that interactive CLI flow, `config init`, `archa-server` startup, repo-listing output, and the web UI empty state still surface `archa config discover-github --owner <github-user-or-org> --apply` as the recovery path.
 

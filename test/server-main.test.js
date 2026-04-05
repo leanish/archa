@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   loadConfig: vi.fn(),
   applyGithubDiscoveryToConfig: vi.fn(),
   discoverGithubOwnerRepos: vi.fn(),
+  mergeGithubDiscoveryResults: vi.fn(),
   planGithubRepoDiscovery: vi.fn(),
   promptGithubDiscoverySelection: vi.fn(),
   renderGithubDiscovery: vi.fn()
@@ -32,6 +33,7 @@ vi.mock("../src/codex-installation.js", () => ({
 
 vi.mock("../src/github-catalog.js", () => ({
   discoverGithubOwnerRepos: mocks.discoverGithubOwnerRepos,
+  mergeGithubDiscoveryResults: mocks.mergeGithubDiscoveryResults,
   planGithubRepoDiscovery: mocks.planGithubRepoDiscovery
 }));
 
@@ -93,6 +95,13 @@ describe("server-main", () => {
         withSuggestions: 0
       }
     });
+    mocks.mergeGithubDiscoveryResults.mockImplementation((baseDiscovery, refinedDiscovery) => ({
+      ...baseDiscovery,
+      repos: baseDiscovery.repos.map(repo => {
+        const refinedRepo = refinedDiscovery.repos.find(candidate => candidate.name === repo.name);
+        return refinedRepo || repo;
+      })
+    }));
     mocks.promptGithubDiscoverySelection.mockResolvedValue({
       reposToAdd: [],
       reposToOverride: []
@@ -185,8 +194,8 @@ describe("server-main", () => {
 
     expect(result).toBeNull();
     expect(stderr.join("")).toContain("Discovering GitHub repos for leanish...");
-    expect(stderr.join("")).toContain("Found 2 repo(s); inspecting 1 eligible repo(s)...");
-    expect(stderr.join("")).toContain("Inspecting repos: 1/1 (archa)");
+    expect(stderr.join("")).toContain("Found 2 repo(s); loading GitHub metadata for 1 eligible repo(s)...");
+    expect(stderr.join("")).toContain("Loading repos: 1/1 (archa)");
     expect(stdout.join("")).toContain("discovery summary");
     expect(mocks.startHttpServer).not.toHaveBeenCalled();
   });

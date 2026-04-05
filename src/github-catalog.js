@@ -72,7 +72,10 @@ export async function discoverGithubOwnerRepos({
   curateWithCodex = true,
   onProgress = null,
   includeForks = true,
-  includeArchived = false
+  includeArchived = false,
+  inspectRepos = true,
+  includeDiscoverySummary = true,
+  selectedRepoNames = []
 }) {
   const normalizedOwner = normalizeOwner(owner);
 
@@ -113,6 +116,7 @@ export async function discoverGithubOwnerRepos({
   let skippedForks = 0;
   let skippedArchived = 0;
   const eligibleRepos = [];
+  const selectedRepoNameSet = normalizeSelectedRepoNames(selectedRepoNames);
 
   for (const repo of discoveredRepos) {
     if (!includeForks && repo.fork) {
@@ -128,34 +132,41 @@ export async function discoverGithubOwnerRepos({
     eligibleRepos.push(repo);
   }
 
-  onProgress?.({
-    type: "discovery-listed",
-    owner: normalizedOwner,
-    discoveredCount: discoveredRepos.length,
-    eligibleCount: eligibleRepos.length,
-    skippedForks,
-    skippedArchived
-  });
+  const reposToProcess = selectedRepoNameSet
+    ? eligibleRepos.filter(repo => selectedRepoNameSet.has(repo.name.toLowerCase()))
+    : eligibleRepos;
+
+  if (includeDiscoverySummary) {
+    onProgress?.({
+      type: "discovery-listed",
+      owner: normalizedOwner,
+      discoveredCount: discoveredRepos.length,
+      eligibleCount: reposToProcess.length,
+      skippedForks,
+      skippedArchived
+    });
+  }
 
   let processedCount = 0;
   const repos = await Promise.all(
-    eligibleRepos.map(async repo => {
+    reposToProcess.map(async repo => {
       const hydratedRepo = await hydrateGithubRepoTopics({
         owner: normalizedOwner,
         repo,
         env,
         fetchFn,
         inspectRepoFn,
-        curateWithCodex
+        curateWithCodex,
+        inspectRepos
       });
 
       processedCount += 1;
       onProgress?.({
-        type: "repo-processed",
+        type: inspectRepos ? "repo-curated" : "repo-processed",
         owner: normalizedOwner,
         repoName: repo.name,
         processedCount,
-        totalCount: eligibleRepos.length
+        totalCount: reposToProcess.length
       });
 
       return hydratedRepo;
@@ -169,6 +180,17 @@ export async function discoverGithubOwnerRepos({
     repos,
     skippedForks,
     skippedArchived
+  };
+}
+
+export function mergeGithubDiscoveryResults(baseDiscovery, refinedDiscovery) {
+  const replacements = new Map(
+    refinedDiscovery.repos.map(repo => [repo.name, repo])
+  );
+
+  return {
+    ...baseDiscovery,
+    repos: baseDiscovery.repos.map(repo => replacements.get(repo.name) || repo)
   };
 }
 
@@ -306,14 +328,16 @@ function normalizeGithubRepo(repo) {
   };
 }
 
-async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoFn, curateWithCodex }) {
+async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoFn, curateWithCodex, inspectRepos }) {
   const normalizedRepo = normalizeGithubRepo(repo);
-  const inspectedMetadata = await safeInspectMetadata(inspectRepoFn, {
-    repo: normalizedRepo,
-    sourceRepo: repo,
-    env,
-    useCodexCleanup: curateWithCodex
-  });
+  const inspectedMetadata = inspectRepos
+    ? await safeInspectMetadata(inspectRepoFn, {
+        repo: normalizedRepo,
+        sourceRepo: repo,
+        env,
+        useCodexCleanup: curateWithCodex
+      })
+    : emptyInspectionMetadata();
   const description = normalizedRepo.description || inspectedMetadata.description || "";
   const repoWithDescription = {
     ...normalizedRepo,
@@ -368,6 +392,19 @@ async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoF
     topics,
     classifications
   };
+}
+
+function normalizeSelectedRepoNames(selectedRepoNames) {
+  if (!Array.isArray(selectedRepoNames) || selectedRepoNames.length === 0) {
+    return null;
+  }
+
+  const names = selectedRepoNames
+    .filter(name => typeof name === "string")
+    .map(name => name.trim().toLowerCase())
+    .filter(Boolean);
+
+  return names.length > 0 ? new Set(names) : null;
 }
 
 function normalizeTopicList(value, repo, sizeKb) {

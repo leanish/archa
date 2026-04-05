@@ -8,7 +8,11 @@ import {
 import { applyGithubDiscoveryToConfig, loadConfig, initializeConfig } from "./config.js";
 import { ensureCodexInstalled } from "./codex-installation.js";
 import { getConfigPath } from "./config-paths.js";
-import { discoverGithubOwnerRepos, planGithubRepoDiscovery } from "./github-catalog.js";
+import {
+  discoverGithubOwnerRepos,
+  mergeGithubDiscoveryResults,
+  planGithubRepoDiscovery
+} from "./github-catalog.js";
 import { createGithubDiscoveryProgressReporter } from "./github-discovery-progress.js";
 import { promptGithubDiscoverySelection, selectGithubDiscoveryRepos } from "./github-discovery-selection.js";
 import { parseArgs } from "./parse-args.js";
@@ -84,8 +88,7 @@ export async function main(argv) {
 }
 
 function commandRequiresCodex(options) {
-  return (options.command === "ask" && !options.noSynthesis)
-    || options.command === "config-discover-github";
+  return options.command === "ask" && !options.noSynthesis;
 }
 
 function filterRepos(repos, requestedNames) {
@@ -175,7 +178,8 @@ async function runGithubDiscovery(options, config = null) {
     discovery = await discoverGithubOwnerRepos({
       owner: options.owner,
       env: process.env,
-      curateWithCodex: true,
+      curateWithCodex: false,
+      inspectRepos: false,
       onProgress: event => progressReporter.onProgress(event),
       includeForks: options.includeForks,
       includeArchived: options.includeArchived
@@ -183,7 +187,7 @@ async function runGithubDiscovery(options, config = null) {
   } finally {
     progressReporter.finish();
   }
-  const plan = planGithubRepoDiscovery(resolvedConfig, discovery);
+  let plan = planGithubRepoDiscovery(resolvedConfig, discovery);
 
   if (!options.apply) {
     process.stdout.write(`${renderGithubDiscovery({
@@ -193,7 +197,7 @@ async function runGithubDiscovery(options, config = null) {
     return;
   }
 
-  const selection = hasExplicitGithubDiscoverySelection(options)
+  const initialSelection = hasExplicitGithubDiscoverySelection(options)
     ? selectGithubDiscoveryRepos(plan, {
         addRepoNames: options.addRepoNames,
         overrideRepoNames: options.overrideRepoNames
@@ -202,6 +206,39 @@ async function runGithubDiscovery(options, config = null) {
         input: process.stdin,
         output: process.stdout
       });
+  const selectedRepoNames = [
+    ...initialSelection.reposToAdd.map(repo => repo.name),
+    ...initialSelection.reposToOverride.map(repo => repo.name)
+  ];
+
+  if (selectedRepoNames.length > 0) {
+    ensureCodexInstalled();
+    progressReporter.startCuration(selectedRepoNames.length);
+    let refinedDiscovery;
+    try {
+      refinedDiscovery = await discoverGithubOwnerRepos({
+        owner: options.owner,
+        env: process.env,
+        curateWithCodex: true,
+        inspectRepos: true,
+        includeDiscoverySummary: false,
+        selectedRepoNames,
+        onProgress: event => progressReporter.onProgress(event),
+        includeForks: options.includeForks,
+        includeArchived: options.includeArchived
+      });
+    } finally {
+      progressReporter.finish();
+    }
+
+    discovery = mergeGithubDiscoveryResults(discovery, refinedDiscovery);
+    plan = planGithubRepoDiscovery(resolvedConfig, discovery);
+  }
+
+  const selection = selectGithubDiscoveryRepos(plan, {
+    addRepoNames: initialSelection.reposToAdd.map(repo => repo.name),
+    overrideRepoNames: initialSelection.reposToOverride.map(repo => repo.name)
+  });
   const applyResult = selection.reposToAdd.length > 0 || selection.reposToOverride.length > 0
     ? await applyGithubDiscoveryToConfig({
         env: process.env,

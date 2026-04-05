@@ -34,9 +34,9 @@ describe("github-discovery-progress", () => {
     reporter.finish();
 
     expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for leanish...\n");
-    expect(output.write).toHaveBeenNthCalledWith(2, "Found 3 repo(s); inspecting 2 eligible repo(s)...\n");
-    expect(output.write).toHaveBeenNthCalledWith(3, "Inspecting repos: 1/2 (archa)\n");
-    expect(output.write).toHaveBeenNthCalledWith(4, "Inspecting repos: 2/2 (terminator)\n");
+    expect(output.write).toHaveBeenNthCalledWith(2, "Found 3 repo(s); loading GitHub metadata for 2 eligible repo(s)...\n");
+    expect(output.write).toHaveBeenNthCalledWith(3, "Loading repos: 1/2 (archa)\n");
+    expect(output.write).toHaveBeenNthCalledWith(4, "Loading repos: 2/2 (terminator)\n");
   });
 
   it("uses inline progress updates for interactive output and finishes with a newline", () => {
@@ -59,7 +59,29 @@ describe("github-discovery-progress", () => {
     reporter.finish();
 
     expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for leanish...\n");
-    expect(output.write).toHaveBeenNthCalledWith(2, "\rInspecting repos: 1/2 (archa)");
+    expect(output.write).toHaveBeenNthCalledWith(2, "\rLoading repos: 1/2 (archa)");
     expect(output.write).toHaveBeenNthCalledWith(3, "\n");
+  });
+
+  it("shows a separate refinement phase for selected repos", () => {
+    const output = {
+      write: vi.fn(),
+      isTTY: false
+    };
+    const reporter = createGithubDiscoveryProgressReporter({
+      output,
+      isInteractive: false
+    });
+
+    reporter.startCuration(1);
+    reporter.onProgress({
+      type: "repo-curated",
+      processedCount: 1,
+      totalCount: 1,
+      repoName: "archa"
+    });
+
+    expect(output.write).toHaveBeenNthCalledWith(1, "Refining selected repo metadata for 1 repo(s)...\n");
+    expect(output.write).toHaveBeenNthCalledWith(2, "Refining repos: 1/1 (archa)\n");
   });
 });
