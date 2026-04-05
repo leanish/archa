@@ -161,6 +161,7 @@ async function runGithubDiscovery(options, config = null) {
   const discovery = await discoverGithubOwnerRepos({
     owner: options.owner,
     env: process.env,
+    curateWithCodex: options.apply,
     includeForks: options.includeForks,
     includeArchived: options.includeArchived
   });

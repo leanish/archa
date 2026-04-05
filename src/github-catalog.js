@@ -69,6 +69,7 @@ export async function discoverGithubOwnerRepos({
   env = process.env,
   fetchFn = globalThis.fetch,
   inspectRepoFn = inspectRepoMetadata,
+  curateWithCodex = false,
   includeForks = true,
   includeArchived = false
 }) {
@@ -132,7 +133,8 @@ export async function discoverGithubOwnerRepos({
       repo,
       env,
       fetchFn,
-      inspectRepoFn
+      inspectRepoFn,
+      curateWithCodex
     }))
   );
   repos.sort((left, right) => left.name.localeCompare(right.name));
@@ -280,12 +282,13 @@ function normalizeGithubRepo(repo) {
   };
 }
 
-async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoFn }) {
+async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, inspectRepoFn, curateWithCodex }) {
   const normalizedRepo = normalizeGithubRepo(repo);
   const inspectedMetadata = await safeInspectMetadata(inspectRepoFn, {
     repo: normalizedRepo,
     sourceRepo: repo,
-    env
+    env,
+    useCodexCleanup: curateWithCodex
   });
   const description = normalizedRepo.description || inspectedMetadata.description || "";
   const repoWithDescription = {

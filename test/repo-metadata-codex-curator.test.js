@@ -32,6 +32,7 @@ describe("repo-metadata-codex-curator", () => {
 
     expect(runCodexPromptFn).toHaveBeenCalledWith(expect.objectContaining({
       workingDirectory: "/workspace/repos/java-conventions",
+      reasoningEffort: "none",
       timeoutMs: 60_000
     }));
     expect(metadata).toEqual({

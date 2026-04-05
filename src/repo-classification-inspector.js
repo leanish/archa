@@ -134,7 +134,8 @@ export async function inspectRepoClassifications({
   runCommandFn = runCommand,
   fsModule = fs,
   tempDirRoot = os.tmpdir(),
-  curateMetadataFn = curateRepoMetadataWithCodex
+  curateMetadataFn = curateRepoMetadataWithCodex,
+  useCodexCleanup = true
 }) {
   const metadata = await inspectRepoMetadata({
     repo,
@@ -143,7 +144,8 @@ export async function inspectRepoClassifications({
     runCommandFn,
     fsModule,
     tempDirRoot,
-    curateMetadataFn
+    curateMetadataFn,
+    useCodexCleanup
   });
 
   return metadata.classifications;
@@ -156,7 +158,8 @@ export async function inspectRepoMetadata({
   runCommandFn = runCommand,
   fsModule = fs,
   tempDirRoot = os.tmpdir(),
-  curateMetadataFn = curateRepoMetadataWithCodex
+  curateMetadataFn = curateRepoMetadataWithCodex,
+  useCodexCleanup = true
 }) {
   const inspection = await prepareInspectionDirectory({
     repo,
@@ -173,17 +176,21 @@ export async function inspectRepoMetadata({
       sourceRepo,
       fsModule
     });
-    try {
-      return await curateMetadataFn({
-        directory: inspection.directory,
-        repo,
-        sourceRepo,
-        inferredMetadata,
-        env
-      });
-    } catch {
-      return inferredMetadata;
+    if (useCodexCleanup) {
+      try {
+        return await curateMetadataFn({
+          directory: inspection.directory,
+          repo,
+          sourceRepo,
+          inferredMetadata,
+          env
+        });
+      } catch {
+        return inferredMetadata;
+      }
     }
+
+    return inferredMetadata;
   } catch {
     return {
       description: "",

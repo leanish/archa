@@ -1,6 +1,7 @@
 import { runCodexPrompt } from "./codex-runner.js";
 
 const DEFAULT_DISCOVERY_CODEX_TIMEOUT_MS = 60_000;
+const DISCOVERY_CODEX_REASONING_EFFORT = "none";
 const MAX_DESCRIPTION_LENGTH = 180;
 const ALLOWED_CLASSIFICATIONS = new Set([
   "infra",
@@ -33,6 +34,7 @@ export async function curateRepoMetadataWithCodex({
   const result = await runCodexPromptFn({
     prompt,
     workingDirectory: directory,
+    reasoningEffort: DISCOVERY_CODEX_REASONING_EFFORT,
     timeoutMs: DEFAULT_DISCOVERY_CODEX_TIMEOUT_MS
   });
   const parsed = parseCuratedMetadata(result.text, {
