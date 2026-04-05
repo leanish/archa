@@ -26,10 +26,15 @@ export function createAskJobManager({
   const pendingJobIds = [];
   let runningJobs = 0;
   let closed = false;
+  let shuttingDown = false;
+  let shutdownPromise = null;
+  let resolveShutdown = null;
 
   return {
     createJob,
     getJob,
+    shutdown,
+    getStats,
     subscribe,
     close
   };
@@ -37,6 +42,9 @@ export function createAskJobManager({
   function createJob(request) {
     if (closed) {
       throw new Error("Ask job manager is closed.");
+    }
+    if (shuttingDown) {
+      throw new Error("Ask job manager is shutting down.");
     }
 
     const job = {
@@ -66,6 +74,24 @@ export function createAskJobManager({
     return job ? snapshotJob(job) : null;
   }
 
+  function getStats() {
+    let queued = 0;
+    let running = 0;
+    let completed = 0;
+    let failed = 0;
+
+    for (const job of jobs.values()) {
+      switch (job.status) {
+        case "queued": queued += 1; break;
+        case "running": running += 1; break;
+        case "completed": completed += 1; break;
+        case "failed": failed += 1; break;
+      }
+    }
+
+    return { queued, running, completed, failed };
+  }
+
   function subscribe(jobId, listener) {
     if (closed) {
       return null;
@@ -83,8 +109,29 @@ export function createAskJobManager({
     };
   }
 
+  function shutdown() {
+    if (closed) {
+      return Promise.resolve();
+    }
+
+    if (shuttingDown) {
+      return shutdownPromise;
+    }
+
+    shuttingDown = true;
+    shutdownPromise = new Promise(resolve => {
+      resolveShutdown = resolve;
+    });
+
+    cancelPendingJobs();
+    resolveShutdownIfDrained();
+
+    return shutdownPromise;
+  }
+
   function close() {
     closed = true;
+    shuttingDown = true;
     pendingJobIds.length = 0;
 
     for (const timer of cleanupTimers.values()) {
@@ -94,10 +141,11 @@ export function createAskJobManager({
     cleanupTimers.clear();
     subscribers.clear();
     jobs.clear();
+    resolveShutdownIfDrained();
   }
 
   function drainQueue() {
-    if (closed) {
+    if (closed || shuttingDown) {
       return;
     }
 
@@ -144,6 +192,12 @@ export function createAskJobManager({
       runningJobs -= 1;
 
       if (closed) {
+        resolveShutdownIfDrained();
+        return;
+      }
+
+      if (shuttingDown) {
+        resolveShutdownIfDrained();
         return;
       }
 
@@ -190,6 +244,34 @@ export function createAskJobManager({
 
     timer.unref?.();
     cleanupTimers.set(jobId, timer);
+  }
+
+  function cancelPendingJobs() {
+    while (pendingJobIds.length > 0) {
+      const nextJobId = pendingJobIds.shift();
+      if (!nextJobId) {
+        continue;
+      }
+
+      const job = jobs.get(nextJobId);
+      if (!job || job.status !== "queued") {
+        continue;
+      }
+
+      job.status = "failed";
+      job.finishedAt = toTimestamp(now());
+      job.error = "Server shutting down.";
+      appendEvent(job, "failed", job.error);
+    }
+  }
+
+  function resolveShutdownIfDrained() {
+    if (!shuttingDown || runningJobs > 0 || !resolveShutdown) {
+      return;
+    }
+
+    resolveShutdown();
+    resolveShutdown = null;
   }
 }
 

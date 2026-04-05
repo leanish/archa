@@ -48,16 +48,8 @@ export async function startHttpServer({
     jobManager: resolvedJobManager,
     loadConfigFn
   });
-  const sockets = new Set();
   const server = http.createServer((request, response) => {
     void handler(request, response);
-  });
-
-  server.on("connection", socket => {
-    sockets.add(socket);
-    socket.on("close", () => {
-      sockets.delete(socket);
-    });
   });
 
   await new Promise((resolve, reject) => {
@@ -75,17 +67,21 @@ export async function startHttpServer({
     configuredRepoCount: loadedConfig.repos.length,
     configPath: loadedConfig.configPath || null,
     async close() {
+      const shutdownPromise = typeof resolvedJobManager.shutdown === "function"
+        ? resolvedJobManager.shutdown()
+        : Promise.resolve();
+
+      await Promise.all([
+        shutdownPromise,
+        new Promise(resolve => {
+          server.close(() => {
+            resolve();
+          });
+          server.closeIdleConnections?.();
+        })
+      ]);
+
       resolvedJobManager.close();
-
-      await new Promise(resolve => {
-        server.close(() => {
-          resolve();
-        });
-
-        for (const socket of sockets) {
-          socket.destroy();
-        }
-      });
     }
   };
 }
@@ -144,7 +140,10 @@ async function handleRequest({ request, response, jobManager, bodyLimitBytes, en
     }
 
     if (request.method === "GET" && url.pathname === "/health") {
-      writeJson(response, 200, { status: "ok" });
+      writeJson(response, 200, {
+        status: "ok",
+        jobs: typeof jobManager.getStats === "function" ? jobManager.getStats() : null
+      });
       return;
     }
 

@@ -13,13 +13,25 @@ Content-negotiated:
 
 ### `GET /health`
 
-Returns:
+Returns the server status along with job counts by state:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "jobs": {
+    "queued": 0,
+    "running": 0,
+    "completed": 0,
+    "failed": 0
+  }
 }
 ```
+
+Notes:
+
+- `jobs` is `null` when the server is using a custom job manager that does not expose stats
+- `completed` and `failed` reflect only the jobs still retained in memory, not cumulative historical totals
+- those counts reset after the job retention window expires and when the server process restarts
 
 ### `GET /repos`
 
@@ -36,9 +48,15 @@ Response:
       "description": "Repo-aware CLI for engineering Q&A with local Codex",
       "aliases": ["self"]
     }
-  ]
+  ],
+  "setupHint": null
 }
 ```
+
+Notes:
+
+- `setupHint` is `null` during normal operation
+- when the configured repo list is empty, `setupHint` contains a suggested `discover-github --apply` command for bootstrapping config
 
 ### `POST /ask`
 

@@ -17,7 +17,31 @@ export async function main(argv) {
       'archa-server: no managed repos are configured yet. Suggestion: run "archa config discover-github --owner <github-user-or-org> --apply".\n'
     );
   }
+
+  setupShutdownHandlers(serverHandle);
   return serverHandle;
+}
+
+export function setupShutdownHandlers(serverHandle, { processRef = process } = {}) {
+  let shuttingDown = false;
+
+  function onSignal(signal) {
+    if (shuttingDown) {
+      processRef.stderr.write(`Forced shutdown (${signal})\n`);
+      processRef.exit(1);
+      return;
+    }
+
+    shuttingDown = true;
+    processRef.stderr.write(`Shutting down (${signal})...\n`);
+    serverHandle.close().then(
+      () => processRef.exit(0),
+      () => processRef.exit(1)
+    );
+  }
+
+  processRef.on("SIGTERM", () => onSignal("SIGTERM"));
+  processRef.on("SIGINT", () => onSignal("SIGINT"));
 }
 
 export { HelpError };

@@ -13,11 +13,13 @@ export async function loadConfig(env = process.env) {
   }
 
   const managedReposRoot = parsed.managedReposRoot || getDefaultManagedReposRoot(env);
+  const repos = parsed.repos.map((repo, index) => normalizeRepo(repo, index, managedReposRoot, configPath));
+  validateUniqueRepoIdentifiers(repos, configPath);
 
   return {
     configPath,
     managedReposRoot,
-    repos: parsed.repos.map((repo, index) => normalizeRepo(repo, index, managedReposRoot, configPath))
+    repos
   };
 }
 
@@ -191,7 +193,7 @@ function normalizeRepoDefinition(repo, index, sourcePath) {
     defaultBranch: repo.defaultBranch || repo.branch || "main",
     description: repo.description || "",
     topics: Array.isArray(repo.topics) ? repo.topics : [],
-    aliases: Array.isArray(repo.aliases) ? repo.aliases : [],
+    aliases: normalizeAliases(repo.aliases, repo.name, sourcePath),
     alwaysSelect: repo.alwaysSelect === true
   };
 }
@@ -218,7 +220,7 @@ async function importCatalog(catalogPath) {
     throw new Error(`Invalid catalog at ${catalogPath}: "repos" must be an array.`);
   }
 
-  return parsed.repos.map((repo, index) => {
+  const repos = parsed.repos.map((repo, index) => {
     const normalizedRepo = normalizeRepoDefinition(repo, index, catalogPath);
 
     return {
@@ -231,13 +233,33 @@ async function importCatalog(catalogPath) {
       alwaysSelect: normalizedRepo.alwaysSelect
     };
   });
+
+  validateUniqueRepoIdentifiers(repos, catalogPath);
+
+  return repos;
+}
+
+function normalizeAliases(value, repoName, sourcePath) {
+  if (value == null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid Archa config at ${sourcePath}: repo "${repoName}" has non-array "aliases".`);
+  }
+
+  if (!value.every(alias => typeof alias === "string" && alias.trim() !== "")) {
+    throw new Error(`Invalid Archa config at ${sourcePath}: repo "${repoName}" has non-string or empty aliases.`);
+  }
+
+  return value.map(alias => alias.trim());
 }
 
 function validateUniqueRepoIdentifiers(repos, sourcePath) {
   const seenIdentifiers = new Map();
 
   for (const repo of repos) {
-    for (const identifier of [repo.name, ...(repo.aliases || [])]) {
+    for (const identifier of [repo.name, ...repo.aliases]) {
       const normalizedIdentifier = identifier.toLowerCase();
       const existingOwner = seenIdentifiers.get(normalizedIdentifier);
 

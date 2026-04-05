@@ -169,6 +169,118 @@ describe("ask-job-manager", () => {
     manager.close();
   });
 
+  it("shutdown cancels queued jobs and waits for running jobs to finish", async () => {
+    let finishFirstJob;
+    const firstJobDone = new Promise(resolve => {
+      finishFirstJob = resolve;
+    });
+    const answerQuestionFn = vi.fn(async ({ question }) => {
+      if (question === "first") {
+        await firstJobDone;
+      }
+
+      return {
+        mode: "answer",
+        question,
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: {
+          text: `answer:${question}`
+        }
+      };
+    });
+    const manager = createAskJobManager({
+      answerQuestionFn,
+      generateJobId: createSequenceIdGenerator(),
+      maxConcurrentJobs: 1,
+      jobRetentionMs: 60_000
+    });
+
+    const firstJob = manager.createJob({ question: "first" });
+    const secondJob = manager.createJob({ question: "second" });
+
+    await Promise.resolve();
+
+    const shutdownPromise = manager.shutdown();
+
+    expect(() => manager.createJob({ question: "after-shutdown" })).toThrow("Ask job manager is shutting down.");
+    expect(manager.getJob(firstJob.id)?.status).toBe("running");
+    expect(manager.getJob(secondJob.id)).toMatchObject({
+      status: "failed",
+      error: "Server shutting down."
+    });
+
+    finishFirstJob();
+
+    await shutdownPromise;
+
+    expect(manager.getJob(firstJob.id)?.status).toBe("completed");
+    expect(answerQuestionFn).toHaveBeenCalledTimes(1);
+
+    manager.close();
+  });
+
+  it("reports correct stats as jobs progress through states", async () => {
+    let finishFirstJob;
+    const firstJobDone = new Promise(resolve => {
+      finishFirstJob = resolve;
+    });
+    const answerQuestionFn = vi.fn(async ({ question }) => {
+      if (question === "first") {
+        await firstJobDone;
+      }
+
+      return {
+        mode: "answer",
+        question,
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: { text: `answer:${question}` }
+      };
+    });
+    const manager = createAskJobManager({
+      answerQuestionFn,
+      generateJobId: createSequenceIdGenerator(),
+      maxConcurrentJobs: 1,
+      jobRetentionMs: 60_000
+    });
+
+    expect(manager.getStats()).toEqual({ queued: 0, running: 0, completed: 0, failed: 0 });
+
+    manager.createJob({ question: "first" });
+    manager.createJob({ question: "second" });
+
+    await Promise.resolve();
+
+    expect(manager.getStats()).toEqual({ queued: 1, running: 1, completed: 0, failed: 0 });
+
+    finishFirstJob();
+
+    await waitFor(() => manager.getStats().completed === 2);
+
+    expect(manager.getStats()).toEqual({ queued: 0, running: 0, completed: 2, failed: 0 });
+
+    manager.close();
+  });
+
+  it("reports failed jobs in stats", async () => {
+    const manager = createAskJobManager({
+      answerQuestionFn: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+      generateJobId: createSequenceIdGenerator(),
+      jobRetentionMs: 60_000
+    });
+
+    manager.createJob({ question: "explode" });
+
+    await waitFor(() => manager.getStats().failed === 1);
+
+    expect(manager.getStats()).toEqual({ queued: 0, running: 0, completed: 0, failed: 1 });
+
+    manager.close();
+  });
+
   it("returns null when subscribing to an unknown job", () => {
     const manager = createAskJobManager({
       answerQuestionFn: vi.fn(async () => ({
