@@ -124,7 +124,7 @@ const EXTERNAL_TERMS = [
 ];
 const INTERNAL_TERMS = ["internal", "employee", "backoffice", "admin-only", "private"];
 const LIBRARY_TERMS = ["library", "sdk", "module", "plugin", "package"];
-const SERVICE_TERMS = ["microservice", "service", "worker", "daemon"];
+const SERVICE_TERMS = ["microservice", "worker", "daemon"];
 
 export async function inspectRepoClassifications({
   repo,
@@ -280,7 +280,7 @@ async function inferMetadataFromDirectory({ directory, repo, sourceRepo, fsModul
     classifications.push("infra");
   }
 
-  if (hasLibraryPackaging && !hasInfra) {
+  if (hasLibraryPackaging) {
     classifications.push("library");
   }
 

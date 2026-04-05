@@ -189,7 +189,63 @@ describe("github-catalog", () => {
         defaultBranch: "main",
         description: "Shared Gradle conventions for JDK-based projects",
         topics: ["gradle", "conventions", "jdk"],
-        classifications: ["infra"]
+        classifications: []
+      }
+    ]);
+  });
+
+  it("does not misclassify Gradle conventions repos as infra or microservice when inspection identifies a library", async () => {
+    const inspectRepoFn = vi.fn(async () => ({
+      description: "",
+      topics: [],
+      classifications: ["library"]
+    }));
+    const fetchFn = vi.fn(async url => {
+      if (url === "https://api.github.com/users/leanish") {
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
+        return createJsonResponse(200, [
+          {
+            name: "java-conventions",
+            clone_url: "https://github.com/leanish/java-conventions.git",
+            default_branch: "main",
+            description: "Shared Gradle conventions for JDK-based projects",
+            topics: [],
+            size: 1800,
+            fork: false,
+            archived: false
+          }
+        ]);
+      }
+
+      if (url === "https://api.github.com/repos/leanish/java-conventions/topics") {
+        return createJsonResponse(200, {
+          names: []
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      fetchFn,
+      inspectRepoFn
+    });
+
+    expect(result.repos).toEqual([
+      {
+        name: "java-conventions",
+        url: "https://github.com/leanish/java-conventions.git",
+        defaultBranch: "main",
+        description: "Shared Gradle conventions for JDK-based projects",
+        topics: ["gradle", "conventions", "jdk"],
+        classifications: ["library"]
       }
     ]);
   });

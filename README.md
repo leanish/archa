@@ -64,7 +64,7 @@ Example using a few public `leanish` repos:
       "defaultBranch": "main",
       "description": "Shared Gradle conventions for JDK-based projects",
       "topics": ["gradle", "java", "jacoco", "checkstyle"],
-      "classifications": ["infra"],
+      "classifications": ["library"],
       "aliases": ["conventions"]
     },
     {
@@ -81,7 +81,7 @@ Example using a few public `leanish` repos:
 ```
 
 Repos may also set `"alwaysSelect": true` to stay in scope during automatic repo selection. This is useful for foundational repos that should always be available when Archa narrows to likely matches. If nothing scores positively, Archa still falls back to all configured repos.
-`classifications` are handled separately from free-form `topics` and weighted more strongly during automatic repo selection for cues like `infra`, `library`, `internal`, `external`, and `microservice`.
+`classifications` are handled separately from free-form `topics` and weighted more strongly during automatic repo selection for cues like `infra`, `library`, `internal`, `external`, and `microservice`. They are additive rather than exclusive, so a repo can carry multiple accurate roles when the evidence supports that.
 
 Bootstrap an empty config:
 

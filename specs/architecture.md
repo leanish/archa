@@ -126,6 +126,7 @@ Repo definitions include:
 - `description`
 - `topics`
 - `classifications`
+  Additive high-signal roles such as `library`, `infra`, `internal`, or `external`; multiple values may coexist when supported by the metadata and inspected repo structure.
 - optional `aliases`
 - optional `alwaysSelect`
 

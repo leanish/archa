@@ -23,7 +23,7 @@ Archa exposes the same repo-aware question-answering core through a CLI and an o
 - the HTTP adapter exposes the same ask flow as async jobs plus status streams
 - the built-in web UI can load the configured repo catalog and present it as a picker instead of raw comma-separated input
 - repos can be pinned into automatic selection with `alwaysSelect`, and automatic selection still falls back to all configured repos when nothing scores positively
-- high-signal classifications such as `infra`, `library`, `internal`, `external`, and `microservice` are handled separately from generic topics and weighted more strongly during automatic selection
+- high-signal classifications such as `infra`, `library`, `internal`, `external`, and `microservice` are handled separately from generic topics, are additive when multiple roles apply, and are weighted more strongly during automatic selection
 - answers default to a general engineering audience and can optionally target codebase-aware readers
 
 ## Non-goals

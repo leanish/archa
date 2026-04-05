@@ -69,6 +69,54 @@ describe("repo-classification-inspector", () => {
     expect(classifications).toEqual(["infra", "internal"]);
   });
 
+  it("allows infra and library classifications to coexist when both have evidence", async () => {
+    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "terraform-modules");
+    await fs.mkdir(path.join(repoDirectory, "terraform"), { recursive: true });
+    await fs.writeFile(path.join(repoDirectory, "README.md"), "Reusable Terraform module package for shared platform infrastructure.");
+    await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java-library' }\n");
+
+    const classifications = await inspectRepoClassifications({
+      repo: {
+        name: "terraform-modules",
+        url: "https://github.com/leanish/terraform-modules.git",
+        defaultBranch: "main",
+        description: "Shared infrastructure modules",
+        topics: []
+      },
+      sourceRepo: {},
+      env
+    });
+
+    expect(classifications).toEqual(["infra", "library"]);
+  });
+
+  it("does not infer microservice from generic service wording in conventions docs", async () => {
+    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "java-conventions");
+    await fs.mkdir(repoDirectory, { recursive: true });
+    await fs.writeFile(path.join(repoDirectory, "README.md"), [
+      "# java-conventions",
+      "",
+      "Shared Gradle conventions for JDK-based projects.",
+      "",
+      "The plugin applies shared defaults for service and library builds."
+    ].join("\n"));
+    await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java-library' }\n");
+
+    const classifications = await inspectRepoClassifications({
+      repo: {
+        name: "java-conventions",
+        url: "https://github.com/leanish/java-conventions.git",
+        defaultBranch: "main",
+        description: "Shared Gradle conventions for JDK-based projects",
+        topics: []
+      },
+      sourceRepo: {},
+      env
+    });
+
+    expect(classifications).toEqual(["library"]);
+  });
+
   it("infers description and topics from the repo readme when metadata is missing", async () => {
     const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "terminator");
     await fs.mkdir(repoDirectory, { recursive: true });

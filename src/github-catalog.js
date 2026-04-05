@@ -6,10 +6,10 @@ const SMALL_REPO_MAX_INFERRED_TOPICS = 3;
 const MEDIUM_REPO_MAX_INFERRED_TOPICS = 5;
 const LARGE_REPO_MAX_INFERRED_TOPICS = 8;
 const CLASSIFICATION_KEYWORDS = new Map([
-  ["infra", ["infra", "infrastructure", "terraform", "helm", "kubernetes", "k8s", "ansible", "devops", "ops", "gradle", "build"]],
+  ["infra", ["infra", "infrastructure", "terraform", "helm", "kubernetes", "k8s", "ansible", "devops", "ops"]],
   ["library", ["library", "lib", "sdk", "module", "plugin", "package"]],
   ["internal", ["internal", "private", "proprietary"]],
-  ["microservice", ["microservice", "service", "worker", "daemon"]],
+  ["microservice", ["microservice", "worker", "daemon"]],
   ["external", ["external", "customer-facing", "product", "public", "user-facing", "customer", "shopper", "checkout", "storefront", "onboarding", "pricing", "api", "graphql", "rest"]],
   ["frontend", ["frontend", "ui", "browser", "react", "vue", "nextjs", "next"]],
   ["backend", ["backend", "server", "api", "graphql", "rest"]],

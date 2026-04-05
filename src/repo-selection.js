@@ -3,7 +3,7 @@ const CLASSIFICATION_ALIASES = new Map([
   ["infra", ["infra", "infrastructure", "ops", "devops"]],
   ["library", ["library", "lib", "sdk", "module", "package"]],
   ["internal", ["internal", "private", "proprietary"]],
-  ["microservice", ["microservice", "service", "worker", "daemon"]],
+  ["microservice", ["microservice", "worker", "daemon"]],
   ["external", ["external", "customer-facing", "product", "public", "user-facing", "customer", "shopper", "checkout", "storefront", "onboarding", "pricing", "api", "graphql", "rest"]],
   ["frontend", ["frontend", "ui", "browser", "web"]],
   ["backend", ["backend", "server", "api", "graphql", "rest"]],
