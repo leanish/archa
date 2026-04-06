@@ -13,6 +13,7 @@ import { getConfigPath } from "./config-paths.js";
 import { ensureGitInstalled } from "./git-installation.js";
 import { ensureGithubDiscoveryAuthAvailable } from "./github-discovery-auth.js";
 import {
+  buildAppliedGithubDiscoveryEntries,
   discoverGithubOwnerRepos,
   getGithubDiscoveryRepoKey,
   mergeGithubDiscoveryPlan,
@@ -279,6 +280,8 @@ async function runGithubDiscovery(options, config = null) {
     process.stdout.write(`${renderGithubDiscovery({
       ...plan,
       applied: true,
+      appliedEntries: buildAppliedGithubDiscoveryEntries(plan, selection),
+      selectedCount: selectedRepoNames.length,
       configPath,
       addedCount,
       overriddenCount

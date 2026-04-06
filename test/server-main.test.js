@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   ensureGithubDiscoveryAuthAvailable: vi.fn(),
   loadConfig: vi.fn(),
   applyGithubDiscoveryToConfig: vi.fn(),
+  buildAppliedGithubDiscoveryEntries: vi.fn(),
   discoverGithubOwnerRepos: vi.fn(),
   getGithubDiscoveryRepoKey: vi.fn(),
   mergeGithubDiscoveryPlan: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock("../src/github-discovery-auth.js", () => ({
 }));
 
 vi.mock("../src/github-catalog.js", () => ({
+  buildAppliedGithubDiscoveryEntries: mocks.buildAppliedGithubDiscoveryEntries,
   discoverGithubOwnerRepos: mocks.discoverGithubOwnerRepos,
   getGithubDiscoveryRepoKey: mocks.getGithubDiscoveryRepoKey,
   mergeGithubDiscoveryPlan: mocks.mergeGithubDiscoveryPlan,
@@ -85,6 +87,18 @@ describe("server-main", () => {
     mocks.ensureGitInstalled.mockImplementation(() => {});
     mocks.ensureGithubDiscoveryAuthAvailable.mockImplementation(() => {});
     mocks.getGithubDiscoveryRepoKey.mockImplementation(repo => repo.sourceFullName || repo.name);
+    mocks.buildAppliedGithubDiscoveryEntries.mockImplementation((plan, selection) => [
+      ...selection.reposToAdd.map(repo => plan.entries.find(entry => entry.repo === repo) || {
+        repo,
+        status: "new",
+        suggestions: []
+      }),
+      ...selection.reposToOverride.map(repo => plan.entries.find(entry => entry.repo === repo) || {
+        repo,
+        status: "configured",
+        suggestions: []
+      })
+    ]);
     mocks.refineDiscoveredGithubRepos.mockResolvedValue({
       owner: "leanish",
       ownerType: "User",

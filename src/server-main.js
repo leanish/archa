@@ -7,6 +7,7 @@ import { ensureGitInstalled } from "./git-installation.js";
 import { ensureGithubDiscoveryAuthAvailable } from "./github-discovery-auth.js";
 import { ensureInteractiveConfigSetup } from "./cli-bootstrap.js";
 import {
+  buildAppliedGithubDiscoveryEntries,
   discoverGithubOwnerRepos,
   getGithubDiscoveryRepoKey,
   mergeGithubDiscoveryPlan,
@@ -131,6 +132,8 @@ async function runServerGithubDiscovery(options) {
     process.stdout.write(`${renderGithubDiscovery({
       ...plan,
       applied: true,
+      appliedEntries: buildAppliedGithubDiscoveryEntries(plan, selection),
+      selectedCount: selectedRepoNames.length,
       configPath,
       addedCount,
       overriddenCount

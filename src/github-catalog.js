@@ -499,6 +499,21 @@ export function mergeGithubDiscoveryPlan(basePlan, refinedPlan) {
   };
 }
 
+export function buildAppliedGithubDiscoveryEntries(plan, selection) {
+  const entriesByKey = new Map(
+    plan.entries.map(entry => [getGithubDiscoveryRepoKey(entry.repo), entry])
+  );
+
+  return [
+    ...selection.reposToAdd,
+    ...selection.reposToOverride
+  ].map(repo => entriesByKey.get(getGithubDiscoveryRepoKey(repo)) || {
+    repo,
+    status: "new",
+    suggestions: []
+  });
+}
+
 export function planGithubRepoDiscovery(config, discovery) {
   const reposByName = new Map();
   const reposByIdentifier = new Map();

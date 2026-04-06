@@ -137,22 +137,50 @@ describe("render", () => {
     const applied = renderGithubDiscovery({
       owner: "leanish",
       ownerType: "User",
-      entries: [],
+      entries: [
+        {
+          status: "new",
+          repo: {
+            name: "ignored-repo",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        }
+      ],
+      appliedEntries: [
+        {
+          status: "new",
+          repo: {
+            name: "archa",
+            description: "Repo-aware CLI",
+            topics: ["cli"],
+            classifications: ["cli"]
+          },
+          suggestions: []
+        }
+      ],
       counts: {
-        discovered: 0,
+        discovered: 2,
         configured: 0,
-        new: 0,
+        new: 2,
         conflicts: 0,
         withSuggestions: 0
       },
       skippedForks: 0,
       skippedArchived: 0,
       applied: true,
+      selectedCount: 1,
       configPath: "/tmp/archa-config.json",
       addedCount: 1,
       overriddenCount: 2
     });
 
+    expect(applied).toContain("archa [new]");
+    expect(applied).not.toContain("ignored-repo");
+    expect(applied).toContain("Repos selected: 1");
+    expect(applied).not.toContain("Repos discovered:");
     expect(applied).toContain("Config updated: /tmp/archa-config.json");
     expect(applied).toContain("Repos overridden: 2");
   });

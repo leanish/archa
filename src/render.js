@@ -53,29 +53,44 @@ export function renderGithubDiscovery(result) {
   const lines = [
     `GitHub repo discovery for ${result.ownerDisplay || result.owner} (${result.ownerType}):`
   ];
+  const entries = result.applied
+    ? (result.appliedEntries || [])
+    : result.entries;
   const sourceOwners = new Set(
-    result.entries
+    entries
       .map(entry => entry.repo.sourceOwner)
       .filter(sourceOwner => typeof sourceOwner === "string" && sourceOwner !== "")
   );
 
   if (sourceOwners.size > 1) {
-    const groupedEntries = groupDiscoveryEntriesByOwner(result.entries, getPrimarySourceOwner(result));
+    const groupedEntries = groupDiscoveryEntriesByOwner(entries, getPrimarySourceOwner(result));
 
     for (const group of groupedEntries) {
       lines.push(`${group.ownerLabel}:`);
       for (const entry of group.entries) {
         lines.push(formatDiscoveryEntry(entry, {
-          useSourceLabels: isAmbiguousDiscoveryName(entry.repo, result.entries)
+          useSourceLabels: isAmbiguousDiscoveryName(entry.repo, entries)
         }));
       }
     }
   } else {
-    for (const entry of result.entries) {
+    for (const entry of entries) {
       lines.push(formatDiscoveryEntry(entry, {
         useSourceLabels: false
       }));
     }
+  }
+
+  if (result.applied) {
+    lines.push("");
+    if (typeof result.selectedCount === "number") {
+      lines.push(`Repos selected: ${result.selectedCount}`);
+    }
+    const hasChanges = result.addedCount > 0 || (result.overriddenCount || 0) > 0;
+    lines.push(`${hasChanges ? "Config updated" : "Config unchanged"}: ${result.configPath}`);
+    lines.push(`Repos added: ${result.addedCount}`);
+    lines.push(`Repos overridden: ${result.overriddenCount || 0}`);
+    return lines.join("\n");
   }
 
   lines.push("");
@@ -91,14 +106,6 @@ export function renderGithubDiscovery(result) {
 
   if (result.skippedArchived > 0) {
     lines.push(`Skipped archived repos: ${result.skippedArchived}`);
-  }
-
-  if (result.applied) {
-    const hasChanges = result.addedCount > 0 || (result.overriddenCount || 0) > 0;
-    lines.push(`${hasChanges ? "Config updated" : "Config unchanged"}: ${result.configPath}`);
-    lines.push(`Repos added: ${result.addedCount}`);
-    lines.push(`Repos overridden: ${result.overriddenCount || 0}`);
-    return lines.join("\n");
   }
 
   if (result.counts.new > 0 || result.counts.configured > 0) {
