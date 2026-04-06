@@ -18,17 +18,17 @@ export function createGithubDiscoveryProgressReporter({
     start(owner) {
       output.write(`Discovering GitHub repos for ${owner}...\n`);
     },
-    startCuration(selectedCount) {
-      output.write(`Refining selected repo metadata for ${selectedCount} repo(s)...\n`);
-    },
     onProgress(event) {
       if (!event || typeof event !== "object") {
         return;
       }
 
       if (event.type === "discovery-listed") {
+        const action = event.inspectRepos
+          ? "loading and curating metadata"
+          : "loading GitHub metadata";
         output.write(
-          `Found ${event.discoveredCount} repo(s); loading GitHub metadata for ${event.eligibleCount} eligible repo(s)...\n`
+          `Found ${event.discoveredCount} repo(s); ${action} for ${event.eligibleCount} eligible repo(s)...\n`
         );
         return;
       }
@@ -45,7 +45,7 @@ export function createGithubDiscoveryProgressReporter({
       }
 
       if (event.type === "repo-curated") {
-        const message = `Refining repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`;
+        const message = `Curating repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`;
         if (isInteractive) {
           writeInlineProgress(message, event.processedCount === event.totalCount);
           return;

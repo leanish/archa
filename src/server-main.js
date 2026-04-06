@@ -6,7 +6,6 @@ import { getConfigPath } from "./config-paths.js";
 import { ensureInteractiveConfigSetup } from "./cli-bootstrap.js";
 import {
   discoverGithubOwnerRepos,
-  mergeGithubDiscoveryResults,
   planGithubRepoDiscovery
 } from "./github-catalog.js";
 import { createGithubDiscoveryProgressReporter } from "./github-discovery-progress.js";
@@ -57,8 +56,8 @@ async function runServerGithubDiscovery(options) {
     discovery = await discoverGithubOwnerRepos({
       owner: options.owner,
       env: process.env,
-      curateWithCodex: false,
-      inspectRepos: false,
+      curateWithCodex: true,
+      inspectRepos: true,
       onProgress: event => progressReporter.onProgress(event),
       includeForks: options.includeForks,
       includeArchived: options.includeArchived
@@ -71,33 +70,6 @@ async function runServerGithubDiscovery(options) {
     input: process.stdin,
     output: process.stdout
   });
-  const selectedRepoNames = [
-    ...initialSelection.reposToAdd.map(repo => repo.name),
-    ...initialSelection.reposToOverride.map(repo => repo.name)
-  ];
-
-  if (selectedRepoNames.length > 0) {
-    progressReporter.startCuration(selectedRepoNames.length);
-    let refinedDiscovery;
-    try {
-      refinedDiscovery = await discoverGithubOwnerRepos({
-        owner: options.owner,
-        env: process.env,
-        curateWithCodex: true,
-        inspectRepos: true,
-        includeDiscoverySummary: false,
-        selectedRepoNames,
-        onProgress: event => progressReporter.onProgress(event),
-        includeForks: options.includeForks,
-        includeArchived: options.includeArchived
-      });
-    } finally {
-      progressReporter.finish();
-    }
-
-    discovery = mergeGithubDiscoveryResults(discovery, refinedDiscovery);
-    plan = planGithubRepoDiscovery(config, discovery);
-  }
 
   const selection = {
     reposToAdd: plan.entries

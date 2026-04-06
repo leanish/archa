@@ -196,6 +196,8 @@ export async function discoverGithubOwnerRepos({
       owner: normalizedOwner,
       discoveredCount: discoveredRepos.length,
       eligibleCount: reposToProcess.length,
+      inspectRepos,
+      curateWithCodex,
       skippedForks,
       skippedArchived
     });

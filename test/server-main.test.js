@@ -162,11 +162,12 @@ describe("server-main", () => {
         owner: "leanish",
         discoveredCount: 2,
         eligibleCount: 1,
+        inspectRepos: true,
         skippedForks: 1,
         skippedArchived: 0
       });
       onProgress?.({
-        type: "repo-processed",
+        type: "repo-curated",
         owner: "leanish",
         repoName: "archa",
         processedCount: 1,
@@ -194,8 +195,8 @@ describe("server-main", () => {
 
     expect(result).toBeNull();
     expect(stderr.join("")).toContain("Discovering GitHub repos for leanish...");
-    expect(stderr.join("")).toContain("Found 2 repo(s); loading GitHub metadata for 1 eligible repo(s)...");
-    expect(stderr.join("")).toContain("Loading repos: 1/1 (archa)");
+    expect(stderr.join("")).toContain("Found 2 repo(s); loading and curating metadata for 1 eligible repo(s)...");
+    expect(stderr.join("")).toContain("Curating repos: 1/1 (archa)");
     expect(stdout.join("")).toContain("discovery summary");
     expect(mocks.startHttpServer).not.toHaveBeenCalled();
   });

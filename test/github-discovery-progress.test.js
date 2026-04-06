@@ -17,7 +17,8 @@ describe("github-discovery-progress", () => {
     reporter.onProgress({
       type: "discovery-listed",
       discoveredCount: 3,
-      eligibleCount: 2
+      eligibleCount: 2,
+      inspectRepos: false
     });
     reporter.onProgress({
       type: "repo-processed",
@@ -92,7 +93,7 @@ describe("github-discovery-progress", () => {
     expect(output.write).toHaveBeenNthCalledWith(2, `\r${finalMessage.padEnd(firstMessage.length)}\n`);
   });
 
-  it("shows a separate refinement phase for selected repos", () => {
+  it("shows curated discovery progress when repo inspection is enabled", () => {
     const output = {
       write: vi.fn(),
       isTTY: false
@@ -102,7 +103,13 @@ describe("github-discovery-progress", () => {
       isInteractive: false
     });
 
-    reporter.startCuration(1);
+    reporter.start("leanish");
+    reporter.onProgress({
+      type: "discovery-listed",
+      discoveredCount: 1,
+      eligibleCount: 1,
+      inspectRepos: true
+    });
     reporter.onProgress({
       type: "repo-curated",
       processedCount: 1,
@@ -110,7 +117,8 @@ describe("github-discovery-progress", () => {
       repoName: "archa"
     });
 
-    expect(output.write).toHaveBeenNthCalledWith(1, "Refining selected repo metadata for 1 repo(s)...\n");
-    expect(output.write).toHaveBeenNthCalledWith(2, "Refining repos: 1/1 (archa)\n");
+    expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for leanish...\n");
+    expect(output.write).toHaveBeenNthCalledWith(2, "Found 1 repo(s); loading and curating metadata for 1 eligible repo(s)...\n");
+    expect(output.write).toHaveBeenNthCalledWith(3, "Curating repos: 1/1 (archa)\n");
   });
 });

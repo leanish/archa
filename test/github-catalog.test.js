@@ -251,6 +251,8 @@ describe("github-catalog", () => {
       owner: "leanish",
       discoveredCount: 1,
       eligibleCount: 1,
+      inspectRepos: true,
+      curateWithCodex: true,
       skippedForks: 0,
       skippedArchived: 0
     });
