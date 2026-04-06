@@ -38,7 +38,7 @@ describe("render", () => {
     expect(renderRepoList([])).toBe([
       "Managed repos:",
       "- none configured",
-      'Run: archa config discover-github --owner <github-user-or-org> --apply'
+      "Run: archa config discover-github --apply"
     ].join("\n"));
   });
 

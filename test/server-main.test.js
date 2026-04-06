@@ -161,7 +161,7 @@ describe("server-main", () => {
     expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
     expect(mocks.ensureInteractiveConfigSetup).toHaveBeenCalled();
     expect(stdout.join("")).toBe("Archa server listening on http://127.0.0.1:8787\n");
-    expect(stderr.join("")).toContain('Suggestion: run "archa config discover-github --owner <github-user-or-org> --apply".');
+    expect(stderr.join("")).toContain('Suggestion: run "archa config discover-github --apply".');
   });
 
   it("does not print the discovery suggestion when repos are already configured", async () => {

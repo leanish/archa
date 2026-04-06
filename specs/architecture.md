@@ -78,7 +78,7 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 ## Main modules
 
 - `src/cli.js`
-  Dispatches commands, resolves question files, prints output, and handles interactive CLI bootstrap when config is missing or freshly initialized without repos.
+  Dispatches commands, resolves question files, prints output, handles interactive CLI bootstrap when config is missing or freshly initialized without repos, and lets direct `config discover-github` prompt for an owner or default to `@accessible` when `--owner` is omitted.
 - `src/server-main.js`
   Parses server startup arguments, reuses the same interactive config bootstrap flow as `archa`, and then boots the HTTP adapter.
 - `src/cli-bootstrap.js`

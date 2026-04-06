@@ -5,7 +5,7 @@ export function renderRepoList(repos) {
 
   if (repos.length === 0) {
     lines.push("- none configured");
-    lines.push('Run: archa config discover-github --owner <github-user-or-org> --apply');
+    lines.push("Run: archa config discover-github --apply");
     return lines.join("\n");
   }
 

@@ -39,6 +39,16 @@ describe("parseArgs", () => {
         addRepoNames: [],
         overrideRepoNames: []
       });
+    expect(parseArgs(["config", "discover-github"], {}))
+      .toEqual({
+        command: "config-discover-github",
+        owner: null,
+        apply: false,
+        includeForks: true,
+        includeArchived: false,
+        addRepoNames: [],
+        overrideRepoNames: []
+      });
   });
 
   it("supports explicit GitHub discovery selections and fork exclusion", () => {
@@ -208,10 +218,6 @@ describe("parseArgs", () => {
 
   it("throws help text for config discover-github help flag", () => {
     expect(() => parseArgs(["config", "discover-github", "--help"], {})).toThrow(HelpError);
-  });
-
-  it("throws for missing config discover-github owner", () => {
-    expect(() => parseArgs(["config", "discover-github"], {})).toThrow("Missing value for --owner");
   });
 
   it("throws for unknown config discover-github options", () => {

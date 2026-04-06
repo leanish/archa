@@ -132,7 +132,7 @@ describe("cli", () => {
 
       if (options.includeNextStepSuggestion !== false && result.repoCount === 0) {
         lines.push("");
-        lines.push('Next step: archa config discover-github --owner <github-user-or-org> --apply');
+        lines.push("Next step: archa config discover-github --apply");
         lines.push("That imports GitHub metadata plus curated descriptions, topics, and classifications into your config.");
       }
 
@@ -329,7 +329,7 @@ describe("cli", () => {
     expect(stdout.join("")).toContain("Initialized config at /tmp/archa-config.json");
     expect(stdout.join("")).toContain("Repos imported: 0");
     expect(stdout.join("")).toContain(
-      "Next step: archa config discover-github --owner <github-user-or-org> --apply"
+      "Next step: archa config discover-github --apply"
     );
     expect(stdout.join("")).toContain(
       "That imports GitHub metadata plus curated descriptions, topics, and classifications into your config."
@@ -460,6 +460,76 @@ describe("cli", () => {
     expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
     expect(mocks.ensureGitInstalled).toHaveBeenCalled();
     expect(mocks.ensureGithubDiscoveryAuthAvailable).toHaveBeenCalled();
+  });
+
+  it("prompts for the GitHub owner when discovery omits --owner on a TTY", async () => {
+    mocks.canPromptInteractively.mockReturnValue(true);
+    mocks.promptForGithubOwner.mockResolvedValue("leanish");
+    mocks.discoverGithubOwnerRepos.mockResolvedValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: []
+    });
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      entries: [],
+      counts: {
+        discovered: 0,
+        configured: 0,
+        new: 0,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+
+    await main(["config", "discover-github"]);
+
+    expect(mocks.promptForGithubOwner).toHaveBeenCalledWith({
+      input: process.stdin,
+      output: process.stdout
+    });
+    expect(mocks.discoverGithubOwnerRepos).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "leanish"
+    }));
+    expect(stderr.join("")).toContain("Discovering GitHub repos for leanish...");
+  });
+
+  it("defaults discovery to @accessible when --owner is omitted outside a TTY", async () => {
+    mocks.canPromptInteractively.mockReturnValue(false);
+    mocks.discoverGithubOwnerRepos.mockResolvedValue({
+      owner: "@accessible",
+      ownerType: "Accessible",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: []
+    });
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "@accessible",
+      ownerType: "Accessible",
+      skippedForks: 0,
+      skippedArchived: 0,
+      entries: [],
+      counts: {
+        discovered: 0,
+        configured: 0,
+        new: 0,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+
+    await main(["config", "discover-github"]);
+
+    expect(mocks.promptForGithubOwner).not.toHaveBeenCalled();
+    expect(mocks.discoverGithubOwnerRepos).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "@accessible"
+    }));
+    expect(stderr.join("")).toContain("Discovering accessible GitHub repos...");
   });
 
   it("applies interactively selected repo changes when requested", async () => {

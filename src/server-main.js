@@ -45,7 +45,7 @@ export async function main(argv) {
   process.stdout.write(`Archa server listening on ${serverHandle.url}\n`);
   if (serverHandle.configuredRepoCount === 0) {
     process.stderr.write(
-      'archa-server: no managed repos are configured yet. Suggestion: run "archa config discover-github --owner <github-user-or-org> --apply".\n'
+      'archa-server: no managed repos are configured yet. Suggestion: run "archa config discover-github --apply".\n'
     );
   }
 

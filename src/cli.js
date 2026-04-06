@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import process from "node:process";
 
 import {
+  canPromptInteractively,
   ensureInteractiveConfigSetup,
+  promptForGithubOwner,
   renderConfigInit as renderConfigInitSummary
 } from "./cli-bootstrap.js";
 import { applyGithubDiscoveryToConfig, loadConfig, initializeConfig } from "./config.js";
@@ -186,12 +188,13 @@ async function runGithubDiscovery(options, config = null) {
   ensureGithubDiscoveryAuthAvailable({ env: process.env });
   ensureCodexInstalled();
   const resolvedConfig = config || await loadConfig(process.env);
+  const resolvedOwner = await resolveGithubDiscoveryOwner(options.owner);
   const progressReporter = createGithubDiscoveryProgressReporter();
-  progressReporter.start(options.owner);
+  progressReporter.start(resolvedOwner);
 
   try {
     const discovery = await discoverGithubOwnerRepos({
-      owner: options.owner,
+      owner: resolvedOwner,
       env: process.env,
       curateWithCodex: false,
       inspectRepos: false,
@@ -283,6 +286,24 @@ async function runGithubDiscovery(options, config = null) {
   } finally {
     progressReporter.finish();
   }
+}
+
+async function resolveGithubDiscoveryOwner(owner) {
+  if (owner) {
+    return owner;
+  }
+
+  if (!canPromptInteractively({
+    input: process.stdin,
+    output: process.stdout
+  })) {
+    return "@accessible";
+  }
+
+  return promptForGithubOwner({
+    input: process.stdin,
+    output: process.stdout
+  });
 }
 
 function requiresConfig(command) {

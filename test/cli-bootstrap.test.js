@@ -170,7 +170,7 @@ describe("cli-bootstrap", () => {
 
     expect(result).toBe(false);
     expect(output.write).toHaveBeenCalledWith(
-      'GitHub discovery skipped. Add repos manually or run "archa config discover-github --owner <github-user-or-org> --apply" when you are ready.\n'
+      'GitHub discovery skipped. Add repos manually or run "archa config discover-github --apply" when you are ready.\n'
     );
   });
 });

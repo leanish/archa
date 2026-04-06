@@ -113,7 +113,7 @@ export async function ensureInteractiveConfigSetup({
 
     if (!shouldDiscover) {
       output.write(
-        'GitHub discovery skipped. Add repos manually or run "archa config discover-github --owner <github-user-or-org> --apply" when you are ready.\n'
+        'GitHub discovery skipped. Add repos manually or run "archa config discover-github --apply" when you are ready.\n'
       );
       return allowProceedWithoutRepos;
     }
@@ -138,7 +138,7 @@ export async function ensureInteractiveConfigSetup({
     }
 
     output.write(
-      'No repos were added. Configure repos manually or run "archa config discover-github --owner <github-user-or-org> --apply".\n'
+      'No repos were added. Configure repos manually or run "archa config discover-github --apply".\n'
     );
     return allowProceedWithoutRepos;
   }
@@ -155,7 +155,7 @@ export function renderConfigInit(result, {
 
   if (includeNextStepSuggestion && result.repoCount === 0) {
     lines.push("");
-    lines.push('Next step: archa config discover-github --owner <github-user-or-org> --apply');
+    lines.push("Next step: archa config discover-github --apply");
     lines.push("That imports GitHub metadata plus curated descriptions, topics, and classifications into your config.");
   }
 
