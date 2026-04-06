@@ -114,20 +114,26 @@ async function promptForSelection(readline, {
     };
   }
 
-  const availableNames = selectableEntries.map(entry => entry.repo.name).join(", ");
+  const newNames = selectableEntries
+    .filter(entry => entry.status === "new")
+    .map(entry => entry.repo.name);
   const configuredNames = selectableEntries
     .filter(entry => entry.status === "configured")
     .map(entry => entry.repo.name);
-  const configuredSummary = configuredNames.length > 0
-    ? `\nConfigured already: ${configuredNames.join(", ")}`
-    : "";
+  const promptSections = [
+    `New: ${newNames.join(", ") || "none"}`
+  ];
+
+  if (configuredNames.length > 0) {
+    promptSections.push(`Configured already: ${configuredNames.join(", ")}`);
+  }
   const reposByName = new Map(
     selectableEntries.map(entry => [entry.repo.name.toLowerCase(), entry])
   );
 
   while (true) {
     const answer = await readline.question(
-      `Select repos to add or override (comma-separated, "*" for all, blank for none)\n${availableNames}${configuredSummary}\n> `
+      `Select repos to add or override (comma-separated, "*" for all, blank for none)\n${promptSections.join("\n")}\n> `
     );
 
     try {

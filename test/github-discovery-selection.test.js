@@ -104,6 +104,7 @@ describe("github-discovery-selection", () => {
       reposToOverride: [plan.entries[2].repo]
     });
     expect(outputWrites.join("")).toContain("Select repos to add or override");
+    expect(outputWrites.join("")).toContain("New: archa, java-conventions");
     expect(outputWrites.join("")).toContain("Configured already: foundation");
   });
 
