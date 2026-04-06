@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   initializeConfig: vi.fn(),
   applyGithubDiscoveryToConfig: vi.fn(),
   discoverGithubOwnerRepos: vi.fn(),
-  mergeGithubDiscoveryResults: vi.fn(),
   planGithubRepoDiscovery: vi.fn(),
   promptGithubDiscoverySelection: vi.fn(),
   selectGithubDiscoveryRepos: vi.fn(),
@@ -63,7 +62,6 @@ vi.mock("../src/config-paths.js", () => ({
 
 vi.mock("../src/github-catalog.js", () => ({
   discoverGithubOwnerRepos: mocks.discoverGithubOwnerRepos,
-  mergeGithubDiscoveryResults: mocks.mergeGithubDiscoveryResults,
   planGithubRepoDiscovery: mocks.planGithubRepoDiscovery
 }));
 
@@ -167,13 +165,6 @@ describe("cli", () => {
         withSuggestions: 0
       }
     });
-    mocks.mergeGithubDiscoveryResults.mockImplementation((baseDiscovery, refinedDiscovery) => ({
-      ...baseDiscovery,
-      repos: baseDiscovery.repos.map(repo => {
-        const refinedRepo = refinedDiscovery.repos.find(candidate => candidate.name === repo.name);
-        return refinedRepo || repo;
-      })
-    }));
     mocks.promptGithubDiscoverySelection.mockResolvedValue({
       reposToAdd: [],
       reposToOverride: []

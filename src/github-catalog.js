@@ -117,9 +117,7 @@ export async function discoverGithubOwnerRepos({
   onProgress = null,
   includeForks = true,
   includeArchived = false,
-  inspectRepos = true,
-  includeDiscoverySummary = true,
-  selectedRepoNames = []
+  inspectRepos = true
 }) {
   const normalizedOwner = normalizeOwner(owner);
 
@@ -170,7 +168,6 @@ export async function discoverGithubOwnerRepos({
   let skippedForks = 0;
   let skippedArchived = 0;
   const eligibleRepos = [];
-  const selectedRepoNameSet = normalizeSelectedRepoNames(selectedRepoNames);
 
   for (const repo of discoveredRepos) {
     if (!includeForks && repo.fork) {
@@ -186,26 +183,19 @@ export async function discoverGithubOwnerRepos({
     eligibleRepos.push(repo);
   }
 
-  const reposToProcess = selectedRepoNameSet
-    ? eligibleRepos.filter(repo => selectedRepoNameSet.has(repo.name.toLowerCase()))
-    : eligibleRepos;
+  onProgress?.({
+    type: "discovery-listed",
+    owner: normalizedOwner,
+    discoveredCount: discoveredRepos.length,
+    eligibleCount: eligibleRepos.length,
+    inspectRepos,
+    curateWithCodex,
+    skippedForks,
+    skippedArchived
+  });
 
-  if (includeDiscoverySummary) {
-    onProgress?.({
-      type: "discovery-listed",
-      owner: normalizedOwner,
-      discoveredCount: discoveredRepos.length,
-      eligibleCount: reposToProcess.length,
-      inspectRepos,
-      curateWithCodex,
-      skippedForks,
-      skippedArchived
-    });
-  }
-
-  let processedCount = 0;
   const repos = [];
-  for (const repo of reposToProcess) {
+  for (const [index, repo] of eligibleRepos.entries()) {
     const hydratedRepo = await hydrateGithubRepoTopics({
       owner: normalizedOwner,
       repo,
@@ -217,13 +207,12 @@ export async function discoverGithubOwnerRepos({
       inspectRepos
     });
 
-    processedCount += 1;
     onProgress?.({
       type: inspectRepos ? "repo-curated" : "repo-processed",
       owner: normalizedOwner,
       repoName: repo.name,
-      processedCount,
-      totalCount: reposToProcess.length
+      processedCount: index + 1,
+      totalCount: eligibleRepos.length
     });
 
     repos.push(hydratedRepo);
@@ -236,17 +225,6 @@ export async function discoverGithubOwnerRepos({
     repos,
     skippedForks,
     skippedArchived
-  };
-}
-
-export function mergeGithubDiscoveryResults(baseDiscovery, refinedDiscovery) {
-  const replacements = new Map(
-    refinedDiscovery.repos.map(repo => [repo.name, repo])
-  );
-
-  return {
-    ...baseDiscovery,
-    repos: baseDiscovery.repos.map(repo => replacements.get(repo.name) || repo)
   };
 }
 
@@ -516,19 +494,6 @@ async function hydrateGithubRepoTopics({ owner, repo, env, fetchFn, token, inspe
     topics,
     classifications
   };
-}
-
-function normalizeSelectedRepoNames(selectedRepoNames) {
-  if (!Array.isArray(selectedRepoNames) || selectedRepoNames.length === 0) {
-    return null;
-  }
-
-  const names = selectedRepoNames
-    .filter(name => typeof name === "string")
-    .map(name => name.trim().toLowerCase())
-    .filter(Boolean);
-
-  return names.length > 0 ? new Set(names) : null;
 }
 
 function resolveTopics({ rawGithubTopics, repo, sizeKb, inspectedTopics }) {

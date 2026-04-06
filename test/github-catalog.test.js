@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   discoverGithubOwnerRepos,
-  mergeGithubDiscoveryResults,
   planGithubRepoDiscovery
 } from "../src/github-catalog.js";
 
@@ -401,97 +400,6 @@ describe("github-catalog", () => {
       }
     ]);
     expect(inspectRepoFn).not.toHaveBeenCalled();
-  });
-
-  it("can refine only a selected subset and merge it back into the preview", async () => {
-    const fetchFn = vi.fn(async url => {
-      if (url === "https://api.github.com/users/leanish") {
-        return createJsonResponse(200, {
-          login: "leanish",
-          type: "User"
-        });
-      }
-
-      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
-        return createJsonResponse(200, [
-          {
-            name: "archa",
-            clone_url: "https://github.com/leanish/archa.git",
-            default_branch: "main",
-            description: "Repo-aware CLI for engineering Q&A with local Codex",
-            topics: ["cli"],
-            size: 6400,
-            fork: false,
-            archived: false
-          },
-          {
-            name: "terminator",
-            clone_url: "https://github.com/leanish/terminator.git",
-            default_branch: "main",
-            description: "",
-            topics: [],
-            size: 175,
-            fork: false,
-            archived: false
-          }
-        ]);
-      }
-
-      if (url === "https://api.github.com/repos/leanish/terminator/topics") {
-        return createJsonResponse(200, {
-          names: []
-        });
-      }
-
-      throw new Error(`Unexpected URL: ${url}`);
-    });
-    const inspectRepoFn = vi.fn(async ({ repo }) => ({
-      description: repo.name === "terminator"
-        ? "Small Java library for orderly shutdown coordination."
-        : "",
-      topics: repo.name === "terminator" ? ["java", "shutdown"] : [],
-      classifications: repo.name === "terminator" ? ["library"] : []
-    }));
-
-    const preview = await discoverGithubOwnerRepos({
-      owner: "leanish",
-      fetchFn,
-      inspectRepoFn,
-      inspectRepos: false,
-      curateWithCodex: false
-    });
-    const refined = await discoverGithubOwnerRepos({
-      owner: "leanish",
-      fetchFn,
-      inspectRepoFn,
-      selectedRepoNames: ["terminator"]
-    });
-    const merged = mergeGithubDiscoveryResults(preview, refined);
-
-    expect(merged.repos).toEqual([
-      {
-        name: "archa",
-        url: "https://github.com/leanish/archa.git",
-        defaultBranch: "main",
-        description: "Repo-aware CLI for engineering Q&A with local Codex",
-        topics: ["cli", "codex"],
-        classifications: ["cli"]
-      },
-      {
-        name: "terminator",
-        url: "https://github.com/leanish/terminator.git",
-        defaultBranch: "main",
-        description: "Small Java library for orderly shutdown coordination.",
-        topics: ["java", "shutdown"],
-        classifications: ["library"]
-      }
-    ]);
-    expect(inspectRepoFn).toHaveBeenCalledTimes(1);
-    expect(inspectRepoFn).toHaveBeenCalledWith(expect.objectContaining({
-      repo: expect.objectContaining({
-        name: "terminator"
-      })
-    }));
   });
 
   it("keeps inline repo topics without an extra topics request", async () => {
