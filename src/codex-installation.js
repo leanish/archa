@@ -6,6 +6,7 @@ export function ensureCodexInstalled({ spawnSyncFn = spawnSync } = {}) {
   });
 
   if (!result?.error) {
+    ensureCodexLoggedIn({ spawnSyncFn });
     return;
   }
 
@@ -24,6 +25,13 @@ export function formatMissingCodexMessage() {
   ].join(" ");
 }
 
+export function formatUnconfiguredCodexMessage() {
+  return [
+    "Codex CLI is installed but not ready to use.",
+    'Run "codex login" or complete the Codex connection/login flow, then retry later.'
+  ].join(" ");
+}
+
 export function normalizeCodexExecutionError(error) {
   if (isMissingCodexError(error)) {
     return new Error(formatMissingCodexMessage());
@@ -39,4 +47,38 @@ function isMissingCodexError(error) {
     && "code" in error
     && error.code === "ENOENT"
   );
+}
+
+function ensureCodexLoggedIn({ spawnSyncFn }) {
+  const result = spawnSyncFn("codex", ["login", "status"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  if (result?.error) {
+    if (isMissingCodexError(result.error)) {
+      throw new Error(formatMissingCodexMessage());
+    }
+
+    throw result.error;
+  }
+
+  if (isLoggedInStatus(result)) {
+    return;
+  }
+
+  throw new Error(formatUnconfiguredCodexMessage());
+}
+
+function isLoggedInStatus(result) {
+  if (result?.status !== 0) {
+    return false;
+  }
+
+  const output = [result.stdout, result.stderr]
+    .filter(value => typeof value === "string" && value.trim() !== "")
+    .join("\n")
+    .trim();
+
+  return /\blogged in\b/i.test(output) && !/\bnot logged in\b/i.test(output);
 }

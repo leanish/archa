@@ -32,7 +32,7 @@ flowchart LR
 ## High-level flow
 
 1. A transport adapter receives a request, including the question plus optional audience and execution overrides.
-2. Commands that require Codex check that the local `codex` CLI is installed before continuing.
+2. Commands that require Codex check that the local `codex` CLI is installed and `codex login status` reports a logged-in session before continuing.
 3. Config is loaded from the user config path.
 4. Repo selection chooses explicit repos or heuristic candidates, keeps any pinned repos in scope, and falls back to all configured repos when nothing scores positively.
 5. Repo sync clones or fast-forwards the selected repos.
@@ -106,7 +106,7 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/codex-runner.js`
   Wraps `codex exec`, manages the audience-aware prompt, heartbeats, execution timeout, and final-message capture.
 - `src/codex-installation.js`
-  Checks whether the local `codex` CLI is installed and formats user-facing installation guidance when it is missing.
+  Checks whether the local `codex` CLI is installed and logged in, and formats user-facing installation/login guidance when it is not ready.
 - `src/ask-job-manager.js`
   Maintains in-memory async jobs, per-job event history, and bounded execution concurrency.
 - `src/http-server.js`

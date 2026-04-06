@@ -16,13 +16,13 @@ The project is intentionally split in two:
 
 This keeps the tool reusable while still letting each installation decide which repos to manage.
 
-Archa requires the local `codex` CLI on `PATH` for asking questions, starting `archa-server`, and running `config discover-github`. Install it with:
+Archa requires the local `codex` CLI on `PATH` and a logged-in Codex session for asking questions, starting `archa-server`, and running `config discover-github`. Install it with:
 
 ```bash
 brew install codex
 ```
 
-If Codex is still not connected afterwards, complete the Codex connection/login flow and retry later.
+Then make sure `codex login status` reports a logged-in session. If Codex is still not connected afterwards, complete the Codex connection/login flow and retry later.
 
 This project follows a simple layout:
 
