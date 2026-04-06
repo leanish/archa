@@ -302,4 +302,51 @@ describe("render", () => {
     expect(preview).toContain("leanish:\n- leanish/shared [new]");
     expect(preview).toContain("Nosto:\n- Nosto/shared [new]");
   });
+
+  it("derives owner-qualified preview labels from the GitHub URL when source metadata is missing", () => {
+    const preview = renderGithubDiscovery({
+      owner: "@accessible",
+      ownerDisplay: "leanish + orgs",
+      ownerType: "Accessible",
+      entries: [
+        {
+          status: "configured",
+          repo: {
+            name: "nullability",
+            url: "https://github.com/leanish/nullability.git",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        },
+        {
+          status: "new",
+          repo: {
+            name: "nosto/nullability",
+            sourceOwner: "Nosto",
+            sourceFullName: "Nosto/nullability",
+            url: "https://github.com/Nosto/nullability.git",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        }
+      ],
+      counts: {
+        discovered: 2,
+        configured: 1,
+        new: 1,
+        conflicts: 0,
+        withSuggestions: 0
+      },
+      skippedForks: 0,
+      skippedArchived: 0,
+      applied: false
+    });
+
+    expect(preview).toContain("- leanish/nullability [configured]");
+    expect(preview).toContain("- Nosto/nullability [new]");
+  });
 });

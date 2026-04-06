@@ -303,8 +303,8 @@ function formatSelectionSectionLines({
 
   const sourceOwners = new Set(
     options
-      .map(option => option.repo.sourceOwner)
-      .filter(sourceOwner => typeof sourceOwner === "string" && sourceOwner !== "")
+      .map(option => getOwnerLabel(option.repo))
+      .filter(sourceOwner => sourceOwner !== "Other")
   );
 
   if (sourceOwners.size <= 1) {
@@ -365,9 +365,16 @@ function groupSelectionOptionsByOwner(options, primarySourceOwner) {
 }
 
 function getOwnerLabel(repo) {
-  return typeof repo.sourceOwner === "string" && repo.sourceOwner.trim() !== ""
-    ? repo.sourceOwner.trim()
-    : "Other";
+  if (typeof repo.sourceOwner === "string" && repo.sourceOwner.trim() !== "") {
+    return repo.sourceOwner.trim();
+  }
+
+  const githubIdentity = getGithubRepoIdentityFromUrl(repo.url);
+  if (githubIdentity?.includes("/")) {
+    return githubIdentity.split("/")[0];
+  }
+
+  return "Other";
 }
 
 function compareOwnerLabels(left, right, primarySourceOwner) {
@@ -433,9 +440,27 @@ function getQualifiedRepoLabel(repo, defaultSourceOwner) {
     return repo.sourceFullName.trim();
   }
 
+  const githubIdentity = getGithubRepoIdentityFromUrl(repo.url);
+  if (githubIdentity) {
+    return githubIdentity;
+  }
+
   if (typeof defaultSourceOwner === "string" && defaultSourceOwner.trim() !== "") {
     return `${defaultSourceOwner.trim()}/${repo.name}`;
   }
 
   return null;
+}
+
+function getGithubRepoIdentityFromUrl(url) {
+  if (typeof url !== "string" || url.trim() === "") {
+    return null;
+  }
+
+  const match = url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (!match) {
+    return null;
+  }
+
+  return `${match[1]}/${match[2]}`;
 }

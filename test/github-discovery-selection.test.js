@@ -267,6 +267,56 @@ describe("github-discovery-selection", () => {
     expect(prompts[1]).toBe("Add all 1 new repo(s)? Press Enter to confirm, or type repo names to customize.\n> ");
   });
 
+  it("derives owner-qualified configured labels from the GitHub URL when source metadata is missing", async () => {
+    const collisionPlan = {
+      ownerDisplay: "leanish + orgs",
+      entries: [
+        {
+          status: "configured",
+          repo: {
+            name: "nullability",
+            url: "https://github.com/leanish/nullability.git",
+            defaultBranch: "main",
+            description: "",
+            topics: []
+          },
+          suggestions: []
+        },
+        {
+          status: "new",
+          repo: {
+            name: "nosto/nullability",
+            sourceOwner: "Nosto",
+            sourceFullName: "Nosto/nullability",
+            url: "https://github.com/Nosto/nullability.git",
+            defaultBranch: "main",
+            description: "",
+            topics: []
+          },
+          suggestions: []
+        }
+      ]
+    };
+    const prompts = [];
+    const fakeReadline = {
+      question: async prompt => {
+        prompts.push(prompt);
+        return "";
+      },
+      close() {}
+    };
+
+    await promptGithubDiscoverySelection(collisionPlan, {
+      input: { isTTY: true },
+      output: { isTTY: true },
+      createInterfaceFn() {
+        return fakeReadline;
+      }
+    });
+
+    expect(prompts[0]).toContain("Configured already (1): leanish/nullability");
+  });
+
   it("groups repos by source owner when multiple owners are in scope", async () => {
     const multiOwnerPlan = {
       ownerDisplay: "leanish + orgs",

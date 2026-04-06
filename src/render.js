@@ -58,8 +58,8 @@ export function renderGithubDiscovery(result) {
     : result.entries;
   const sourceOwners = new Set(
     entries
-      .map(entry => entry.repo.sourceOwner)
-      .filter(sourceOwner => typeof sourceOwner === "string" && sourceOwner !== "")
+      .map(entry => getDiscoveryOwnerLabel(entry.repo))
+      .filter(sourceOwner => sourceOwner !== "Other")
   );
 
   if (sourceOwners.size > 1) {
@@ -131,8 +131,11 @@ function formatDiscoveryStatus(entry) {
 }
 
 function formatDiscoveryRepoLabel(repo, useSourceLabels) {
-  if (useSourceLabels && repo.sourceFullName) {
-    return repo.sourceFullName;
+  if (useSourceLabels) {
+    const sourceLabel = getGithubRepoDisplayIdentity(repo);
+    if (sourceLabel) {
+      return sourceLabel;
+    }
   }
 
   return repo.name;
@@ -173,9 +176,16 @@ function groupDiscoveryEntriesByOwner(entries, primarySourceOwner) {
 }
 
 function getDiscoveryOwnerLabel(repo) {
-  return typeof repo.sourceOwner === "string" && repo.sourceOwner.trim() !== ""
-    ? repo.sourceOwner.trim()
-    : "Other";
+  if (typeof repo.sourceOwner === "string" && repo.sourceOwner.trim() !== "") {
+    return repo.sourceOwner.trim();
+  }
+
+  const githubIdentity = getGithubRepoDisplayIdentity(repo);
+  if (githubIdentity?.includes("/")) {
+    return githubIdentity.split("/")[0];
+  }
+
+  return "Other";
 }
 
 function compareDiscoveryOwnerLabels(left, right, primarySourceOwner) {
@@ -222,4 +232,21 @@ function getDiscoveryRepoBaseName(repo) {
   }
 
   return repo.name;
+}
+
+function getGithubRepoDisplayIdentity(repo) {
+  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.trim() !== "") {
+    return repo.sourceFullName.trim();
+  }
+
+  if (typeof repo.url !== "string" || repo.url.trim() === "") {
+    return null;
+  }
+
+  const match = repo.url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (!match) {
+    return null;
+  }
+
+  return `${match[1]}/${match[2]}`;
 }
