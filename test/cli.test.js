@@ -353,6 +353,7 @@ describe("cli", () => {
         discoveredCount: 2,
         eligibleCount: 1,
         inspectRepos: false,
+        hydrateMetadata: true,
         skippedForks: 1,
         skippedArchived: 0
       });
@@ -428,6 +429,7 @@ describe("cli", () => {
     expect(mocks.ensureGithubDiscoveryAuthAvailable).toHaveBeenCalled();
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenCalledWith(expect.objectContaining({
       inspectRepos: false,
+      hydrateMetadata: true,
       curateWithCodex: false
     }));
   });
@@ -466,15 +468,9 @@ describe("cli", () => {
           discoveredCount: 1,
           eligibleCount: 1,
           inspectRepos: false,
+          hydrateMetadata: false,
           skippedForks: 0,
           skippedArchived: 0
-        });
-        onProgress?.({
-          type: "repo-processed",
-          owner: "leanish",
-          repoName: "java-conventions",
-          processedCount: 1,
-          totalCount: 1
         });
         return {
           owner: "leanish",
@@ -492,6 +488,7 @@ describe("cli", () => {
           discoveredCount: 1,
           eligibleCount: 1,
           inspectRepos: true,
+          hydrateMetadata: true,
           skippedForks: 0,
           skippedArchived: 0
         });
@@ -554,6 +551,7 @@ describe("cli", () => {
     expect(mocks.promptGithubDiscoverySelection).toHaveBeenCalled();
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(1, expect.objectContaining({
       inspectRepos: false,
+      hydrateMetadata: false,
       curateWithCodex: false
     }));
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(2, expect.objectContaining({
@@ -566,7 +564,7 @@ describe("cli", () => {
       reposToAdd,
       reposToOverride: []
     });
-    expect(stderr.join("")).toContain("Loading repos: 1/1 (java-conventions)");
+    expect(stderr.join("")).toContain("Found 1 repo(s); ready to choose from 1 eligible repo(s).");
     expect(stderr.join("")).toContain("Curating repos: 1/1 (java-conventions)");
     expect(stdout.join("")).toContain("Config updated: /tmp/archa-config.json");
     expect(stdout.join("")).toContain("Repos added: 1");
@@ -663,6 +661,7 @@ describe("cli", () => {
     expect(mocks.promptGithubDiscoverySelection).not.toHaveBeenCalled();
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(1, expect.objectContaining({
       inspectRepos: false,
+      hydrateMetadata: false,
       curateWithCodex: false
     }));
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(2, expect.objectContaining({

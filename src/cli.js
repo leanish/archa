@@ -193,6 +193,7 @@ async function runGithubDiscovery(options, config = null) {
       env: process.env,
       curateWithCodex: false,
       inspectRepos: false,
+      hydrateMetadata: !options.apply,
       onProgress: event => progressReporter.onProgress(event),
       includeForks: options.includeForks,
       includeArchived: options.includeArchived

@@ -24,6 +24,13 @@ export function createGithubDiscoveryProgressReporter({
       }
 
       if (event.type === "discovery-listed") {
+        if (!event.hydrateMetadata) {
+          output.write(
+            `Found ${event.discoveredCount} repo(s); ready to choose from ${event.eligibleCount} eligible repo(s).\n`
+          );
+          return;
+        }
+
         const action = event.inspectRepos
           ? "loading and curating metadata"
           : "loading GitHub metadata";

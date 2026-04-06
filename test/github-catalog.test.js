@@ -251,6 +251,7 @@ describe("github-catalog", () => {
       discoveredCount: 1,
       eligibleCount: 1,
       inspectRepos: true,
+      hydrateMetadata: true,
       curateWithCodex: true,
       skippedForks: 0,
       skippedArchived: 0
@@ -400,6 +401,59 @@ describe("github-catalog", () => {
       }
     ]);
     expect(inspectRepoFn).not.toHaveBeenCalled();
+  });
+
+  it("can skip metadata hydration entirely during pre-selection discovery", async () => {
+    const inspectRepoFn = vi.fn(async () => {
+      throw new Error("inspectRepoFn should not be called");
+    });
+    const fetchFn = vi.fn(async url => {
+      if (url === "https://api.github.com/users/leanish") {
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
+        return createJsonResponse(200, [
+          {
+            name: "java-conventions",
+            clone_url: "https://github.com/leanish/java-conventions.git",
+            default_branch: "main",
+            description: "Shared Gradle conventions for JDK-based projects",
+            topics: [],
+            size: 1800,
+            fork: false,
+            archived: false
+          }
+        ]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      fetchFn,
+      inspectRepoFn,
+      inspectRepos: false,
+      curateWithCodex: false,
+      hydrateMetadata: false
+    });
+
+    expect(result.repos).toEqual([
+      {
+        name: "java-conventions",
+        url: "https://github.com/leanish/java-conventions.git",
+        defaultBranch: "main",
+        description: "Shared Gradle conventions for JDK-based projects",
+        topics: [],
+        classifications: []
+      }
+    ]);
+    expect(inspectRepoFn).not.toHaveBeenCalled();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
   it("can refine only a selected repo subset", async () => {

@@ -180,15 +180,9 @@ describe("server-main", () => {
         discoveredCount: 2,
         eligibleCount: 1,
         inspectRepos: false,
+        hydrateMetadata: false,
         skippedForks: 1,
         skippedArchived: 0
-      });
-      onProgress?.({
-        type: "repo-processed",
-        owner: "leanish",
-        repoName: "archa",
-        processedCount: 1,
-        totalCount: 1
       });
 
       return {
@@ -212,8 +206,7 @@ describe("server-main", () => {
 
     expect(result).toBeNull();
     expect(stderr.join("")).toContain("Discovering GitHub repos for leanish...");
-    expect(stderr.join("")).toContain("Found 2 repo(s); loading GitHub metadata for 1 eligible repo(s)...");
-    expect(stderr.join("")).toContain("Loading repos: 1/1 (archa)");
+    expect(stderr.join("")).toContain("Found 2 repo(s); ready to choose from 1 eligible repo(s).");
     expect(mocks.ensureGithubDiscoveryAuthAvailable).toHaveBeenCalled();
     expect(stdout.join("")).toContain("discovery summary");
     expect(mocks.startHttpServer).not.toHaveBeenCalled();
@@ -235,6 +228,7 @@ describe("server-main", () => {
           discoveredCount: 2,
           eligibleCount: 2,
           inspectRepos: false,
+          hydrateMetadata: false,
           skippedForks: 0,
           skippedArchived: 0
         });
@@ -260,6 +254,7 @@ describe("server-main", () => {
           discoveredCount: 2,
           eligibleCount: 1,
           inspectRepos: true,
+          hydrateMetadata: true,
           skippedForks: 0,
           skippedArchived: 0
         });
@@ -317,11 +312,12 @@ describe("server-main", () => {
     const result = await main([]);
 
     expect(result).toBeNull();
-    expect(stderr.join("")).toContain("Found 2 repo(s); loading GitHub metadata for 2 eligible repo(s)...");
+    expect(stderr.join("")).toContain("Found 2 repo(s); ready to choose from 2 eligible repo(s).");
     expect(stderr.join("")).toContain("Found 2 repo(s); loading and curating metadata for 1 eligible repo(s)...");
     expect(stderr.join("")).toContain("Curating repos: 1/1 (archa)");
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(1, expect.objectContaining({
       inspectRepos: false,
+      hydrateMetadata: false,
       curateWithCodex: false
     }));
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(2, expect.objectContaining({

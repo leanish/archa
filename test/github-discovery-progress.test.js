@@ -18,6 +18,7 @@ describe("github-discovery-progress", () => {
       type: "discovery-listed",
       discoveredCount: 3,
       eligibleCount: 2,
+      hydrateMetadata: true,
       inspectRepos: false
     });
     reporter.onProgress({
@@ -108,6 +109,7 @@ describe("github-discovery-progress", () => {
       type: "discovery-listed",
       discoveredCount: 1,
       eligibleCount: 1,
+      hydrateMetadata: true,
       inspectRepos: true
     });
     reporter.onProgress({
@@ -120,5 +122,28 @@ describe("github-discovery-progress", () => {
     expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for leanish...\n");
     expect(output.write).toHaveBeenNthCalledWith(2, "Found 1 repo(s); loading and curating metadata for 1 eligible repo(s)...\n");
     expect(output.write).toHaveBeenNthCalledWith(3, "Curating repos: 1/1 (archa)\n");
+  });
+
+  it("shows immediate selection readiness when metadata hydration is skipped", () => {
+    const output = {
+      write: vi.fn(),
+      isTTY: false
+    };
+    const reporter = createGithubDiscoveryProgressReporter({
+      output,
+      isInteractive: false
+    });
+
+    reporter.start("leanish");
+    reporter.onProgress({
+      type: "discovery-listed",
+      discoveredCount: 8,
+      eligibleCount: 8,
+      hydrateMetadata: false,
+      inspectRepos: false
+    });
+
+    expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for leanish...\n");
+    expect(output.write).toHaveBeenNthCalledWith(2, "Found 8 repo(s); ready to choose from 8 eligible repo(s).\n");
   });
 });

@@ -118,6 +118,7 @@ export async function discoverGithubOwnerRepos({
   includeForks = true,
   includeArchived = false,
   inspectRepos = true,
+  hydrateMetadata = true,
   selectedRepoNames = []
 }) {
   const normalizedOwner = normalizeOwner(owner);
@@ -195,34 +196,37 @@ export async function discoverGithubOwnerRepos({
     discoveredCount: discoveredRepos.length,
     eligibleCount: reposToProcess.length,
     inspectRepos,
+    hydrateMetadata,
     curateWithCodex,
     skippedForks,
     skippedArchived
   });
 
-  const repos = [];
-  for (const [index, repo] of reposToProcess.entries()) {
-    const hydratedRepo = await hydrateGithubRepoTopics({
-      owner: normalizedOwner,
-      repo,
-      env,
-      fetchFn,
-      token: githubToken,
-      inspectRepoFn,
-      curateWithCodex,
-      inspectRepos
-    });
-
-    onProgress?.({
-      type: inspectRepos ? "repo-curated" : "repo-processed",
-      owner: normalizedOwner,
-      repoName: repo.name,
-      processedCount: index + 1,
-      totalCount: reposToProcess.length
-    });
-
-    repos.push(hydratedRepo);
-  }
+  const repos = !hydrateMetadata
+    ? reposToProcess.map(normalizeGithubRepo)
+    : inspectRepos
+    ? await hydrateReposSequentially({
+        reposToProcess,
+        owner: normalizedOwner,
+        env,
+        fetchFn,
+        token: githubToken,
+        inspectRepoFn,
+        curateWithCodex,
+        inspectRepos,
+        onProgress
+      })
+    : await hydrateReposInParallel({
+        reposToProcess,
+        owner: normalizedOwner,
+        env,
+        fetchFn,
+        token: githubToken,
+        inspectRepoFn,
+        curateWithCodex,
+        inspectRepos,
+        onProgress
+      });
   repos.sort((left, right) => left.name.localeCompare(right.name));
 
   return {
@@ -232,6 +236,83 @@ export async function discoverGithubOwnerRepos({
     skippedForks,
     skippedArchived
   };
+}
+
+async function hydrateReposSequentially({
+  reposToProcess,
+  owner,
+  env,
+  fetchFn,
+  token,
+  inspectRepoFn,
+  curateWithCodex,
+  inspectRepos,
+  onProgress
+}) {
+  const repos = [];
+
+  for (const [index, repo] of reposToProcess.entries()) {
+    const hydratedRepo = await hydrateGithubRepoTopics({
+      owner,
+      repo,
+      env,
+      fetchFn,
+      token,
+      inspectRepoFn,
+      curateWithCodex,
+      inspectRepos
+    });
+
+    onProgress?.({
+      type: "repo-curated",
+      owner,
+      repoName: repo.name,
+      processedCount: index + 1,
+      totalCount: reposToProcess.length
+    });
+
+    repos.push(hydratedRepo);
+  }
+
+  return repos;
+}
+
+async function hydrateReposInParallel({
+  reposToProcess,
+  owner,
+  env,
+  fetchFn,
+  token,
+  inspectRepoFn,
+  curateWithCodex,
+  inspectRepos,
+  onProgress
+}) {
+  let processedCount = 0;
+
+  return await Promise.all(reposToProcess.map(async repo => {
+    const hydratedRepo = await hydrateGithubRepoTopics({
+      owner,
+      repo,
+      env,
+      fetchFn,
+      token,
+      inspectRepoFn,
+      curateWithCodex,
+      inspectRepos
+    });
+
+    processedCount += 1;
+    onProgress?.({
+      type: "repo-processed",
+      owner,
+      repoName: repo.name,
+      processedCount,
+      totalCount: reposToProcess.length
+    });
+
+    return hydratedRepo;
+  }));
 }
 
 export function mergeGithubDiscoveryPlan(basePlan, refinedPlan) {
