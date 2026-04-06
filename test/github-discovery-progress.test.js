@@ -235,4 +235,27 @@ describe("github-discovery-progress", () => {
     expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for leanish...\n");
     expect(output.write).toHaveBeenNthCalledWith(2, "Found 8 repo(s); ready to choose from 8 eligible repo(s).\n");
   });
+
+  it("uses a user-facing label for accessible discovery", () => {
+    const output = {
+      write: vi.fn(),
+      isTTY: false
+    };
+    const reporter = createGithubDiscoveryProgressReporter({
+      output,
+      isInteractive: false
+    });
+
+    reporter.start("@accessible");
+    reporter.onProgress({
+      type: "discovery-listed",
+      discoveredCount: 12,
+      eligibleCount: 12,
+      hydrateMetadata: false,
+      inspectRepos: false
+    });
+
+    expect(output.write).toHaveBeenNthCalledWith(1, "Discovering accessible GitHub repos...\n");
+    expect(output.write).toHaveBeenNthCalledWith(2, "Found 12 repo(s); ready to choose from 12 eligible repo(s).\n");
+  });
 });

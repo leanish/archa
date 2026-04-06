@@ -1,5 +1,7 @@
 import process from "node:process";
 
+const ACCESSIBLE_GITHUB_OWNER = "@accessible";
+
 export function createGithubDiscoveryProgressReporter({
   output = process.stderr,
   isInteractive = Boolean(output?.isTTY)
@@ -26,6 +28,11 @@ export function createGithubDiscoveryProgressReporter({
 
   return {
     start(owner) {
+      if (owner === ACCESSIBLE_GITHUB_OWNER) {
+        output.write("Discovering accessible GitHub repos...\n");
+        return;
+      }
+
       output.write(`Discovering GitHub repos for ${owner}...\n`);
     },
     onProgress(event) {
