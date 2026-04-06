@@ -24,6 +24,8 @@ export async function syncRepo(repo, callbacks = {}) {
       callbacks.onRepoStart?.(repo, "clone", trunkBranch);
       await runCommand("git", [
         "clone",
+        "--depth",
+        "1",
         "--branch",
         trunkBranch,
         "--single-branch",
@@ -37,9 +39,9 @@ export async function syncRepo(repo, callbacks = {}) {
     }
 
     callbacks.onRepoStart?.(repo, "update", trunkBranch);
-    await runCommand("git", ["-C", repo.directory, "fetch", "origin", trunkBranch]);
+    await runCommand("git", ["-C", repo.directory, "fetch", "--depth", "1", "origin", trunkBranch]);
     await runCommand("git", ["-C", repo.directory, "checkout", trunkBranch]);
-    await runCommand("git", ["-C", repo.directory, "merge", "--ff-only", `origin/${trunkBranch}`]);
+    await runCommand("git", ["-C", repo.directory, "reset", "--hard", `origin/${trunkBranch}`]);
 
     const item = createSyncItem(repo, "updated", trunkBranch);
     callbacks.onRepoResult?.(item);

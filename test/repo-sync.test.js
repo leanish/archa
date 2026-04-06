@@ -48,6 +48,8 @@ describe("syncRepos", () => {
     ]);
     expect(mocks.spawn).toHaveBeenCalledWith("git", [
       "clone",
+      "--depth",
+      "1",
       "--branch",
       "main",
       "--single-branch",
@@ -83,9 +85,9 @@ describe("syncRepos", () => {
       }
     ]);
     expect(mocks.spawn.mock.calls.map(call => call[1])).toEqual([
-      ["-C", "/workspace/repos/sqs-codec", "fetch", "origin", "main"],
+      ["-C", "/workspace/repos/sqs-codec", "fetch", "--depth", "1", "origin", "main"],
       ["-C", "/workspace/repos/sqs-codec", "checkout", "main"],
-      ["-C", "/workspace/repos/sqs-codec", "merge", "--ff-only", "origin/main"]
+      ["-C", "/workspace/repos/sqs-codec", "reset", "--hard", "origin/main"]
     ]);
   });
 
@@ -107,7 +109,7 @@ describe("syncRepos", () => {
         name: "sqs-codec",
         directory: "/workspace/repos/sqs-codec",
         action: "failed",
-        detail: "git -C /workspace/repos/sqs-codec fetch origin main failed: fetch failed"
+        detail: "git -C /workspace/repos/sqs-codec fetch --depth 1 origin main failed: fetch failed"
       }
     ]);
   });

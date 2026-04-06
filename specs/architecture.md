@@ -37,7 +37,7 @@ flowchart LR
 4. Commands that require Codex check that the local `codex` CLI is installed and `codex login status` reports a logged-in session before continuing.
 5. Config is loaded from the user config path.
 6. Repo selection chooses explicit repos or heuristic candidates, keeps any pinned repos in scope, and falls back to all configured repos when nothing scores positively.
-7. Repo sync clones or fast-forwards the selected repos.
+7. Repo sync shallow-clones missing selected repos or resets existing ones to the latest tracked trunk tip.
 8. Codex runs against either the single selected repo or the managed repos root.
 9. The adapter renders the result:
    - CLI: text to stdout plus status to stderr
@@ -104,7 +104,7 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/repo-selection.js`
   Resolves explicit repo names and aliases, or scores likely repos from repo-name tokens, descriptions, topics, and separately weighted classifications while keeping repos marked `alwaysSelect` in scope and falling back to all configured repos when nothing scores positively.
 - `src/repo-sync.js`
-  Clones missing repos and fast-forwards existing repos to `main` or `master`.
+  Shallow-clones missing repos and resets existing repos to the latest remote `main` or `master` tip.
 - `src/git-installation.js`
   Checks whether the local `git` CLI is installed and formats user-facing installation guidance when it is missing.
 - `src/repo-sync-coordinator.js`
