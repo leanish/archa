@@ -415,15 +415,15 @@ describe("github-catalog", () => {
       type: "discovery-page",
       owner: "leanish",
       page: 1,
-      nextPage: 2,
-      fetchedCount: 100
+      fetchedCount: 100,
+      hasMorePages: true
     });
     expect(onProgress).toHaveBeenNthCalledWith(3, {
       type: "discovery-page",
       owner: "leanish",
       page: 2,
-      nextPage: 3,
-      fetchedCount: 101
+      fetchedCount: 101,
+      hasMorePages: false
     });
     expect(onProgress).toHaveBeenNthCalledWith(4, {
       type: "discovery-listed",

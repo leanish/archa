@@ -186,17 +186,18 @@ export async function discoverGithubOwnerRepos({
     }
 
     discoveredRepos.push(...reposPage);
-    if (page > 1 || reposPage.length === PAGE_SIZE) {
+    const hasMorePages = reposPage.length === PAGE_SIZE;
+    if (page > 1 || hasMorePages) {
       onProgress?.({
         type: "discovery-page",
         owner: normalizedOwner,
         page,
-        nextPage: page + 1,
-        fetchedCount: discoveredRepos.length
+        fetchedCount: discoveredRepos.length,
+        hasMorePages
       });
     }
 
-    if (reposPage.length < PAGE_SIZE) {
+    if (!hasMorePages) {
       break;
     }
 
