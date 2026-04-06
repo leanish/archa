@@ -1483,6 +1483,73 @@ describe("github-catalog", () => {
       }
     ]);
   });
+
+  it("treats owner-colliding repo names as conflicts instead of configured matches", () => {
+    const plan = planGithubRepoDiscovery({
+      repos: [
+        {
+          name: "nullability",
+          url: "https://github.com/leanish/nullability.git",
+          defaultBranch: "main",
+          description: "",
+          topics: [],
+          classifications: [],
+          aliases: [],
+          directory: "/repos/nullability"
+        }
+      ]
+    }, {
+      owner: "@accessible",
+      ownerDisplay: "leanish + orgs",
+      ownerType: "Accessible",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: [
+        {
+          name: "nullability",
+          sourceOwner: "leanish",
+          sourceFullName: "leanish/nullability",
+          url: "https://github.com/leanish/nullability.git",
+          defaultBranch: "main",
+          description: "",
+          topics: [],
+          classifications: []
+        },
+        {
+          name: "nullability",
+          sourceOwner: "Nosto",
+          sourceFullName: "Nosto/nullability",
+          url: "https://github.com/Nosto/nullability.git",
+          defaultBranch: "main",
+          description: "",
+          topics: [],
+          classifications: []
+        }
+      ]
+    });
+
+    expect(plan.counts).toEqual({
+      discovered: 2,
+      configured: 1,
+      new: 0,
+      conflicts: 1,
+      withSuggestions: 0
+    });
+    expect(plan.entries.find(entry => entry.repo.sourceFullName === "leanish/nullability")).toMatchObject({
+      status: "configured",
+      configuredRepo: {
+        name: "nullability",
+        url: "https://github.com/leanish/nullability.git"
+      }
+    });
+    expect(plan.entries.find(entry => entry.repo.sourceFullName === "Nosto/nullability")).toMatchObject({
+      status: "conflict",
+      configuredRepo: {
+        name: "nullability",
+        url: "https://github.com/leanish/nullability.git"
+      }
+    });
+  });
 });
 
 function createJsonResponse(status, value) {

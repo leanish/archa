@@ -502,17 +502,27 @@ export function mergeGithubDiscoveryPlan(basePlan, refinedPlan) {
 export function planGithubRepoDiscovery(config, discovery) {
   const reposByName = new Map();
   const reposByIdentifier = new Map();
+  const reposByGithubIdentity = new Map();
 
   for (const repo of config.repos) {
     reposByName.set(repo.name.toLowerCase(), repo);
     reposByIdentifier.set(repo.name.toLowerCase(), repo);
+    const githubIdentity = getConfiguredGithubRepoIdentity(repo);
+    if (githubIdentity) {
+      reposByGithubIdentity.set(githubIdentity, repo);
+    }
     for (const alias of repo.aliases || []) {
       reposByIdentifier.set(alias.toLowerCase(), repo);
     }
   }
 
   const entries = discovery.repos.map(repo => {
-    const exactMatch = reposByName.get(repo.name.toLowerCase());
+    const discoveryIdentity = getDiscoveryRepoIdentity(repo, {
+      fallbackOwner: discovery.owner
+    });
+    const exactMatch = discoveryIdentity
+      ? reposByGithubIdentity.get(discoveryIdentity)
+      : reposByName.get(repo.name.toLowerCase());
     if (exactMatch) {
       return {
         repo,
@@ -558,6 +568,41 @@ export function planGithubRepoDiscovery(config, discovery) {
       withSuggestions: entries.filter(entry => entry.suggestions.length > 0).length
     }
   };
+}
+
+function getConfiguredGithubRepoIdentity(repo) {
+  if (typeof repo?.sourceFullName === "string" && repo.sourceFullName.trim() !== "") {
+    return repo.sourceFullName.trim().toLowerCase();
+  }
+
+  if (typeof repo?.url !== "string" || repo.url.trim() === "") {
+    return "";
+  }
+
+  const match = repo.url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (!match) {
+    return "";
+  }
+
+  return `${match[1]}/${match[2]}`.toLowerCase();
+}
+
+function getDiscoveryRepoIdentity(repo, {
+  fallbackOwner = null
+} = {}) {
+  if (typeof repo?.sourceFullName === "string" && repo.sourceFullName.trim() !== "") {
+    return repo.sourceFullName.trim().toLowerCase();
+  }
+
+  if (typeof repo?.full_name === "string" && repo.full_name.trim() !== "") {
+    return repo.full_name.trim().toLowerCase();
+  }
+
+  if (!fallbackOwner || typeof repo?.name !== "string" || repo.name.trim() === "") {
+    return "";
+  }
+
+  return `${fallbackOwner}/${repo.name}`.toLowerCase();
 }
 
 function normalizeOwner(owner) {
