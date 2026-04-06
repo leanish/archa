@@ -18,10 +18,9 @@ export async function promptToInitializeConfig({
     input,
     output,
     createInterfaceFn
-  }, readline => promptYesNo(
+  }, readline => promptEnterOrCancel(
     readline,
-    `Archa is not initialized yet: ${configPath} is missing.\nInitialize it now? [Y/n]\n> `,
-    true
+    `Archa is not initialized yet: ${configPath} is missing.\nPress Enter to initialize it now, or press Esc then Enter to cancel.\n> `
   ));
 }
 
@@ -34,10 +33,9 @@ export async function promptToContinueGithubDiscovery({
     input,
     output,
     createInterfaceFn
-  }, readline => promptYesNo(
+  }, readline => promptEnterOrCancel(
     readline,
-    "No repos are configured yet.\nContinue with GitHub discovery now? [Y/n]\n> ",
-    true
+    "No repos are configured yet.\nPress Enter to continue with GitHub discovery, or press Esc then Enter to cancel.\n> "
   ));
 }
 
@@ -192,23 +190,26 @@ async function withReadline({
   }
 }
 
-async function promptYesNo(readline, prompt, defaultValue) {
+async function promptEnterOrCancel(readline, prompt) {
   while (true) {
-    const answer = (await readline.question(prompt)).trim().toLowerCase();
+    const answer = (await readline.question(prompt)).trim();
+    const normalizedAnswer = answer.toLowerCase();
 
     if (answer === "") {
-      return defaultValue;
-    }
-
-    if (answer === "y" || answer === "yes") {
       return true;
     }
 
-    if (answer === "n" || answer === "no") {
+    if (answer === "\u001b"
+      || normalizedAnswer === "esc"
+      || normalizedAnswer === "escape"
+      || normalizedAnswer === "cancel"
+      || normalizedAnswer === "skip"
+      || normalizedAnswer === "n"
+      || normalizedAnswer === "no") {
       return false;
     }
 
-    readline.write('Please answer "yes" or "no".\n');
+    readline.write('Press Enter to continue, or press Esc then Enter to cancel.\n');
   }
 }
 

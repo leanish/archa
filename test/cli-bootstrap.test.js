@@ -21,7 +21,7 @@ describe("cli-bootstrap", () => {
     })).toBe(false);
   });
 
-  it("defaults config initialization prompts to yes", async () => {
+  it("defaults config initialization prompts to Enter", async () => {
     const readline = createReadline([""]);
 
     const result = await promptToInitializeConfig({
@@ -33,13 +33,13 @@ describe("cli-bootstrap", () => {
 
     expect(result).toBe(true);
     expect(readline.question).toHaveBeenCalledWith(
-      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nInitialize it now? [Y/n]\n> "
+      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nPress Enter to initialize it now, or press Esc then Enter to cancel.\n> "
     );
     expect(readline.close).toHaveBeenCalled();
   });
 
   it("re-prompts for discovery confirmation until a valid answer is given", async () => {
-    const readline = createReadline(["wat", "no"]);
+    const readline = createReadline(["wat", "\u001b"]);
 
     const result = await promptToContinueGithubDiscovery({
       input: { isTTY: true },
@@ -48,7 +48,7 @@ describe("cli-bootstrap", () => {
     });
 
     expect(result).toBe(false);
-    expect(readline.write).toHaveBeenCalledWith('Please answer "yes" or "no".\n');
+    expect(readline.write).toHaveBeenCalledWith('Press Enter to continue, or press Esc then Enter to cancel.\n');
   });
 
   it("requires a non-empty GitHub owner", async () => {
