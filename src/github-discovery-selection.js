@@ -25,29 +25,16 @@ export async function promptGithubDiscoverySelection(plan, {
     );
   }
 
-  const addableRepos = getAddableRepos(plan);
-  const overridableRepos = getOverridableRepos(plan);
+  const selectableEntries = getSelectableEntries(plan);
   const readline = createInterfaceFn({
     input,
     output
   });
 
   try {
-    const reposToAdd = await promptForSelection(readline, {
-      availableRepos: addableRepos,
-      promptLabel: "Add repos",
-      selectionKind: "new"
+    return await promptForSelection(readline, {
+      selectableEntries
     });
-    const reposToOverride = await promptForSelection(readline, {
-      availableRepos: overridableRepos,
-      promptLabel: "Override repos",
-      selectionKind: "configured"
-    });
-
-    return {
-      reposToAdd,
-      reposToOverride
-    };
   } finally {
     readline.close();
   }
@@ -63,6 +50,15 @@ function getOverridableRepos(plan) {
   return plan.entries
     .filter(entry => entry.status === "configured")
     .map(entry => entry.repo);
+}
+
+function getSelectableEntries(plan) {
+  return plan.entries
+    .filter(entry => entry.status === "new" || entry.status === "configured")
+    .map(entry => ({
+      status: entry.status,
+      repo: entry.repo
+    }));
 }
 
 function resolveSelectedRepos(requestedNames, availableRepos, flagName, selectionKind) {
@@ -109,23 +105,45 @@ function normalizeRequestedNames(requestedNames) {
 }
 
 async function promptForSelection(readline, {
-  availableRepos,
-  promptLabel,
-  selectionKind
+  selectableEntries
 }) {
-  if (availableRepos.length === 0) {
-    return [];
+  if (selectableEntries.length === 0) {
+    return {
+      reposToAdd: [],
+      reposToOverride: []
+    };
   }
 
-  const availableNames = availableRepos.map(repo => repo.name).join(", ");
+  const availableNames = selectableEntries.map(entry => entry.repo.name).join(", ");
+  const configuredNames = selectableEntries
+    .filter(entry => entry.status === "configured")
+    .map(entry => entry.repo.name);
+  const configuredSummary = configuredNames.length > 0
+    ? `\nConfigured already: ${configuredNames.join(", ")}`
+    : "";
+  const reposByName = new Map(
+    selectableEntries.map(entry => [entry.repo.name.toLowerCase(), entry])
+  );
 
   while (true) {
     const answer = await readline.question(
-      `${promptLabel} (${selectionKind}; comma-separated, "*" for all, blank for none)\n${availableNames}\n> `
+      `Select repos to add or override (comma-separated, "*" for all, blank for none)\n${availableNames}${configuredSummary}\n> `
     );
 
     try {
-      return resolveSelectedRepos(answer.split(","), availableRepos, promptLabel, selectionKind);
+      const selectedRepos = resolveSelectedRepos(
+        answer.split(","),
+        selectableEntries.map(entry => entry.repo),
+        "selection",
+        "selectable"
+      );
+
+      return {
+        reposToAdd: selectedRepos
+          .filter(repo => reposByName.get(repo.name.toLowerCase())?.status === "new"),
+        reposToOverride: selectedRepos
+          .filter(repo => reposByName.get(repo.name.toLowerCase())?.status === "configured")
+      };
     } catch (error) {
       readline.write(`${error.message}\n`);
     }

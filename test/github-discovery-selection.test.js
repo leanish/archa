@@ -81,17 +81,12 @@ describe("github-discovery-selection", () => {
     })).toThrow('Unknown new repo(s) for --add: foundation.');
   });
 
-  it("prompts for comma-separated add and override selections", async () => {
+  it("prompts once for comma-separated add and override selections", async () => {
     const outputWrites = [];
     const fakeReadline = {
       question: async prompt => {
         outputWrites.push(prompt);
-
-        if (prompt.startsWith("Add repos")) {
-          return "archa, java-conventions";
-        }
-
-        return "foundation";
+        return "archa, java-conventions, foundation";
       },
       close() {}
     };
@@ -108,8 +103,8 @@ describe("github-discovery-selection", () => {
       reposToAdd: [plan.entries[0].repo, plan.entries[1].repo],
       reposToOverride: [plan.entries[2].repo]
     });
-    expect(outputWrites.join("")).toContain("Add repos");
-    expect(outputWrites.join("")).toContain("Override repos");
+    expect(outputWrites.join("")).toContain("Select repos to add or override");
+    expect(outputWrites.join("")).toContain("Configured already: foundation");
   });
 
   it("rejects interactive selection without a tty", async () => {
