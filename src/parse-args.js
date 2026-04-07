@@ -244,10 +244,6 @@ function parseConfigDiscoverGithubCommand(argv) {
     }
   }
 
-  if (!owner) {
-    throw new Error('Missing value for --owner');
-  }
-
   if (!apply && (addRepoNames.length > 0 || overrideRepoNames.length > 0)) {
     throw new Error("Use --apply when passing --add or --override.");
   }
@@ -295,7 +291,7 @@ function helpText() {
     "  archa repos sync [repo1,repo2,...]",
     "  archa config path",
     "  archa config init [--catalog <path>] [--managed-repos-root <path>] [--force]",
-    "  archa config discover-github --owner <name> [--apply] [--add <names>] [--override <names>] [--exclude-forks] [--include-archived]",
+    "  archa config discover-github [--owner <name|@accessible>] [--apply] [--add <names>] [--override <names>] [--exclude-forks] [--include-archived]",
     "",
     "Ask Options:",
     "  --repo <names>                Limit to managed repo names",
@@ -308,7 +304,7 @@ function helpText() {
     "  --                            Stop parsing options for the question text",
     "",
     "Config Discovery:",
-    "  --owner <name>                GitHub user or org to inspect",
+    "  --owner <name>                GitHub user, org, or @accessible; prompts on TTY and otherwise defaults to @accessible",
     "  --apply                       Interactively select repos to add or override",
     "  --add <names>                 Non-interactive add selection (comma-separated or *)",
     "  --override <names>            Non-interactive override selection (comma-separated or *)",

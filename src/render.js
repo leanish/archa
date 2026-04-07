@@ -5,7 +5,7 @@ export function renderRepoList(repos) {
 
   if (repos.length === 0) {
     lines.push("- none configured");
-    lines.push('Run: archa config discover-github --owner <github-user-or-org> --apply');
+    lines.push("Run: archa config discover-github --apply");
     return lines.join("\n");
   }
 
@@ -51,18 +51,46 @@ export function renderAnswer(result) {
 
 export function renderGithubDiscovery(result) {
   const lines = [
-    `GitHub repo discovery for ${result.owner} (${result.ownerType}):`
+    `GitHub repo discovery for ${result.ownerDisplay || result.owner} (${result.ownerType}):`
   ];
+  const entries = result.applied
+    ? (result.appliedEntries || [])
+    : result.entries;
+  const sourceOwners = new Set(
+    entries
+      .map(entry => getDiscoveryOwnerLabel(entry.repo))
+      .filter(sourceOwner => sourceOwner !== "Other")
+  );
 
-  for (const entry of result.entries) {
-    const status = formatDiscoveryStatus(entry);
-    const classifications = entry.repo.classifications?.length > 0
-      ? ` classifications=${entry.repo.classifications.join(",")}`
-      : "";
-    const topics = entry.repo.topics.length > 0 ? ` topics=${entry.repo.topics.join(",")}` : "";
-    const description = entry.repo.description ? ` ${entry.repo.description}` : "";
-    const suggestions = entry.suggestions.length > 0 ? ` review=${entry.suggestions.join("; ")}` : "";
-    lines.push(`- ${entry.repo.name} [${status}]${classifications}${topics}${suggestions}${description}`);
+  if (sourceOwners.size > 1) {
+    const groupedEntries = groupDiscoveryEntriesByOwner(entries, getPrimarySourceOwner(result));
+
+    for (const group of groupedEntries) {
+      lines.push(`${group.ownerLabel}:`);
+      for (const entry of group.entries) {
+        lines.push(formatDiscoveryEntry(entry, {
+          useSourceLabels: isAmbiguousDiscoveryName(entry.repo, entries)
+        }));
+      }
+    }
+  } else {
+    for (const entry of entries) {
+      lines.push(formatDiscoveryEntry(entry, {
+        useSourceLabels: false
+      }));
+    }
+  }
+
+  if (result.applied) {
+    lines.push("");
+    if (typeof result.selectedCount === "number") {
+      lines.push(`Repos selected: ${result.selectedCount}`);
+    }
+    const hasChanges = result.addedCount > 0 || (result.overriddenCount || 0) > 0;
+    lines.push(`${hasChanges ? "Config updated" : "Config unchanged"}: ${result.configPath}`);
+    lines.push(`Repos added: ${result.addedCount}`);
+    lines.push(`Repos overridden: ${result.overriddenCount || 0}`);
+    return lines.join("\n");
   }
 
   lines.push("");
@@ -80,17 +108,13 @@ export function renderGithubDiscovery(result) {
     lines.push(`Skipped archived repos: ${result.skippedArchived}`);
   }
 
-  if (result.applied) {
-    const hasChanges = result.addedCount > 0 || (result.overriddenCount || 0) > 0;
-    lines.push(`${hasChanges ? "Config updated" : "Config unchanged"}: ${result.configPath}`);
-    lines.push(`Repos added: ${result.addedCount}`);
-    lines.push(`Repos overridden: ${result.overriddenCount || 0}`);
-    return lines.join("\n");
+  if (result.skippedDisabled > 0) {
+    lines.push(`Skipped disabled repos: ${result.skippedDisabled}`);
   }
 
   if (result.counts.new > 0 || result.counts.configured > 0) {
     lines.push(`Run: archa config discover-github --owner ${result.owner} --apply`);
-    lines.push("Apply mode lets you choose which repos to add and which configured repos to override, then refines only that selected subset before writing.");
+    lines.push("Apply mode lets you choose from the combined list of new and already configured repos. Press Enter to add all new repos, or customize the selection before only that subset is refined and saved incrementally.");
   } else {
     lines.push("No new repos to add.");
   }
@@ -104,4 +128,125 @@ function formatDiscoveryStatus(entry) {
   }
 
   return entry.status;
+}
+
+function formatDiscoveryRepoLabel(repo, useSourceLabels) {
+  if (useSourceLabels) {
+    const sourceLabel = getGithubRepoDisplayIdentity(repo);
+    if (sourceLabel) {
+      return sourceLabel;
+    }
+  }
+
+  return repo.name;
+}
+
+function formatDiscoveryEntry(entry, {
+  useSourceLabels
+}) {
+  const status = formatDiscoveryStatus(entry);
+  const classifications = entry.repo.classifications?.length > 0
+    ? ` classifications=${entry.repo.classifications.join(",")}`
+    : "";
+  const topics = entry.repo.topics.length > 0 ? ` topics=${entry.repo.topics.join(",")}` : "";
+  const description = entry.repo.description ? ` ${entry.repo.description}` : "";
+  const suggestions = entry.suggestions.length > 0 ? ` review=${entry.suggestions.join("; ")}` : "";
+  return `- ${formatDiscoveryRepoLabel(entry.repo, useSourceLabels)} [${status}]${classifications}${topics}${suggestions}${description}`;
+}
+
+function groupDiscoveryEntriesByOwner(entries, primarySourceOwner) {
+  const groupsByOwner = new Map();
+  const orderedOwners = [];
+
+  for (const entry of entries) {
+    const ownerLabel = getDiscoveryOwnerLabel(entry.repo);
+    if (!groupsByOwner.has(ownerLabel)) {
+      groupsByOwner.set(ownerLabel, []);
+      orderedOwners.push(ownerLabel);
+    }
+    groupsByOwner.get(ownerLabel).push(entry);
+  }
+
+  orderedOwners.sort((left, right) => compareDiscoveryOwnerLabels(left, right, primarySourceOwner));
+
+  return orderedOwners.map(ownerLabel => ({
+    ownerLabel,
+    entries: groupsByOwner.get(ownerLabel)
+  }));
+}
+
+function getDiscoveryOwnerLabel(repo) {
+  if (typeof repo.sourceOwner === "string" && repo.sourceOwner.trim() !== "") {
+    return repo.sourceOwner.trim();
+  }
+
+  const githubIdentity = getGithubRepoDisplayIdentity(repo);
+  if (githubIdentity?.includes("/")) {
+    return githubIdentity.split("/")[0];
+  }
+
+  return "Other";
+}
+
+function compareDiscoveryOwnerLabels(left, right, primarySourceOwner) {
+  const normalizedPrimaryOwner = typeof primarySourceOwner === "string"
+    ? primarySourceOwner.trim().toLowerCase()
+    : "";
+  const normalizedLeft = left.toLowerCase();
+  const normalizedRight = right.toLowerCase();
+
+  if (normalizedPrimaryOwner) {
+    if (normalizedLeft === normalizedPrimaryOwner && normalizedRight !== normalizedPrimaryOwner) {
+      return -1;
+    }
+
+    if (normalizedRight === normalizedPrimaryOwner && normalizedLeft !== normalizedPrimaryOwner) {
+      return 1;
+    }
+  }
+
+  return normalizedLeft.localeCompare(normalizedRight);
+}
+
+function getPrimarySourceOwner(result) {
+  if (typeof result.ownerDisplay !== "string") {
+    return null;
+  }
+
+  const [primaryOwner] = result.ownerDisplay.split(" + orgs");
+  return primaryOwner?.trim() || null;
+}
+
+function isAmbiguousDiscoveryName(repo, entries) {
+  const repoBaseName = getDiscoveryRepoBaseName(repo);
+  return entries.filter(entry => getDiscoveryRepoBaseName(entry.repo) === repoBaseName).length > 1;
+}
+
+function getDiscoveryRepoBaseName(repo) {
+  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.includes("/")) {
+    return repo.sourceFullName.split("/").pop().trim();
+  }
+
+  if (typeof repo.name === "string" && repo.name.includes("/")) {
+    return repo.name.split("/").pop().trim();
+  }
+
+  return repo.name;
+}
+
+function getGithubRepoDisplayIdentity(repo) {
+  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.trim() !== "") {
+    return repo.sourceFullName.trim();
+  }
+
+  if (typeof repo.url !== "string" || repo.url.trim() === "") {
+    return null;
+  }
+
+  const match = repo.url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (!match) {
+    return null;
+  }
+
+  return `${match[1]}/${match[2]}`;
 }

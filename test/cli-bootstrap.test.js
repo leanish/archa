@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -21,7 +23,7 @@ describe("cli-bootstrap", () => {
     })).toBe(false);
   });
 
-  it("defaults config initialization prompts to yes", async () => {
+  it("defaults config initialization prompts to Enter", async () => {
     const readline = createReadline([""]);
 
     const result = await promptToInitializeConfig({
@@ -33,13 +35,43 @@ describe("cli-bootstrap", () => {
 
     expect(result).toBe(true);
     expect(readline.question).toHaveBeenCalledWith(
-      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nInitialize it now? [Y/n]\n> "
+      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nPress Enter to initialize it now, or press Esc to cancel.\n> "
     );
     expect(readline.close).toHaveBeenCalled();
   });
 
+  it("cancels immediately on Esc when raw keypress input is available", async () => {
+    const input = createRawKeypressInput();
+    const output = {
+      isTTY: true,
+      write: vi.fn()
+    };
+    const resultPromise = promptToInitializeConfig({
+      configPath: "/tmp/archa-config.json",
+      input,
+      output
+    });
+
+    input.emit("keypress", "\u001b", {
+      name: "escape"
+    });
+
+    const result = await resultPromise;
+
+    expect(result).toBe(false);
+    expect(output.write).toHaveBeenNthCalledWith(
+      1,
+      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nPress Enter to initialize it now, or press Esc to cancel.\n> "
+    );
+    expect(output.write).toHaveBeenNthCalledWith(2, "\n");
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
+    expect(input.resume).toHaveBeenCalledTimes(1);
+    expect(input.pause).toHaveBeenCalledTimes(1);
+  });
+
   it("re-prompts for discovery confirmation until a valid answer is given", async () => {
-    const readline = createReadline(["wat", "no"]);
+    const readline = createReadline(["wat", "\u001b"]);
 
     const result = await promptToContinueGithubDiscovery({
       input: { isTTY: true },
@@ -48,11 +80,26 @@ describe("cli-bootstrap", () => {
     });
 
     expect(result).toBe(false);
-    expect(readline.write).toHaveBeenCalledWith('Please answer "yes" or "no".\n');
+    expect(readline.write).toHaveBeenCalledWith("Press Enter to continue, or press Esc to cancel.\n");
   });
 
-  it("requires a non-empty GitHub owner", async () => {
-    const readline = createReadline(["", " leanish "]);
+  it("defaults a blank GitHub owner prompt to accessible discovery", async () => {
+    const readline = createReadline([""]);
+
+    const result = await promptForGithubOwner({
+      input: { isTTY: true },
+      output: { isTTY: true },
+      createInterfaceFn: () => readline
+    });
+
+    expect(result).toBe("@accessible");
+    expect(readline.question).toHaveBeenCalledWith(
+      "GitHub owner to discover from (user or org).\nPress Enter to use all accessible repos from your authenticated GitHub access.\n> "
+    );
+  });
+
+  it("keeps explicit GitHub owners when provided", async () => {
+    const readline = createReadline([" leanish "]);
 
     const result = await promptForGithubOwner({
       input: { isTTY: true },
@@ -61,7 +108,6 @@ describe("cli-bootstrap", () => {
     });
 
     expect(result).toBe("leanish");
-    expect(readline.write).toHaveBeenCalledWith("Please enter a value.\n");
   });
 
   it("initializes and continues into discovery when config is missing", async () => {
@@ -124,7 +170,7 @@ describe("cli-bootstrap", () => {
 
     expect(result).toBe(false);
     expect(output.write).toHaveBeenCalledWith(
-      'GitHub discovery skipped. Add repos manually or run "archa config discover-github --owner <github-user-or-org> --apply" when you are ready.\n'
+      'GitHub discovery skipped. Add repos manually or run "archa config discover-github --apply" when you are ready.\n'
     );
   });
 });
@@ -137,4 +183,18 @@ function createReadline(answers) {
     write: vi.fn(),
     close: vi.fn()
   };
+}
+
+function createRawKeypressInput() {
+  const input = new EventEmitter();
+
+  input.isTTY = true;
+  input.isRaw = false;
+  input.setRawMode = vi.fn(enabled => {
+    input.isRaw = enabled;
+  });
+  input.resume = vi.fn();
+  input.pause = vi.fn();
+
+  return input;
 }

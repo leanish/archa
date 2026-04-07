@@ -38,7 +38,7 @@ describe("render", () => {
     expect(renderRepoList([])).toBe([
       "Managed repos:",
       "- none configured",
-      'Run: archa config discover-github --owner <github-user-or-org> --apply'
+      "Run: archa config discover-github --apply"
     ].join("\n"));
   });
 
@@ -132,28 +132,221 @@ describe("render", () => {
     expect(preview).toContain("Configured with review suggestions: 1");
     expect(preview).toContain("classifications=cli topics=cli");
     expect(preview).toContain("classifications=infra topics=java");
-    expect(preview).toContain("Apply mode lets you choose which repos to add and which configured repos to override, then refines only that selected subset before writing.");
+    expect(preview).toContain("Apply mode lets you choose from the combined list of new and already configured repos. Press Enter to add all new repos, or customize the selection before only that subset is refined and saved incrementally.");
 
     const applied = renderGithubDiscovery({
       owner: "leanish",
       ownerType: "User",
-      entries: [],
+      entries: [
+        {
+          status: "new",
+          repo: {
+            name: "ignored-repo",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        }
+      ],
+      appliedEntries: [
+        {
+          status: "new",
+          repo: {
+            name: "archa",
+            description: "Repo-aware CLI",
+            topics: ["cli"],
+            classifications: ["cli"]
+          },
+          suggestions: []
+        }
+      ],
       counts: {
-        discovered: 0,
+        discovered: 2,
         configured: 0,
-        new: 0,
+        new: 2,
         conflicts: 0,
         withSuggestions: 0
       },
       skippedForks: 0,
       skippedArchived: 0,
       applied: true,
+      selectedCount: 1,
       configPath: "/tmp/archa-config.json",
       addedCount: 1,
       overriddenCount: 2
     });
 
+    expect(applied).toContain("archa [new]");
+    expect(applied).not.toContain("ignored-repo");
+    expect(applied).toContain("Repos selected: 1");
+    expect(applied).not.toContain("Repos discovered:");
     expect(applied).toContain("Config updated: /tmp/archa-config.json");
     expect(applied).toContain("Repos overridden: 2");
+  });
+
+  it("renders skipped disabled repos in discovery previews", () => {
+    const preview = renderGithubDiscovery({
+      owner: "leanish",
+      ownerType: "User",
+      entries: [],
+      counts: {
+        discovered: 3,
+        configured: 0,
+        new: 1,
+        conflicts: 0,
+        withSuggestions: 0
+      },
+      skippedForks: 0,
+      skippedArchived: 1,
+      skippedDisabled: 2,
+      applied: false
+    });
+
+    expect(preview).toContain("Skipped archived repos: 1");
+    expect(preview).toContain("Skipped disabled repos: 2");
+  });
+
+  it("renders owner-grouped sections for accessible discovery previews", () => {
+    const preview = renderGithubDiscovery({
+      owner: "@accessible",
+      ownerDisplay: "leanish + orgs",
+      ownerType: "Accessible",
+      entries: [
+        {
+          status: "new",
+          repo: {
+            name: "archa",
+            sourceOwner: "leanish",
+            sourceFullName: "leanish/archa",
+            description: "Repo-aware CLI",
+            topics: ["cli"],
+            classifications: ["cli"]
+          },
+          suggestions: []
+        },
+        {
+          status: "new",
+          repo: {
+            name: "playcart",
+            sourceOwner: "Nosto",
+            sourceFullName: "Nosto/playcart",
+            description: "Storefront backend",
+            topics: ["play"],
+            classifications: ["backend", "external"]
+          },
+          suggestions: []
+        }
+      ],
+      counts: {
+        discovered: 2,
+        configured: 0,
+        new: 2,
+        conflicts: 0,
+        withSuggestions: 0
+      },
+      skippedForks: 0,
+      skippedArchived: 0,
+      applied: false
+    });
+
+    expect(preview).toContain("GitHub repo discovery for leanish + orgs (Accessible):");
+    expect(preview).toContain("leanish:\n- archa [new]");
+    expect(preview).toContain("Nosto:\n- playcart [new]");
+    expect(preview).toContain("Run: archa config discover-github --owner @accessible --apply");
+  });
+
+  it("falls back to owner-qualified labels inside grouped previews when names collide", () => {
+    const preview = renderGithubDiscovery({
+      owner: "@accessible",
+      ownerDisplay: "leanish + orgs",
+      ownerType: "Accessible",
+      entries: [
+        {
+          status: "new",
+          repo: {
+            name: "shared",
+            sourceOwner: "leanish",
+            sourceFullName: "leanish/shared",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        },
+        {
+          status: "new",
+          repo: {
+            name: "shared",
+            sourceOwner: "Nosto",
+            sourceFullName: "Nosto/shared",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        }
+      ],
+      counts: {
+        discovered: 2,
+        configured: 0,
+        new: 2,
+        conflicts: 0,
+        withSuggestions: 0
+      },
+      skippedForks: 0,
+      skippedArchived: 0,
+      applied: false
+    });
+
+    expect(preview).toContain("leanish:\n- leanish/shared [new]");
+    expect(preview).toContain("Nosto:\n- Nosto/shared [new]");
+  });
+
+  it("derives owner-qualified preview labels from the GitHub URL when source metadata is missing", () => {
+    const preview = renderGithubDiscovery({
+      owner: "@accessible",
+      ownerDisplay: "leanish + orgs",
+      ownerType: "Accessible",
+      entries: [
+        {
+          status: "configured",
+          repo: {
+            name: "nullability",
+            url: "https://github.com/leanish/nullability.git",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        },
+        {
+          status: "new",
+          repo: {
+            name: "nosto/nullability",
+            sourceOwner: "Nosto",
+            sourceFullName: "Nosto/nullability",
+            url: "https://github.com/Nosto/nullability.git",
+            description: "",
+            topics: [],
+            classifications: []
+          },
+          suggestions: []
+        }
+      ],
+      counts: {
+        discovered: 2,
+        configured: 1,
+        new: 1,
+        conflicts: 0,
+        withSuggestions: 0
+      },
+      skippedForks: 0,
+      skippedArchived: 0,
+      applied: false
+    });
+
+    expect(preview).toContain("- leanish/nullability [configured]");
+    expect(preview).toContain("- Nosto/nullability [new]");
   });
 });
