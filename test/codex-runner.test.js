@@ -69,10 +69,15 @@ describe("codex-runner", () => {
 
     expect(context.workingDirectory).toBe("/workspace/archa/repos/sqs-codec");
     expect(context.prompt).toContain("Answer using the code in the current workspace.");
-    expect(context.prompt).toContain("Write for a general engineering reader. Keep the answer self-contained and do not assume the reader can inspect this workspace.");
+    expect(context.prompt).toContain("Write for a non-engineering reader. Keep the answer self-contained and do not assume the reader can inspect this workspace.");
+    expect(context.prompt).toContain("Assume no knowledge or access to source code or implementation details.");
+    expect(context.prompt).toContain("Explain the behavior in plain language, not as a code walkthrough.");
+    expect(context.prompt).toContain("Avoid unnecessary references to files, symbols, and other analyzed-workspace code details unless they are needed for accuracy or explicitly requested.");
+    expect(context.prompt).toContain("Service-interaction code, API payloads, and integration examples are allowed when they help explain usage or behavior.");
+    expect(context.prompt).toContain("Translate implementation details into user-facing behavior and outcomes instead of citing analyzed-workspace source identifiers.");
     expect(context.prompt).toContain("Use code snippets only when they help explain integration or behavior.");
     expect(context.prompt).toContain("These repos are in scope for answering the question: sqs-codec.");
-    expect(context.prompt).toContain("Mention file paths or line numbers only when they are necessary.");
+    expect(context.prompt).toContain("Before finalizing, remove unnecessary references to analyzed-workspace code.");
     expect(context.prompt).toContain("Answer the question directly and stop. Do not offer follow-up help or ask whether you should rewrite the answer.");
     expect(context.prompt).toContain('I got the question:\n"""\n');
     expect(context.prompt).toContain(question);
@@ -128,9 +133,7 @@ describe("codex-runner", () => {
     });
 
     expect(result).toEqual({ text: "Final answer from Codex" });
-    expect(onStatus).toHaveBeenCalledWith(
-      "Running Codex in /workspace/archa/repos/sqs-codec with gpt-5.4 (low)..."
-    );
+    expect(onStatus).toHaveBeenCalledWith("Running Codex");
     expect(child.stdin.write).toHaveBeenCalledWith(expect.stringContaining(
       "Write for an engineer who can inspect this workspace."
     ));
@@ -175,7 +178,7 @@ describe("codex-runner", () => {
         "-C",
         "/workspace/archa/repos/java-conventions",
         "--model",
-        "gpt-5.4"
+        "gpt-5.4-mini"
       ]),
       { stdio: ["pipe", "ignore", "pipe"] }
     );
@@ -221,22 +224,20 @@ describe("codex-runner", () => {
     });
 
     expect(result).toEqual({ text: "Codex did not produce a final answer." });
-    expect(onStatus).toHaveBeenCalledWith(
-      "Running Codex in /workspace/archa/repos/sqs-codec with gpt-5.4 (low)..."
-    );
+    expect(onStatus).toHaveBeenCalledWith("Running Codex");
     expect(mocks.spawn).toHaveBeenCalledWith(
       "codex",
       expect.arrayContaining([
         "-c",
         'model_reasoning_effort="low"',
         "--model",
-        "gpt-5.4"
+        "gpt-5.4-mini"
       ]),
       { stdio: ["pipe", "ignore", "pipe"] }
     );
   });
 
-  it("emits a heartbeat every 10 seconds while codex is still running", async () => {
+  it("waits 5 seconds before emitting elapsed codex progress updates", async () => {
     vi.useFakeTimers();
     const child = createChildProcess({ autoCloseOnEnd: false });
     const onStatus = vi.fn();
@@ -257,11 +258,19 @@ describe("codex-runner", () => {
       onStatus
     });
 
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(onStatus).toHaveBeenCalledWith("Still running Codex... (10s elapsed)");
+    onStatus.mockClear();
 
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(onStatus).toHaveBeenCalledWith("Still running Codex... (20s elapsed)");
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(onStatus).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... (5s elapsed)");
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... (10s elapsed)");
+
+    await vi.advanceTimersByTimeAsync(55_000);
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... (1m 5s elapsed)");
 
     child.close(0);
 
@@ -290,14 +299,14 @@ describe("codex-runner", () => {
       timeoutMs: 300_000
     });
 
-    const rejection = expect(resultPromise).rejects.toThrow("codex exec timed out after 300s");
+    const rejection = expect(resultPromise).rejects.toThrow("codex exec timed out after 5m");
 
     await vi.advanceTimersByTimeAsync(300_000);
     await rejection;
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     expect(child.stdin.destroy).toHaveBeenCalled();
     expect(child.stderr.destroy).toHaveBeenCalled();
-    expect(onStatus).toHaveBeenCalledWith("Codex timed out after 300s; stopping...");
+    expect(onStatus).toHaveBeenCalledWith("Codex timed out after 5m; stopping...");
     expect(mocks.rm).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), { force: true });
     expect(mocks.readFile).not.toHaveBeenCalled();
 

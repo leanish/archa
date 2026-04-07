@@ -130,8 +130,8 @@ describe("config", () => {
     await fs.writeFile(configPath, JSON.stringify({
       repos: [
         {
-          name: "playcart",
-          url: "https://github.com/Nosto/playcart.git",
+          name: "dtv",
+          url: "https://github.com/OtherCo/dtv.git",
           defaultBranch: "main"
         }
       ]
@@ -141,15 +141,15 @@ describe("config", () => {
 
     expect(loaded.repos).toEqual([
       {
-        name: "playcart",
-        url: "https://github.com/Nosto/playcart.git",
+        name: "dtv",
+        url: "https://github.com/OtherCo/dtv.git",
         defaultBranch: "main",
         description: "",
         topics: [],
         classifications: [],
         aliases: [],
         alwaysSelect: false,
-        directory: path.join(tempRoot, "data", "archa", "repos", "Nosto", "playcart")
+        directory: path.join(tempRoot, "data", "archa", "repos", "OtherCo", "dtv")
       }
     ]);
   });

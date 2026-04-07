@@ -53,14 +53,14 @@ describe("repo-classification-inspector", () => {
   });
 
   it("detects infra and internal repos from local source signals", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "platform-infra");
+    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "infra-live");
     await fs.mkdir(path.join(repoDirectory, "terraform"), { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "README.md"), "Internal platform infrastructure modules.");
 
     const classifications = await inspectRepoClassifications({
       repo: {
-        name: "platform-infra",
-        url: "https://github.com/leanish/platform-infra.git",
+        name: "infra-live",
+        url: "https://github.com/leanish/infra-live.git",
         defaultBranch: "main",
         description: "Platform infra",
         topics: []
@@ -74,15 +74,15 @@ describe("repo-classification-inspector", () => {
   });
 
   it("allows infra and library classifications to coexist when both have evidence", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "terraform-modules");
+    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "module-pack");
     await fs.mkdir(path.join(repoDirectory, "terraform"), { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "README.md"), "Reusable Terraform module package for shared platform infrastructure.");
     await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java-library' }\n");
 
     const classifications = await inspectRepoClassifications({
       repo: {
-        name: "terraform-modules",
-        url: "https://github.com/leanish/terraform-modules.git",
+        name: "module-pack",
+        url: "https://github.com/leanish/module-pack.git",
         defaultBranch: "main",
         description: "Shared infrastructure modules",
         topics: []
@@ -225,14 +225,14 @@ describe("repo-classification-inspector", () => {
   });
 
   it("classifies a Play-style application as backend and external without frontend or infra false positives", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "Nosto", "playcart");
+    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "OtherCo", "dtv");
     await fs.mkdir(path.join(repoDirectory, "app", "controllers"), { recursive: true });
     await fs.mkdir(path.join(repoDirectory, "conf"), { recursive: true });
     await fs.mkdir(path.join(repoDirectory, "public"), { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "conf", "routes"), "GET /api/ping controllers.HealthController.ping()");
     await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java' }\n");
     await fs.writeFile(path.join(repoDirectory, "README.md"), [
-      "# Playcart",
+      "# Dtv",
       "",
       "This is the main web application project for merchant backend, merchant frontend, and api services.",
       "",
@@ -243,10 +243,10 @@ describe("repo-classification-inspector", () => {
 
     const classifications = await inspectRepoClassifications({
       repo: {
-        name: "playcart",
-        url: "https://github.com/Nosto/playcart.git",
+        name: "dtv",
+        url: "https://github.com/OtherCo/dtv.git",
         defaultBranch: "master",
-        description: "Play framework based implementation of Nosto service",
+        description: "Play framework based commerce service",
         topics: []
       },
       sourceRepo: {
@@ -260,22 +260,22 @@ describe("repo-classification-inspector", () => {
   });
 
   it("uses a larger topic budget for massive repos and filters weak filler tokens", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "Nosto", "playcart");
+    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "OtherCo", "dtv");
     await fs.mkdir(path.join(repoDirectory, "app", "controllers"), { recursive: true });
     await fs.mkdir(path.join(repoDirectory, "conf"), { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "conf", "routes"), "GET /api/ping controllers.HealthController.ping()");
     await fs.writeFile(path.join(repoDirectory, "README.md"), [
-      "# Playcart",
+      "# Dtv",
       "",
-      "Playcart powers merchant backend, merchant frontend, api services, checkout, storefront, onboarding, pricing, personalization, recommendations, search, analytics, sessions, catalogs, campaigns, products, integrations, merchandising, segmentation, and reporting for commerce experiences. Nosto can provide https setup guidance for local development."
+      "Dtv powers merchant backend, merchant frontend, api services, checkout, storefront, onboarding, pricing, personalization, recommendations, search, analytics, sessions, catalogs, campaigns, products, integrations, merchandising, segmentation, and reporting for commerce experiences. Dtv can provide https setup guidance for local development."
     ].join("\n"));
 
     const metadata = await inspectRepoMetadata({
       repo: {
-        name: "playcart",
-        url: "https://github.com/Nosto/playcart.git",
+        name: "dtv",
+        url: "https://github.com/OtherCo/dtv.git",
         defaultBranch: "master",
-        description: "Play framework based implementation of Nosto service",
+        description: "Play framework based commerce service",
         topics: []
       },
       sourceRepo: {
@@ -292,7 +292,6 @@ describe("repo-classification-inspector", () => {
     expect(metadata.topics).not.toContain("can");
     expect(metadata.topics).not.toContain("https");
     expect(metadata.topics).not.toContain("setup");
-    expect(metadata.topics).not.toContain("nosto");
   });
 
   it("falls back to heuristic metadata when Codex curation fails", async () => {

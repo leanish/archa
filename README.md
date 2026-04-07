@@ -78,7 +78,7 @@ The config file contains:
 - `repos`: the curated repo list, including URL, branch, description, generic `topics`, high-signal `classifications`, and optional aliases
 
 Repo names and aliases must be unique case-insensitively. Aliases must be non-empty strings.
-GitHub repos are always stored under an owner-scoped path inside `managedReposRoot`, such as `.../repos/leanish/nullability` or `.../repos/Nosto/playcart`, using the owner casing from GitHub.
+GitHub repos are always stored under an owner-scoped path inside `managedReposRoot`, such as `.../repos/leanish/nullability` or `.../repos/OtherCo/dtv`, using the owner casing from GitHub.
 
 Example using a few public `leanish` repos:
 
@@ -171,7 +171,7 @@ Use the same command to select additions or overrides from that owner into the a
 archa config discover-github
 ```
 
-When the command runs in a terminal, Archa prompts once with the combined list of new and already configured repos. If you did not pass `--owner`, that flow first prompts for a GitHub owner and accepts Enter for `@accessible`. Multi-owner discovery groups repos by owner for readability, and only falls back to owner-qualified names when repo names collide. If two GitHub repos would otherwise collide by plain name, Archa automatically uses an owner-qualified config name such as `nosto/nullability` so both can coexist. Managed checkouts are owner-scoped on disk for GitHub repos even when the configured name stays plain. Press Enter to add all new repos, or type names to customize the selection; a confirmation prompt avoids doing that silently. Anything you pick gets added or overridden as needed. For scripted use, pass `--owner`, `--add <names>`, and `--override <names>`, or use `*` to select all repos of that kind. Owner-qualified names such as `leanish/nullability` are accepted case-insensitively when you want to be explicit.
+When the command runs in a terminal, Archa prompts once with the combined list of new and already configured repos. If you did not pass `--owner`, that flow first prompts for a GitHub owner and accepts Enter for `@accessible`. Multi-owner discovery groups repos by owner for readability, and only falls back to owner-qualified names when repo names collide. If two GitHub repos would otherwise collide by plain name, Archa automatically uses an owner-qualified config name such as `otherco/nullability` so both can coexist. Managed checkouts are owner-scoped on disk for GitHub repos even when the configured name stays plain. Press Enter to add all new repos, or type names to customize the selection; a confirmation prompt avoids doing that silently. Anything you pick gets added or overridden as needed. For scripted use, pass `--owner`, `--add <names>`, and `--override <names>`, or use `*` to select all repos of that kind. Owner-qualified names such as `leanish/nullability` are accepted case-insensitively when you want to be explicit.
 
 By default, GitHub discovery includes forks and skips archived or disabled repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. GitHub may also report some archived repos as disabled, so that flag can surface both. Discovery uses `GH_TOKEN` / `GITHUB_TOKEN` when available, or an existing `gh` login otherwise. Discovery includes private repos visible to that credential. The first pass is intentionally names-first: Archa lists the eligible repos so you can choose what to add or override without paying for per-repo topic lookups up front. After selection, Archa refines only the chosen subset: it fills blank descriptions or topics from README/source inspection when needed, derives additional topics with a size-aware topic budget, derives separate `classifications` like `infra`, `library`, `internal`, `external`, `frontend`, `backend`, and `microservice`, and then runs a Codex cleanup pass before saving the selected repos into config in one write. `external` is kept high-precision: it means the repo clearly exposes an outward-facing app or service surface, not merely that it mentions or consumes APIs. Repo names are handled separately during selection instead of being copied into `topics`. When a selected repo is already cloned under the managed repos root, discovery inspects that local checkout; otherwise it can shallow-clone the repo temporarily to inspect and curate metadata from source structure and README cues. Overrides update the configured repo's URL, default branch, description, topics, and classifications while preserving local-only fields such as aliases and `alwaysSelect`.
 
@@ -208,11 +208,11 @@ Ask a question. By default `archa` will:
 1. choose likely repos from the configured repo list, while keeping any repos marked with `"alwaysSelect": true` in scope
    If nothing scores positively, all configured repos are used.
 2. sync them to the latest tracked trunk tip
-3. run `codex exec` with `gpt-5.4` and `low` reasoning effort
+3. run `codex exec` with `gpt-5.4-mini` and `low` reasoning effort
 
-By default, answers target a general engineering reader. When the reader can inspect the repositories directly, use `--audience codebase` to get a more implementation-oriented answer.
+By default, answers target non-engineering readers who need the system behavior explained clearly. When the reader can inspect the repositories directly, use `--audience codebase` to get a more implementation-oriented answer.
 
-While it runs, `archa` keeps progress reporting high-level, including a heartbeat every 10 seconds during long Codex runs. Raw nested Codex logs stay hidden unless the command fails.
+While it runs, `archa` keeps progress reporting high-level, including a heartbeat every 5 seconds during long Codex runs. Raw nested Codex logs stay hidden unless the command fails.
 
 Managed repos are synced against their configured `defaultBranch`. Discovery’s temporary inspection clones are shallow. Managed repo sync uses normal long-lived checkouts; if a managed repo happens to be shallow, Archa first runs `git fetch --unshallow` before the normal fast-forward update flow.
 
@@ -302,8 +302,8 @@ The response includes a job id plus links:
 }
 ```
 
-When `model` or `reasoningEffort` are omitted from the HTTP request, the server uses the same defaults as the CLI: `gpt-5.4` and `low`.
-When `audience` is omitted, the server defaults to `general`. Use `codebase` when the reader can inspect the managed repos directly and wants file- and symbol-level detail.
+When `model` or `reasoningEffort` are omitted from the HTTP request, the server uses the same defaults as the CLI: `gpt-5.4-mini` and `low`.
+When `audience` is omitted, the server defaults to `general`, which assumes no knowledge of source code or implementation details and avoids unnecessary references to the analyzed workspace's files or symbols. Service and integration examples are still allowed when they help explain behavior. Use `codebase` when the reader can inspect the managed repos directly and wants file- and symbol-level detail.
 
 Poll job state:
 
@@ -340,7 +340,7 @@ Programmatic clients that do not send `Accept: text/html` continue to receive th
 
 ## Configuration overrides
 
-- `ARCHA_DEFAULT_MODEL`: overrides the default Codex model (`gpt-5.4`)
+- `ARCHA_DEFAULT_MODEL`: overrides the default Codex model (`gpt-5.4-mini`)
 - `ARCHA_DEFAULT_REASONING_EFFORT`: overrides the default reasoning effort (`low`)
 - `ARCHA_CODEX_TIMEOUT_MS`: overrides the Codex execution timeout (default `300000`)
 - `GH_TOKEN` / `GITHUB_TOKEN`: authenticates GitHub repo discovery; if they are unset, discovery can fall back to the current `gh` login instead

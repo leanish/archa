@@ -229,9 +229,9 @@ describe("http-server", () => {
             directory: "/workspace/archa"
           },
           {
-            name: "beanie",
+            name: "demo-repo",
             defaultBranch: "master",
-            description: "Beanie project",
+            description: "Demo repo",
             aliases: []
           }
         ]
@@ -253,9 +253,9 @@ describe("http-server", () => {
           aliases: ["self"]
         },
         {
-          name: "beanie",
+          name: "demo-repo",
           defaultBranch: "master",
-          description: "Beanie project",
+          description: "Demo repo",
           aliases: []
         }
       ],
@@ -330,11 +330,10 @@ describe("http-server", () => {
     expect(htmlResponse.body).toContain("if (!advancedOptions.hidden)");
     expect(htmlResponse.body).toContain('<option value="general" selected>general</option>');
     expect(htmlResponse.body).toContain('<option value="codebase">codebase</option>');
-    expect(htmlResponse.body).toContain('<option value="gpt-5.4" selected>gpt-5.4</option>');
-    expect(htmlResponse.body).toContain('<option value="gpt-5.4-mini">gpt-5.4-mini</option>');
+    expect(htmlResponse.body).toContain('<option value="gpt-5.4-mini" selected>gpt-5.4-mini</option>');
+    expect(htmlResponse.body).toContain('<option value="gpt-5.4">gpt-5.4</option>');
     expect(htmlResponse.body).toContain('<option value="low" selected>low</option>');
     expect(htmlResponse.body).not.toContain("repo-picker-toggle");
-    expect(htmlResponse.body).not.toContain("e.g. archa, playcart");
     expect(htmlResponse.body).not.toContain('id="no-synthesis"');
   });
 

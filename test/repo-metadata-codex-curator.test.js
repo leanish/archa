@@ -131,15 +131,15 @@ describe("repo-metadata-codex-curator", () => {
 
   it("drops weak topics and service-app misclassifications from Codex cleanup", async () => {
     const metadata = await curateRepoMetadataWithCodex({
-      directory: "/workspace/repos/playcart",
+      directory: "/workspace/repos/dtv",
       repo: {
-        name: "playcart",
-        url: "https://github.com/Nosto/playcart.git",
+        name: "dtv",
+        url: "https://github.com/OtherCo/dtv.git",
         defaultBranch: "master",
-        description: "Play framework based implementation of Nosto service"
+        description: "Play framework based commerce service"
       },
       sourceRepo: {
-        description: "Play framework based implementation of Nosto service",
+        description: "Play framework based commerce service",
         topics: [],
         size: 150_000
       },
@@ -151,7 +151,7 @@ describe("repo-metadata-codex-curator", () => {
       runCodexPromptFn: vi.fn(async () => ({
         text: JSON.stringify({
           description: "Main web application for merchant backend, merchant frontend, and api services.",
-          topics: ["merchant-backend", "checkout", "api-services", "personalization", "recommendations", "https", "setup", "can", "nosto"],
+          topics: ["merchant-backend", "checkout", "api-services", "personalization", "recommendations", "https", "setup", "can"],
           classifications: ["infra", "library", "external", "microservice", "backend"]
         })
       }))

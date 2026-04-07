@@ -179,9 +179,9 @@ describe("render", () => {
         {
           status: "new",
           repo: {
-            name: "playcart",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/playcart",
+            name: "dtv",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/dtv",
             description: "Storefront backend",
             topics: ["play"],
             classifications: ["backend", "external"]
@@ -197,7 +197,7 @@ describe("render", () => {
 
     expect(summary).toContain("GitHub repo discovery for leanish + orgs (Accessible):");
     expect(summary).toContain("leanish:\n- archa [new]");
-    expect(summary).toContain("Nosto:\n- playcart [new]");
+    expect(summary).toContain("OtherCo:\n- dtv [new]");
     expect(summary).toContain("Config updated: /tmp/archa-config.json");
   });
 
@@ -223,8 +223,8 @@ describe("render", () => {
           status: "new",
           repo: {
             name: "shared",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/shared",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/shared",
             description: "",
             topics: [],
             classifications: []
@@ -239,7 +239,7 @@ describe("render", () => {
     });
 
     expect(summary).toContain("leanish:\n- leanish/shared [new]");
-    expect(summary).toContain("Nosto:\n- Nosto/shared [new]");
+    expect(summary).toContain("OtherCo:\n- OtherCo/shared [new]");
   });
 
   it("derives owner-qualified labels from the GitHub URL when source metadata is missing", () => {
@@ -262,10 +262,10 @@ describe("render", () => {
         {
           status: "new",
           repo: {
-            name: "nosto/nullability",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/nullability",
-            url: "https://github.com/Nosto/nullability.git",
+            name: "otherco/nullability",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/nullability",
+            url: "https://github.com/OtherCo/nullability.git",
             description: "",
             topics: [],
             classifications: []
@@ -280,6 +280,6 @@ describe("render", () => {
     });
 
     expect(summary).toContain("- leanish/nullability [configured]");
-    expect(summary).toContain("- Nosto/nullability [new]");
+    expect(summary).toContain("- OtherCo/nullability [new]");
   });
 });
