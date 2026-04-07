@@ -78,6 +78,7 @@ The config file contains:
 - `repos`: the curated repo list, including URL, branch, description, generic `topics`, high-signal `classifications`, and optional aliases
 
 Repo names and aliases must be unique case-insensitively. Aliases must be non-empty strings.
+When discovery qualifies a colliding GitHub repo name as `<owner>/<repo>`, that qualified name is also used under `managedReposRoot`, so the checkout lives in an owner-scoped directory like `.../repos/leanish/nullability`.
 
 Example using a few public `leanish` repos:
 

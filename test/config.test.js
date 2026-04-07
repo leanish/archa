@@ -94,6 +94,36 @@ describe("config", () => {
     ]);
   });
 
+  it("maps owner-qualified repo names to owner-scoped checkout directories", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      repos: [
+        {
+          name: "leanish/nullability",
+          url: "https://github.com/leanish/nullability.git",
+          defaultBranch: "main"
+        }
+      ]
+    }, null, 2));
+
+    const loaded = await loadConfig(env);
+
+    expect(loaded.repos).toEqual([
+      {
+        name: "leanish/nullability",
+        url: "https://github.com/leanish/nullability.git",
+        defaultBranch: "main",
+        description: "",
+        topics: [],
+        classifications: [],
+        aliases: [],
+        alwaysSelect: false,
+        directory: path.join(tempRoot, "data", "archa", "repos", "leanish", "nullability")
+      }
+    ]);
+  });
+
   it("throws a clear error when the config file is missing", async () => {
     await expect(loadConfig(env)).rejects.toThrow(
       `Archa config not found at ${path.join(tempRoot, "config", "archa", "config.json")}. Run "archa config init" or set ARCHA_CONFIG_PATH.`
