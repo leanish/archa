@@ -69,13 +69,15 @@ describe("codex-runner", () => {
 
     expect(context.workingDirectory).toBe("/workspace/archa/repos/sqs-codec");
     expect(context.prompt).toContain("Answer using the code in the current workspace.");
-    expect(context.prompt).toContain("Write for a general engineering reader. Keep the answer self-contained and do not assume the reader can inspect this workspace.");
+    expect(context.prompt).toContain("Write for a non-engineering reader. Keep the answer self-contained and do not assume the reader can inspect this workspace.");
+    expect(context.prompt).toContain("Assume no knowledge or access to source code or implementation details.");
     expect(context.prompt).toContain("Explain the behavior in plain language, not as a code walkthrough.");
-    expect(context.prompt).toContain("Do not mention file paths, line numbers, tests, functions, classes, or other code symbols unless the user explicitly asks for them or they are required for accuracy.");
-    expect(context.prompt).toContain("Translate implementation details into user-facing behavior and outcomes instead of citing source identifiers.");
+    expect(context.prompt).toContain("Avoid unnecessary references to files, symbols, and other analyzed-workspace code details unless they are needed for accuracy or explicitly requested.");
+    expect(context.prompt).toContain("Service-interaction code, API payloads, and integration examples are allowed when they help explain usage or behavior.");
+    expect(context.prompt).toContain("Translate implementation details into user-facing behavior and outcomes instead of citing analyzed-workspace source identifiers.");
     expect(context.prompt).toContain("Use code snippets only when they help explain integration or behavior.");
     expect(context.prompt).toContain("These repos are in scope for answering the question: sqs-codec.");
-    expect(context.prompt).toContain("Before finalizing, remove unnecessary code references.");
+    expect(context.prompt).toContain("Before finalizing, remove unnecessary references to analyzed-workspace code.");
     expect(context.prompt).toContain("Answer the question directly and stop. Do not offer follow-up help or ask whether you should rewrite the answer.");
     expect(context.prompt).toContain('I got the question:\n"""\n');
     expect(context.prompt).toContain(question);

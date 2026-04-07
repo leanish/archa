@@ -210,7 +210,7 @@ Ask a question. By default `archa` will:
 2. sync them to the latest tracked trunk tip
 3. run `codex exec` with `gpt-5.4-mini` and `low` reasoning effort
 
-By default, answers target a general engineering reader. When the reader can inspect the repositories directly, use `--audience codebase` to get a more implementation-oriented answer.
+By default, answers target non-engineering readers who need the system behavior explained clearly. When the reader can inspect the repositories directly, use `--audience codebase` to get a more implementation-oriented answer.
 
 While it runs, `archa` keeps progress reporting high-level, including a heartbeat every 5 seconds during long Codex runs. Raw nested Codex logs stay hidden unless the command fails.
 
@@ -303,7 +303,7 @@ The response includes a job id plus links:
 ```
 
 When `model` or `reasoningEffort` are omitted from the HTTP request, the server uses the same defaults as the CLI: `gpt-5.4-mini` and `low`.
-When `audience` is omitted, the server defaults to `general`, which aims for plain-language answers without file or symbol references unless they are explicitly needed. Use `codebase` when the reader can inspect the managed repos directly and wants file- and symbol-level detail.
+When `audience` is omitted, the server defaults to `general`, which assumes no knowledge of source code or implementation details and avoids unnecessary references to the analyzed workspace's files or symbols. Service and integration examples are still allowed when they help explain behavior. Use `codebase` when the reader can inspect the managed repos directly and wants file- and symbol-level detail.
 
 Poll job state:
 

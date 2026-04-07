@@ -142,12 +142,14 @@ function getAudiencePromptLines(audience) {
   }
 
   return [
-    "Write for a general engineering reader. Keep the answer self-contained and do not assume the reader can inspect this workspace.",
+    "Write for a non-engineering reader. Keep the answer self-contained and do not assume the reader can inspect this workspace.",
+    "Assume no knowledge or access to source code or implementation details.",
     "Explain the behavior in plain language, not as a code walkthrough.",
-    "Do not mention file paths, line numbers, tests, functions, classes, or other code symbols unless the user explicitly asks for them or they are required for accuracy.",
-    "Translate implementation details into user-facing behavior and outcomes instead of citing source identifiers.",
+    "Avoid unnecessary references to files, symbols, and other analyzed-workspace code details unless they are needed for accuracy or explicitly requested.",
+    "Service-interaction code, API payloads, and integration examples are allowed when they help explain usage or behavior.",
+    "Translate implementation details into user-facing behavior and outcomes instead of citing analyzed-workspace source identifiers.",
     "Use code snippets only when they help explain integration or behavior.",
-    "Before finalizing, remove unnecessary code references."
+    "Before finalizing, remove unnecessary references to analyzed-workspace code."
   ];
 }
 
