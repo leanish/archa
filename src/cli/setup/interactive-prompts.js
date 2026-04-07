@@ -206,7 +206,6 @@ async function promptLineOrCancelWithEscape(readline, {
           settled = true;
           cleanup();
           output.write("\n");
-          readline.close();
           resolve(null);
           return;
         }
@@ -218,7 +217,6 @@ async function promptLineOrCancelWithEscape(readline, {
           settled = true;
           cleanup();
           output.write("\n");
-          readline.close();
           resolve(null);
         }
       };
