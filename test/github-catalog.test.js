@@ -234,6 +234,75 @@ describe("github-catalog", () => {
     }));
   });
 
+  it("keeps discovery refinement context lean and out of JSON serialization", async () => {
+    const inspectRepoFn = vi.fn(async () => []);
+    const fetchFn = vi.fn(async url => {
+      if (url === "https://api.github.com/users/leanish") {
+        return createJsonResponse(200, {
+          login: "leanish",
+          type: "User"
+        });
+      }
+
+      if (url === "https://api.github.com/users/leanish/repos?per_page=100&page=1&sort=full_name&type=owner") {
+        return createJsonResponse(200, [
+          {
+            name: "archa",
+            clone_url: "https://github.com/leanish/archa.git",
+            default_branch: "main",
+            description: "Repo-aware CLI",
+            topics: [],
+            size: 6400,
+            fork: false,
+            archived: false,
+            disabled: false,
+            private: true,
+            visibility: "private",
+            node_id: "R_kgDOTest",
+            full_name: "leanish/archa",
+            owner: {
+              login: "leanish",
+              id: 42
+            }
+          }
+        ]);
+      }
+
+      if (url === "https://api.github.com/repos/leanish/archa/topics") {
+        return createJsonResponse(200, {
+          names: ["cli"]
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const result = await discoverGithubOwnerRepos({
+      owner: "leanish",
+      fetchFn,
+      inspectRepoFn
+    });
+
+    expect(result.discoveryContext.discoveredRepos).toEqual([
+      {
+        name: "archa",
+        clone_url: "https://github.com/leanish/archa.git",
+        default_branch: "main",
+        description: "Repo-aware CLI",
+        topics: [],
+        size: 6400,
+        fork: false,
+        archived: false,
+        disabled: false,
+        full_name: "leanish/archa",
+        owner: {
+          login: "leanish"
+        }
+      }
+    ]);
+    expect(JSON.parse(JSON.stringify(result))).not.toHaveProperty("discoveryContext");
+  });
+
   it("includes private user repos when discovery is authenticated for the same owner", async () => {
     const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async url => {

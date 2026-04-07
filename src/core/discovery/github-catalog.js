@@ -225,14 +225,11 @@ export async function discoverGithubOwnerRepos({
     includeSourceMetadata: isAccessibleDiscovery,
     sourceOwnerFallback
   });
-  return {
-    ...result,
-    discoveryContext: {
-      discoveredRepos,
-      includeSourceMetadata: isAccessibleDiscovery,
-      sourceOwnerFallback
-    }
-  };
+  return attachDiscoveryContext(result, {
+    discoveredRepos,
+    includeSourceMetadata: isAccessibleDiscovery,
+    sourceOwnerFallback
+  });
 }
 
 export async function refineDiscoveredGithubRepos({
@@ -964,6 +961,60 @@ function normalizeSelectedRepoNames(selectedRepoNames) {
     .filter(Boolean);
 
   return names.length > 0 ? new Set(names) : null;
+}
+
+function attachDiscoveryContext(result, {
+  discoveredRepos,
+  includeSourceMetadata,
+  sourceOwnerFallback
+}) {
+  const discoveryResult = {
+    ...result,
+    discoveryContext: {
+      discoveredRepos: discoveredRepos.map(createDiscoveryContextRepo),
+      includeSourceMetadata,
+      sourceOwnerFallback
+    }
+  };
+
+  Object.defineProperty(discoveryResult, "toJSON", {
+    value() {
+      const {
+        discoveryContext: _discoveryContext,
+        ...serializableResult
+      } = this;
+      return serializableResult;
+    },
+    enumerable: false
+  });
+
+  return discoveryResult;
+}
+
+function createDiscoveryContextRepo(repo) {
+  const normalizedContextRepo = {
+    name: repo.name,
+    clone_url: repo.clone_url,
+    default_branch: repo.default_branch,
+    description: repo.description,
+    topics: Array.isArray(repo.topics) ? [...repo.topics] : [],
+    size: typeof repo.size === "number" ? repo.size : 0,
+    fork: repo.fork === true,
+    archived: repo.archived === true,
+    disabled: repo.disabled === true
+  };
+
+  if (typeof repo.full_name === "string" && repo.full_name.trim() !== "") {
+    normalizedContextRepo.full_name = repo.full_name;
+  }
+
+  if (typeof repo.owner?.login === "string" && repo.owner.login.trim() !== "") {
+    normalizedContextRepo.owner = {
+      login: repo.owner.login
+    };
+  }
+
+  return normalizedContextRepo;
 }
 
 export function getGithubDiscoveryRepoKey(repo) {
