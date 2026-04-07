@@ -28,7 +28,7 @@ export function getDiscoveryRepoBaseName(repo) {
     return repo.name.split("/").pop().trim();
   }
 
-  return repo?.name;
+  return typeof repo?.name === "string" ? repo.name : "";
 }
 
 export function getDiscoveryOwnerLabel(repo) {

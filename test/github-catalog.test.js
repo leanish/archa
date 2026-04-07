@@ -420,7 +420,8 @@ describe("github-catalog", () => {
       skippedArchived: 0
     });
     expect(onProgress).toHaveBeenNthCalledWith(3, {
-      type: "repo-curated",
+      type: "repo-hydrated",
+      inspectRepos: true,
       owner: "leanish",
       repoName: "archa",
       processedCount: 1,

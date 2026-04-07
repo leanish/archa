@@ -82,19 +82,10 @@ export function createGithubDiscoveryProgressReporter({
         return;
       }
 
-      if (event.type === "repo-processed") {
-        const message = `Loading repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`;
-        if (isInteractive) {
-          writeInlineProgress(message, event.processedCount === event.totalCount);
-          return;
-        }
-
-        output.write(`${message}\n`);
-        return;
-      }
-
-      if (event.type === "repo-curated") {
-        const message = `Curating repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`;
+      if (event.type === "repo-hydrated") {
+        const message = event.inspectRepos
+          ? `Curating repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`
+          : `Loading repos: ${event.processedCount}/${event.totalCount} (${event.repoName})`;
         if (isInteractive) {
           writeInlineProgress(message, event.processedCount === event.totalCount);
           return;

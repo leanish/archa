@@ -383,11 +383,12 @@ describe("cli", () => {
         skippedForks: 1,
         skippedArchived: 0
       });
-      onProgress?.({
-        type: "repo-processed",
-        owner: "leanish",
-        repoName: "archa",
-        processedCount: 1,
+        onProgress?.({
+          type: "repo-hydrated",
+          inspectRepos: false,
+          owner: "leanish",
+          repoName: "archa",
+          processedCount: 1,
         totalCount: 1
       });
 
@@ -589,7 +590,8 @@ describe("cli", () => {
           skippedArchived: 0
         });
         onProgress?.({
-          type: "repo-curated",
+          type: "repo-hydrated",
+          inspectRepos: true,
           owner: "leanish",
           repoName: "java-conventions",
           processedCount: 1,

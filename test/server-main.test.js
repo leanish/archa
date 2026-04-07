@@ -285,7 +285,8 @@ describe("server-main", () => {
           skippedArchived: 0
         });
         onProgress?.({
-          type: "repo-curated",
+          type: "repo-hydrated",
+          inspectRepos: true,
           owner: "leanish",
           repoName: "archa",
           processedCount: 1,

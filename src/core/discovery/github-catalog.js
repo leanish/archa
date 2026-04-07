@@ -315,9 +315,10 @@ async function hydrateReposSequentially({
     });
 
     onProgress?.({
-      type: "repo-curated",
+      type: "repo-hydrated",
       owner,
       repoName: repo.name,
+      inspectRepos,
       processedCount: index + 1,
       totalCount: reposToProcess.length
     });
@@ -476,9 +477,10 @@ async function hydrateReposInParallel({
 
     processedCount += 1;
     onProgress?.({
-      type: "repo-processed",
+      type: "repo-hydrated",
       owner,
       repoName: repo.name,
+      inspectRepos,
       processedCount,
       totalCount: reposToProcess.length
     });
@@ -527,20 +529,17 @@ export function planGithubRepoDiscovery(config, discovery) {
   const reposByName = new Map();
   const reposByIdentifier = new Map();
   const reposByGithubIdentity = new Map();
-  const reservedIdentifiers = new Set();
   const discoveryNameCounts = buildDiscoveryRepoNameCounts(discovery.repos);
 
   for (const repo of config.repos) {
     reposByName.set(repo.name.toLowerCase(), repo);
     reposByIdentifier.set(repo.name.toLowerCase(), repo);
-    reservedIdentifiers.add(repo.name.toLowerCase());
     const githubIdentity = getConfiguredGithubRepoIdentity(repo);
     if (githubIdentity) {
       reposByGithubIdentity.set(githubIdentity, repo);
     }
     for (const alias of repo.aliases || []) {
       reposByIdentifier.set(alias.toLowerCase(), repo);
-      reservedIdentifiers.add(alias.toLowerCase());
     }
   }
 
@@ -568,7 +567,6 @@ export function planGithubRepoDiscovery(config, discovery) {
       sameNamedConfiguredRepo
     });
     if (qualifiedRepo) {
-      reservedIdentifiers.add(qualifiedRepo.name.toLowerCase());
       return {
         repo: qualifiedRepo,
         status: "new",
@@ -586,8 +584,6 @@ export function planGithubRepoDiscovery(config, discovery) {
         suggestions: []
       };
     }
-
-    reservedIdentifiers.add(repo.name.toLowerCase());
     return {
       repo,
       status: "new",

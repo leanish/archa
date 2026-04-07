@@ -22,13 +22,15 @@ describe("github-discovery-progress", () => {
       inspectRepos: false
     });
     reporter.onProgress({
-      type: "repo-processed",
+      type: "repo-hydrated",
+      inspectRepos: false,
       processedCount: 1,
       totalCount: 2,
       repoName: "archa"
     });
     reporter.onProgress({
-      type: "repo-processed",
+      type: "repo-hydrated",
+      inspectRepos: false,
       processedCount: 2,
       totalCount: 2,
       repoName: "terminator"
@@ -145,7 +147,8 @@ describe("github-discovery-progress", () => {
 
     reporter.start("leanish");
     reporter.onProgress({
-      type: "repo-processed",
+      type: "repo-hydrated",
+      inspectRepos: false,
       processedCount: 1,
       totalCount: 2,
       repoName: "archa"
@@ -170,13 +173,15 @@ describe("github-discovery-progress", () => {
     const finalMessage = "Loading repos: 2/2 (terminator)";
 
     reporter.onProgress({
-      type: "repo-processed",
+      type: "repo-hydrated",
+      inspectRepos: false,
       processedCount: 1,
       totalCount: 2,
       repoName: "java-conventions"
     });
     reporter.onProgress({
-      type: "repo-processed",
+      type: "repo-hydrated",
+      inspectRepos: false,
       processedCount: 2,
       totalCount: 2,
       repoName: "terminator"
@@ -205,7 +210,8 @@ describe("github-discovery-progress", () => {
       inspectRepos: true
     });
     reporter.onProgress({
-      type: "repo-curated",
+      type: "repo-hydrated",
+      inspectRepos: true,
       processedCount: 1,
       totalCount: 1,
       repoName: "archa"
