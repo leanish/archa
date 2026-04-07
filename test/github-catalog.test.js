@@ -400,9 +400,9 @@ describe("github-catalog", () => {
             }
           },
           {
-            name: "playcart",
-            full_name: "Nosto/playcart",
-            clone_url: "https://github.com/Nosto/playcart.git",
+            name: "dtv",
+            full_name: "OtherCo/dtv",
+            clone_url: "https://github.com/OtherCo/dtv.git",
             default_branch: "master",
             description: "Storefront backend",
             topics: ["play"],
@@ -410,7 +410,7 @@ describe("github-catalog", () => {
             fork: false,
             archived: false,
             owner: {
-              login: "Nosto"
+              login: "OtherCo"
             }
           }
         ]);
@@ -446,14 +446,14 @@ describe("github-catalog", () => {
           sourceFullName: "leanish/archa"
         },
         {
-          name: "playcart",
-          url: "https://github.com/Nosto/playcart.git",
+          name: "dtv",
+          url: "https://github.com/OtherCo/dtv.git",
           defaultBranch: "master",
           description: "Storefront backend",
           topics: ["play"],
           classifications: [],
-          sourceOwner: "Nosto",
-          sourceFullName: "Nosto/playcart"
+          sourceOwner: "OtherCo",
+          sourceFullName: "OtherCo/dtv"
         }
       ],
       skippedForks: 0,
@@ -1178,20 +1178,20 @@ describe("github-catalog", () => {
   it("uses a larger fallback topic budget for massive repos and filters weak tokens", async () => {
     const inspectRepoFn = vi.fn(async () => []);
     const fetchFn = vi.fn(async url => {
-      if (url === "https://api.github.com/users/nosto") {
+      if (url === "https://api.github.com/users/otherco") {
         return createJsonResponse(200, {
-          login: "Nosto",
+          login: "OtherCo",
           type: "Organization"
         });
       }
 
-      if (url === "https://api.github.com/orgs/nosto/repos?per_page=100&page=1&sort=full_name&type=all") {
+      if (url === "https://api.github.com/orgs/otherco/repos?per_page=100&page=1&sort=full_name&type=all") {
         return createJsonResponse(200, [
           {
-            name: "playcart",
-            clone_url: "https://github.com/Nosto/playcart.git",
+            name: "dtv",
+            clone_url: "https://github.com/OtherCo/dtv.git",
             default_branch: "master",
-            description: "Nosto checkout storefront onboarding pricing personalization recommendations search analytics sessions campaigns catalogs products can setup https implementation",
+            description: "Checkout storefront onboarding pricing personalization recommendations search analytics sessions campaigns catalogs products can setup https implementation",
             topics: [],
             size: 150000,
             fork: false,
@@ -1200,7 +1200,7 @@ describe("github-catalog", () => {
         ]);
       }
 
-      if (url === "https://api.github.com/repos/nosto/playcart/topics") {
+      if (url === "https://api.github.com/repos/otherco/dtv/topics") {
         return createJsonResponse(200, {
           names: []
         });
@@ -1210,7 +1210,7 @@ describe("github-catalog", () => {
     });
 
     const result = await discoverGithubOwnerRepos({
-      owner: "nosto",
+      owner: "otherco",
       fetchFn,
       inspectRepoFn,
       inspectRepos: false,
@@ -1593,11 +1593,11 @@ describe("github-catalog", () => {
     }));
 
     await expect(discoverGithubOwnerRepos({
-      owner: "nosto",
+      owner: "otherco",
       fetchFn,
       inspectRepoFn
     })).rejects.toThrow(
-      "GitHub API rate limit exceeded while requesting /users/nosto. Authenticate discovery with GH_TOKEN or GITHUB_TOKEN, or retry later."
+      "GitHub API rate limit exceeded while requesting /users/otherco. Authenticate discovery with GH_TOKEN or GITHUB_TOKEN, or retry later."
     );
   });
 
@@ -1800,9 +1800,9 @@ describe("github-catalog", () => {
         },
         {
           name: "nullability",
-          sourceOwner: "Nosto",
-          sourceFullName: "Nosto/nullability",
-          url: "https://github.com/Nosto/nullability.git",
+          sourceOwner: "OtherCo",
+          sourceFullName: "OtherCo/nullability",
+          url: "https://github.com/OtherCo/nullability.git",
           defaultBranch: "main",
           description: "",
           topics: [],
@@ -1825,12 +1825,12 @@ describe("github-catalog", () => {
         url: "https://github.com/leanish/nullability.git"
       }
     });
-    expect(plan.entries.find(entry => entry.repo.sourceFullName === "Nosto/nullability")).toMatchObject({
+    expect(plan.entries.find(entry => entry.repo.sourceFullName === "OtherCo/nullability")).toMatchObject({
       status: "new",
       repo: {
-        name: "nosto/nullability",
-        sourceFullName: "Nosto/nullability",
-        url: "https://github.com/Nosto/nullability.git"
+        name: "otherco/nullability",
+        sourceFullName: "OtherCo/nullability",
+        url: "https://github.com/OtherCo/nullability.git"
       }
     });
   });

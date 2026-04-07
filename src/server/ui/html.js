@@ -311,8 +311,8 @@ button[type="submit"]:disabled {
         <div class="field">
           <label for="model">Model</label>
           <select id="model" name="model">
-            <option value="gpt-5.4-mini" selected>gpt-5.4-mini</option>
             <option value="gpt-5.4">gpt-5.4</option>
+            <option value="gpt-5.4-mini" selected>gpt-5.4-mini</option>
           </select>
         </div>
         <div class="field">

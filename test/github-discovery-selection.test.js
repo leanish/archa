@@ -103,9 +103,9 @@ describe("github-discovery-selection", () => {
           status: "new",
           repo: {
             name: "shared",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/shared",
-            url: "https://github.com/Nosto/shared.git",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/shared",
+            url: "https://github.com/OtherCo/shared.git",
             defaultBranch: "main",
             description: "",
             topics: []
@@ -116,7 +116,7 @@ describe("github-discovery-selection", () => {
     };
 
     expect(selectGithubDiscoveryRepos(multiOwnerPlan, {
-      addRepoNames: ["leanish/shared", "Nosto/shared"]
+      addRepoNames: ["leanish/shared", "OtherCo/shared"]
     })).toEqual({
       reposToAdd: [multiOwnerPlan.entries[0].repo, multiOwnerPlan.entries[1].repo],
       reposToOverride: []
@@ -359,10 +359,10 @@ describe("github-discovery-selection", () => {
         {
           status: "new",
           repo: {
-            name: "nosto/nullability",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/nullability",
-            url: "https://github.com/Nosto/nullability.git",
+            name: "otherco/nullability",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/nullability",
+            url: "https://github.com/OtherCo/nullability.git",
             defaultBranch: "main",
             description: "",
             topics: []
@@ -392,7 +392,7 @@ describe("github-discovery-selection", () => {
       reposToAdd: [collisionPlan.entries[1].repo],
       reposToOverride: []
     });
-    expect(prompts[0]).toContain("New (1): Nosto/nullability");
+    expect(prompts[0]).toContain("New (1): OtherCo/nullability");
     expect(prompts[0]).toContain("Configured already (1): leanish/nullability");
     expect(prompts[1]).toBe(
       "Add all 1 new repo(s)? Press Enter to confirm, or type repo names to customize.\n> "
@@ -417,10 +417,10 @@ describe("github-discovery-selection", () => {
         {
           status: "new",
           repo: {
-            name: "nosto/nullability",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/nullability",
-            url: "https://github.com/Nosto/nullability.git",
+            name: "otherco/nullability",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/nullability",
+            url: "https://github.com/OtherCo/nullability.git",
             defaultBranch: "main",
             description: "",
             topics: []
@@ -469,10 +469,10 @@ describe("github-discovery-selection", () => {
         {
           status: "new",
           repo: {
-            name: "playcart",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/playcart",
-            url: "https://github.com/Nosto/playcart.git",
+            name: "dtv",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/dtv",
+            url: "https://github.com/OtherCo/dtv.git",
             defaultBranch: "master",
             description: "Storefront backend",
             topics: ["play"]
@@ -485,7 +485,7 @@ describe("github-discovery-selection", () => {
     const fakeReadline = {
       question: async prompt => {
         prompts.push(prompt);
-        return "Nosto/playcart";
+        return "OtherCo/dtv";
       },
       close() {}
     };
@@ -502,7 +502,7 @@ describe("github-discovery-selection", () => {
       reposToAdd: [multiOwnerPlan.entries[1].repo],
       reposToOverride: []
     });
-    expect(prompts[0]).toContain("New (2):\nleanish: archa\nNosto: playcart");
+    expect(prompts[0]).toContain("New (2):\nleanish: archa\nOtherCo: dtv");
   });
 
   it("keeps owner-qualified labels only when repo names collide across owners", async () => {
@@ -526,9 +526,9 @@ describe("github-discovery-selection", () => {
           status: "new",
           repo: {
             name: "shared",
-            sourceOwner: "Nosto",
-            sourceFullName: "Nosto/shared",
-            url: "https://github.com/Nosto/shared.git",
+            sourceOwner: "OtherCo",
+            sourceFullName: "OtherCo/shared",
+            url: "https://github.com/OtherCo/shared.git",
             defaultBranch: "main",
             description: "Company shared repo",
             topics: []
@@ -541,7 +541,7 @@ describe("github-discovery-selection", () => {
     const fakeReadline = {
       question: async prompt => {
         prompts.push(prompt);
-        return "Nosto/shared";
+        return "OtherCo/shared";
       },
       close() {}
     };
@@ -559,7 +559,7 @@ describe("github-discovery-selection", () => {
       reposToOverride: []
     });
     expect(prompts[0]).toContain("leanish: leanish/shared");
-    expect(prompts[0]).toContain("Nosto: Nosto/shared");
+    expect(prompts[0]).toContain("OtherCo: OtherCo/shared");
   });
 
   it("rejects interactive selection without a tty", async () => {

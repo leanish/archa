@@ -53,7 +53,7 @@ describe("github-discovery-progress", () => {
       isInteractive: false
     });
 
-    reporter.start("Nosto");
+    reporter.start("OtherCo");
     reporter.onProgress({
       type: "discovery-fetching"
     });
@@ -83,7 +83,7 @@ describe("github-discovery-progress", () => {
       inspectRepos: false
     });
 
-    expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for Nosto...\n");
+    expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for OtherCo...\n");
     expect(output.write).toHaveBeenNthCalledWith(2, "Fetching repos...\n");
     expect(output.write).toHaveBeenNthCalledWith(3, "Fetching repos... page 1 (100 fetched so far)\n");
     expect(output.write).toHaveBeenNthCalledWith(4, "Fetching repos... page 2 (200 fetched so far)\n");
@@ -101,7 +101,7 @@ describe("github-discovery-progress", () => {
       isInteractive: true
     });
 
-    reporter.start("Nosto");
+    reporter.start("OtherCo");
     reporter.onProgress({
       type: "discovery-fetching"
     });
@@ -125,7 +125,7 @@ describe("github-discovery-progress", () => {
       inspectRepos: false
     });
 
-    expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for Nosto...\n");
+    expect(output.write).toHaveBeenNthCalledWith(1, "Discovering GitHub repos for OtherCo...\n");
     expect(output.write).toHaveBeenNthCalledWith(2, "\rFetching repos...");
     expect(output.write).toHaveBeenNthCalledWith(3, "\rFetching repos... page 1 (100 fetched so far)");
     expect(output.write).toHaveBeenNthCalledWith(
