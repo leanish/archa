@@ -174,7 +174,7 @@ describe("syncRepos", () => {
     ]);
   });
 
-  it("records unsupported trunk branches per repo and continues syncing others", async () => {
+  it("supports non-standard default branches", async () => {
     mocks.access.mockRejectedValueOnce(new Error("missing"));
     mocks.spawn.mockReturnValue(createSuccessfulChild());
 
@@ -184,12 +184,37 @@ describe("syncRepos", () => {
         url: "git@github.com:leanish/sqs-codec.git",
         directory: "/workspace/repos/sqs-codec",
         defaultBranch: "develop"
-      },
+      }
+    ]);
+
+    expect(report).toEqual([
       {
-        name: "java-conventions",
-        url: "git@github.com:leanish/java-conventions.git",
-        directory: "/workspace/repos/java-conventions",
-        defaultBranch: "main"
+        name: "sqs-codec",
+        directory: "/workspace/repos/sqs-codec",
+        action: "cloned",
+        detail: "develop"
+      }
+    ]);
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.spawn).toHaveBeenCalledWith("git", [
+      "clone",
+      "--branch",
+      "develop",
+      "--single-branch",
+      "git@github.com:leanish/sqs-codec.git",
+      "/workspace/repos/sqs-codec"
+    ], expect.objectContaining({
+      stdio: ["ignore", "pipe", "pipe"]
+    }));
+  });
+
+  it("records a clear failure when the tracked branch is missing", async () => {
+    const report = await syncRepos([
+      {
+        name: "sqs-codec",
+        url: "git@github.com:leanish/sqs-codec.git",
+        directory: "/workspace/repos/sqs-codec",
+        defaultBranch: ""
       }
     ]);
 
@@ -198,16 +223,10 @@ describe("syncRepos", () => {
         name: "sqs-codec",
         directory: "/workspace/repos/sqs-codec",
         action: "failed",
-        detail: "Unsupported branch for managed repo sqs-codec: develop. Only main/master are supported."
-      },
-      {
-        name: "java-conventions",
-        directory: "/workspace/repos/java-conventions",
-        action: "cloned",
-        detail: "main"
+        detail: "Managed repo sqs-codec is missing a default branch. Update its config entry with defaultBranch, then retry."
       }
     ]);
-    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.spawn).not.toHaveBeenCalled();
   });
 });
 

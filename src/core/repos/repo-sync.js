@@ -16,7 +16,7 @@ export async function syncRepos(repos, callbacks = {}) {
 
 export async function syncRepo(repo, callbacks = {}) {
   try {
-    const trunkBranch = getTrunkBranch(repo);
+    const trunkBranch = getTrackedBranch(repo);
 
     await fs.mkdir(path.dirname(repo.directory), { recursive: true });
 
@@ -55,10 +55,14 @@ export async function syncRepo(repo, callbacks = {}) {
   }
 }
 
-function getTrunkBranch(repo) {
-  const branch = repo.defaultBranch || repo.branch;
-  if (branch !== "main" && branch !== "master") {
-    throw new Error(`Unsupported branch for managed repo ${repo.name}: ${branch}. Only main/master are supported.`);
+function getTrackedBranch(repo) {
+  const branch = typeof (repo.defaultBranch || repo.branch) === "string"
+    ? (repo.defaultBranch || repo.branch).trim()
+    : "";
+  if (!branch) {
+    throw new Error(
+      `Managed repo ${repo.name} is missing a default branch. Update its config entry with defaultBranch, then retry.`
+    );
   }
   return branch;
 }

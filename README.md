@@ -213,7 +213,7 @@ By default, answers target a general engineering reader. When the reader can ins
 
 While it runs, `archa` keeps progress reporting high-level, including a heartbeat every 10 seconds during long Codex runs. Raw nested Codex logs stay hidden unless the command fails.
 
-Managed repos are synced only against their default trunk branch, currently limited to `main` or `master`. Discovery’s temporary inspection clones are shallow. Managed repo sync uses normal long-lived checkouts; if a managed repo happens to be shallow, Archa first runs `git fetch --unshallow` before the normal fast-forward update flow.
+Managed repos are synced against their configured `defaultBranch`. Discovery’s temporary inspection clones are shallow. Managed repo sync uses normal long-lived checkouts; if a managed repo happens to be shallow, Archa first runs `git fetch --unshallow` before the normal fast-forward update flow.
 
 A few example questions against public `leanish` repos:
 
