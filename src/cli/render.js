@@ -1,5 +1,13 @@
 import fs from "node:fs";
 
+import {
+  compareDiscoveryOwnerLabels,
+  getDiscoveryOwnerLabel,
+  getDiscoveryRepoBaseName,
+  getGithubRepoDisplayIdentity,
+  getPrimarySourceOwner
+} from "../core/discovery/repo-display-utils.js";
+
 export function renderRepoList(repos) {
   const lines = ["Managed repos:"];
 
@@ -63,7 +71,7 @@ export function renderGithubDiscovery(result) {
   );
 
   if (sourceOwners.size > 1) {
-    const groupedEntries = groupDiscoveryEntriesByOwner(entries, getPrimarySourceOwner(result));
+    const groupedEntries = groupDiscoveryEntriesByOwner(entries, getPrimarySourceOwner(result.ownerDisplay));
 
     for (const group of groupedEntries) {
       lines.push(`${group.ownerLabel}:`);
@@ -175,78 +183,7 @@ function groupDiscoveryEntriesByOwner(entries, primarySourceOwner) {
   }));
 }
 
-function getDiscoveryOwnerLabel(repo) {
-  if (typeof repo.sourceOwner === "string" && repo.sourceOwner.trim() !== "") {
-    return repo.sourceOwner.trim();
-  }
-
-  const githubIdentity = getGithubRepoDisplayIdentity(repo);
-  if (githubIdentity?.includes("/")) {
-    return githubIdentity.split("/")[0];
-  }
-
-  return "Other";
-}
-
-function compareDiscoveryOwnerLabels(left, right, primarySourceOwner) {
-  const normalizedPrimaryOwner = typeof primarySourceOwner === "string"
-    ? primarySourceOwner.trim().toLowerCase()
-    : "";
-  const normalizedLeft = left.toLowerCase();
-  const normalizedRight = right.toLowerCase();
-
-  if (normalizedPrimaryOwner) {
-    if (normalizedLeft === normalizedPrimaryOwner && normalizedRight !== normalizedPrimaryOwner) {
-      return -1;
-    }
-
-    if (normalizedRight === normalizedPrimaryOwner && normalizedLeft !== normalizedPrimaryOwner) {
-      return 1;
-    }
-  }
-
-  return normalizedLeft.localeCompare(normalizedRight);
-}
-
-function getPrimarySourceOwner(result) {
-  if (typeof result.ownerDisplay !== "string") {
-    return null;
-  }
-
-  const [primaryOwner] = result.ownerDisplay.split(" + orgs");
-  return primaryOwner?.trim() || null;
-}
-
 function isAmbiguousDiscoveryName(repo, entries) {
   const repoBaseName = getDiscoveryRepoBaseName(repo);
   return entries.filter(entry => getDiscoveryRepoBaseName(entry.repo) === repoBaseName).length > 1;
-}
-
-function getDiscoveryRepoBaseName(repo) {
-  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.includes("/")) {
-    return repo.sourceFullName.split("/").pop().trim();
-  }
-
-  if (typeof repo.name === "string" && repo.name.includes("/")) {
-    return repo.name.split("/").pop().trim();
-  }
-
-  return repo.name;
-}
-
-function getGithubRepoDisplayIdentity(repo) {
-  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.trim() !== "") {
-    return repo.sourceFullName.trim();
-  }
-
-  if (typeof repo.url !== "string" || repo.url.trim() === "") {
-    return null;
-  }
-
-  const match = repo.url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
-  if (!match) {
-    return null;
-  }
-
-  return `${match[1]}/${match[2]}`;
 }

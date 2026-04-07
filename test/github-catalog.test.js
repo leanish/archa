@@ -1555,6 +1555,44 @@ describe("github-catalog", () => {
     ]);
   });
 
+  it("does not suggest a url review when configured SSH and GitHub HTTPS URLs point to the same repo", () => {
+    const plan = planGithubRepoDiscovery({
+      repos: [
+        {
+          name: "foundation",
+          url: "git@github.com:leanish/foundation.git",
+          defaultBranch: "main",
+          description: "",
+          topics: [],
+          classifications: [],
+          aliases: [],
+          directory: "/repos/foundation"
+        }
+      ]
+    }, {
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          defaultBranch: "main",
+          description: "",
+          topics: [],
+          classifications: []
+        }
+      ]
+    });
+
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0].status).toBe("configured");
+    expect(plan.entries[0].suggestions).not.toContain(
+      "review url (git@github.com:leanish/foundation.git -> https://github.com/leanish/foundation.git)"
+    );
+  });
+
   it("qualifies owner-colliding repo names so they can coexist", () => {
     const plan = planGithubRepoDiscovery({
       repos: [

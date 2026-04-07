@@ -1,6 +1,15 @@
 import { createInterface } from "node:readline/promises";
 import process from "node:process";
 
+import {
+  compareDiscoveryOwnerLabels,
+  getDiscoveryOwnerLabel,
+  getDiscoveryRepoBaseName,
+  getGithubRepoDisplayIdentity,
+  getGithubRepoIdentityFromUrl,
+  getPrimarySourceOwner
+} from "../../core/discovery/repo-display-utils.js";
+
 export function selectGithubDiscoveryRepos(plan, {
   addRepoNames = [],
   overrideRepoNames = []
@@ -41,7 +50,7 @@ export async function promptGithubDiscoverySelection(plan, {
     return await promptForSelection(readline, {
       selectableEntries,
       conflictEntries,
-      primarySourceOwner: getPrimarySourceOwner(plan),
+      primarySourceOwner: getPrimarySourceOwner(plan.ownerDisplay),
       defaultSourceOwner: getDefaultSourceOwner(plan)
     });
   } finally {
@@ -303,7 +312,7 @@ function formatSelectionSectionLines({
 
   const sourceOwners = new Set(
     options
-      .map(option => getOwnerLabel(option.repo))
+      .map(option => getDiscoveryOwnerLabel(option.repo))
       .filter(sourceOwner => sourceOwner !== "Other")
   );
 
@@ -328,15 +337,9 @@ function formatSelectionOptionLabel(option) {
 }
 
 function formatConfiguredRepoLabel(repo) {
-  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.trim() !== "") {
-    return repo.sourceFullName.trim();
-  }
-
-  if (typeof repo.url === "string" && repo.url.trim() !== "") {
-    const match = repo.url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
-    if (match) {
-      return `${match[1]}/${match[2]}`;
-    }
+  const githubIdentity = getGithubRepoDisplayIdentity(repo);
+  if (githubIdentity) {
+    return githubIdentity;
   }
 
   return repo.name;
@@ -347,7 +350,7 @@ function groupSelectionOptionsByOwner(options, primarySourceOwner) {
   const orderedOwners = [];
 
   for (const option of options) {
-    const ownerLabel = getOwnerLabel(option.repo);
+    const ownerLabel = getDiscoveryOwnerLabel(option.repo);
     if (!groupsByOwner.has(ownerLabel)) {
       groupsByOwner.set(ownerLabel, []);
       orderedOwners.push(ownerLabel);
@@ -356,7 +359,7 @@ function groupSelectionOptionsByOwner(options, primarySourceOwner) {
     groupsByOwner.get(ownerLabel).push(option);
   }
 
-  orderedOwners.sort((left, right) => compareOwnerLabels(left, right, primarySourceOwner));
+  orderedOwners.sort((left, right) => compareDiscoveryOwnerLabels(left, right, primarySourceOwner));
 
   return orderedOwners.map(ownerLabel => ({
     ownerLabel,
@@ -364,50 +367,8 @@ function groupSelectionOptionsByOwner(options, primarySourceOwner) {
   }));
 }
 
-function getOwnerLabel(repo) {
-  if (typeof repo.sourceOwner === "string" && repo.sourceOwner.trim() !== "") {
-    return repo.sourceOwner.trim();
-  }
-
-  const githubIdentity = getGithubRepoIdentityFromUrl(repo.url);
-  if (githubIdentity?.includes("/")) {
-    return githubIdentity.split("/")[0];
-  }
-
-  return "Other";
-}
-
-function compareOwnerLabels(left, right, primarySourceOwner) {
-  const normalizedPrimaryOwner = typeof primarySourceOwner === "string"
-    ? primarySourceOwner.trim().toLowerCase()
-    : "";
-  const normalizedLeft = left.toLowerCase();
-  const normalizedRight = right.toLowerCase();
-
-  if (normalizedPrimaryOwner) {
-    if (normalizedLeft === normalizedPrimaryOwner && normalizedRight !== normalizedPrimaryOwner) {
-      return -1;
-    }
-
-    if (normalizedRight === normalizedPrimaryOwner && normalizedLeft !== normalizedPrimaryOwner) {
-      return 1;
-    }
-  }
-
-  return normalizedLeft.localeCompare(normalizedRight);
-}
-
-function getPrimarySourceOwner(plan) {
-  if (typeof plan.ownerDisplay !== "string") {
-    return null;
-  }
-
-  const [primaryOwner] = plan.ownerDisplay.split(" + orgs");
-  return primaryOwner?.trim() || null;
-}
-
 function getDefaultSourceOwner(plan) {
-  const primarySourceOwner = getPrimarySourceOwner(plan);
+  const primarySourceOwner = getPrimarySourceOwner(plan.ownerDisplay);
   if (primarySourceOwner) {
     return primarySourceOwner;
   }
@@ -423,24 +384,8 @@ function getRepoSelectionKey(repo) {
     : repo.name.toLowerCase();
 }
 
-function getDiscoveryRepoBaseName(repo) {
-  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.includes("/")) {
-    return repo.sourceFullName.split("/").pop().trim();
-  }
-
-  if (typeof repo.name === "string" && repo.name.includes("/")) {
-    return repo.name.split("/").pop().trim();
-  }
-
-  return repo.name;
-}
-
 function getQualifiedRepoLabel(repo, defaultSourceOwner) {
-  if (typeof repo.sourceFullName === "string" && repo.sourceFullName.trim() !== "") {
-    return repo.sourceFullName.trim();
-  }
-
-  const githubIdentity = getGithubRepoIdentityFromUrl(repo.url);
+  const githubIdentity = getGithubRepoDisplayIdentity(repo) || getGithubRepoIdentityFromUrl(repo.url);
   if (githubIdentity) {
     return githubIdentity;
   }
@@ -450,17 +395,4 @@ function getQualifiedRepoLabel(repo, defaultSourceOwner) {
   }
 
   return null;
-}
-
-function getGithubRepoIdentityFromUrl(url) {
-  if (typeof url !== "string" || url.trim() === "") {
-    return null;
-  }
-
-  const match = url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
-  if (!match) {
-    return null;
-  }
-
-  return `${match[1]}/${match[2]}`;
 }

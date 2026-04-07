@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 import { inspectRepoMetadata } from "./repo-classification-inspector.js";
+import { getGithubRepoDisplayIdentity } from "./repo-display-utils.js";
 
 const GITHUB_API_URL = "https://api.github.com";
 const PAGE_SIZE = 100;
@@ -724,7 +725,9 @@ async function resolveReposPath({ ownerType, owner, fetchFn, token }) {
 }
 
 function formatPagedReposPath(basePath, page) {
-  const [path, query = ""] = basePath.split("?");
+  const queryIndex = basePath.indexOf("?");
+  const path = queryIndex === -1 ? basePath : basePath.slice(0, queryIndex);
+  const query = queryIndex === -1 ? "" : basePath.slice(queryIndex + 1);
   const querySuffix = query ? `&${query}` : "";
   return `${path}?per_page=${PAGE_SIZE}&page=${page}${querySuffix}`;
 }
@@ -1252,8 +1255,11 @@ function emptyInspectionMetadata() {
 
 function buildRepoSuggestions(configuredRepo, githubRepo) {
   const suggestions = [];
+  const configuredIdentity = getGithubRepoDisplayIdentity(configuredRepo);
+  const githubIdentity = getGithubRepoDisplayIdentity(githubRepo);
+  const hasSameGithubIdentity = configuredIdentity && githubIdentity && configuredIdentity === githubIdentity;
 
-  if (configuredRepo.url !== githubRepo.url) {
+  if (!hasSameGithubIdentity && configuredRepo.url !== githubRepo.url) {
     suggestions.push(`review url (${configuredRepo.url} -> ${githubRepo.url})`);
   }
 
