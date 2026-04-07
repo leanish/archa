@@ -40,11 +40,11 @@ vi.mock("../src/git-installation.js", () => ({
   ensureGitInstalled: mocks.ensureGitInstalled
 }));
 
-vi.mock("../src/github-discovery-auth.js", () => ({
+vi.mock("../src/setup/discovery-auth.js", () => ({
   ensureGithubDiscoveryAuthAvailable: mocks.ensureGithubDiscoveryAuthAvailable
 }));
 
-vi.mock("../src/github-catalog.js", () => ({
+vi.mock("../src/setup/discovery.js", () => ({
   buildAppliedGithubDiscoveryEntries: mocks.buildAppliedGithubDiscoveryEntries,
   discoverGithubOwnerRepos: mocks.discoverGithubOwnerRepos,
   getGithubDiscoveryRepoKey: mocks.getGithubDiscoveryRepoKey,
@@ -53,7 +53,7 @@ vi.mock("../src/github-catalog.js", () => ({
   refineDiscoveredGithubRepos: mocks.refineDiscoveredGithubRepos
 }));
 
-vi.mock("../src/github-discovery-selection.js", () => ({
+vi.mock("../src/setup/discovery-selection.js", () => ({
   promptGithubDiscoverySelection: mocks.promptGithubDiscoverySelection
 }));
 

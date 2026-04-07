@@ -11,7 +11,7 @@ import { applyGithubDiscoveryToConfig, loadConfig, initializeConfig } from "./co
 import { ensureCodexInstalled } from "./codex-installation.js";
 import { getConfigPath } from "./config-paths.js";
 import { ensureGitInstalled } from "./git-installation.js";
-import { ensureGithubDiscoveryAuthAvailable } from "./github-discovery-auth.js";
+import { ensureGithubDiscoveryAuthAvailable } from "./setup/discovery-auth.js";
 import {
   buildAppliedGithubDiscoveryEntries,
   discoverGithubOwnerRepos,
@@ -19,9 +19,9 @@ import {
   mergeGithubDiscoveryPlan,
   planGithubRepoDiscovery,
   refineDiscoveredGithubRepos
-} from "./github-catalog.js";
-import { createGithubDiscoveryProgressReporter } from "./github-discovery-progress.js";
-import { promptGithubDiscoverySelection, selectGithubDiscoveryRepos } from "./github-discovery-selection.js";
+} from "./setup/discovery.js";
+import { createGithubDiscoveryProgressReporter } from "./setup/discovery-progress.js";
+import { promptGithubDiscoverySelection, selectGithubDiscoveryRepos } from "./setup/discovery-selection.js";
 import { parseArgs } from "./parse-args.js";
 import { answerQuestion } from "./question-answering.js";
 import {
