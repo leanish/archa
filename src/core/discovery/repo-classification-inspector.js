@@ -3,7 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-import { getDefaultManagedReposRoot } from "./config-paths.js";
+import { getDefaultManagedReposRoot } from "../config/config-paths.js";
+import { normalizeGitExecutionError } from "../git/git-installation.js";
+import { getManagedRepoDirectory, getManagedRepoRelativePath } from "../repos/repo-paths.js";
+import { EXTERNAL_FACING_PHRASES, getMaxInferredTopics } from "./inference-constants.js";
 import { curateRepoMetadataWithCodex } from "./repo-metadata-codex-curator.js";
 
 const FRONTEND_CONFIG_FILES = [
@@ -44,6 +47,8 @@ const FRONTEND_DEPENDENCIES = new Set(["react", "next", "vue", "nuxt", "svelte",
 const BACKEND_DEPENDENCIES = new Set(["express", "fastify", "koa", "@nestjs/core", "hono", "graphql-yoga", "apollo-server"]);
 const CLI_DEPENDENCIES = new Set(["commander", "yargs", "oclif", "clipanion", "cac"]);
 const DESCRIPTION_MAX_LENGTH = 180;
+// Deep inspection derives topics from README text, manifests, and dependency names,
+// so this stop-word set is intentionally broader than the lightweight catalog one.
 const TOPIC_STOP_WORDS = new Set([
   "about",
   "after",
@@ -138,29 +143,12 @@ const TOPIC_STOP_WORDS = new Set([
   "you",
   "your"
 ]);
-const EXTERNAL_FACING_PHRASES = [
-  "external",
-  "customer-facing",
-  "user-facing",
-  "merchant-facing",
-  "partner-facing",
-  "storefront",
-  "checkout",
-  "onboarding",
-  "pricing",
-  "public api",
-  "public-api",
-  "public endpoint"
-];
+// These richer term lists intentionally go beyond the lightweight catalog keywords,
+// because inspection has access to repository content and framework-specific signals.
 const INTERNAL_TERMS = ["internal", "employee", "backoffice", "admin-only", "private"];
 const LIBRARY_TERMS = ["library", "sdk", "module", "plugin", "package"];
 const SERVICE_TERMS = ["microservice", "worker", "daemon"];
 const PLAY_FRAMEWORK_TERMS = ["playframework", "com.typesafe.play", "play.mvc", "play.api"];
-const SMALL_REPO_MAX_INFERRED_TOPICS = 3;
-const MEDIUM_REPO_MAX_INFERRED_TOPICS = 5;
-const LARGE_REPO_MAX_INFERRED_TOPICS = 8;
-const HUGE_REPO_MAX_INFERRED_TOPICS = 20;
-const MASSIVE_REPO_MAX_INFERRED_TOPICS = 30;
 
 export async function inspectRepoClassifications({
   repo,
@@ -238,7 +226,7 @@ export async function inspectRepoMetadata({
 }
 
 async function prepareInspectionDirectory({ repo, env, fsModule, runCommandFn, tempDirRoot }) {
-  const managedRepoDirectory = path.join(getDefaultManagedReposRoot(env), repo.name);
+  const managedRepoDirectory = getManagedRepoDirectory(getDefaultManagedReposRoot(env), repo);
   if (await exists(fsModule, managedRepoDirectory)) {
     return {
       directory: managedRepoDirectory,
@@ -247,9 +235,10 @@ async function prepareInspectionDirectory({ repo, env, fsModule, runCommandFn, t
   }
 
   const tempRoot = await fsModule.mkdtemp(path.join(tempDirRoot, "archa-discovery-"));
-  const cloneDirectory = path.join(tempRoot, repo.name);
+  const cloneDirectory = path.join(tempRoot, getManagedRepoRelativePath(repo));
 
   try {
+    await fsModule.mkdir(path.dirname(cloneDirectory), { recursive: true });
     await runCommandFn("git", [
       "clone",
       "--depth",
@@ -454,30 +443,6 @@ function inferTopicsFromSignals(tokens, classifications, excludedTokens = [], si
     .map(([token]) => token);
 }
 
-function getMaxInferredTopics(sizeKb) {
-  if (typeof sizeKb !== "number" || Number.isNaN(sizeKb)) {
-    return MEDIUM_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 512) {
-    return SMALL_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 5_000) {
-    return MEDIUM_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 20_000) {
-    return LARGE_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 100_000) {
-    return HUGE_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  return MASSIVE_REPO_MAX_INFERRED_TOPICS;
-}
-
 async function hasAnyPath(fsModule, rootDirectory, relativePaths) {
   for (const relativePath of relativePaths) {
     if (await exists(fsModule, path.join(rootDirectory, relativePath))) {
@@ -680,7 +645,9 @@ async function runCommand(command, args) {
     child.stderr.on("data", chunk => {
       stderr += chunk;
     });
-    child.on("error", reject);
+    child.on("error", error => {
+      reject(normalizeGitExecutionError(error));
+    });
     child.on("close", code => {
       if (code === 0) {
         resolve();

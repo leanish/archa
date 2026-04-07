@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,7 +9,7 @@ import {
   promptToContinueGithubDiscovery,
   promptToInitializeConfig,
   renderConfigInit
-} from "../src/cli-bootstrap.js";
+} from "../src/cli/setup/bootstrap.js";
 
 describe("cli-bootstrap", () => {
   it("detects whether interactive prompts are available", () => {
@@ -21,7 +23,7 @@ describe("cli-bootstrap", () => {
     })).toBe(false);
   });
 
-  it("defaults config initialization prompts to yes", async () => {
+  it("defaults config initialization prompts to Enter", async () => {
     const readline = createReadline([""]);
 
     const result = await promptToInitializeConfig({
@@ -33,13 +35,99 @@ describe("cli-bootstrap", () => {
 
     expect(result).toBe(true);
     expect(readline.question).toHaveBeenCalledWith(
-      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nInitialize it now? [Y/n]\n> "
+      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nPress Enter to initialize it now, or press Esc to cancel.\n> "
     );
     expect(readline.close).toHaveBeenCalled();
   });
 
+  it("cancels immediately on Esc when raw keypress input is available", async () => {
+    const input = createRawKeypressInput();
+    const output = {
+      isTTY: true,
+      write: vi.fn()
+    };
+    const resultPromise = promptToInitializeConfig({
+      configPath: "/tmp/archa-config.json",
+      input,
+      output
+    });
+
+    input.emit("keypress", "\u001b", {
+      name: "escape"
+    });
+
+    const result = await resultPromise;
+
+    expect(result).toBe(false);
+    expect(output.write).toHaveBeenNthCalledWith(
+      1,
+      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nPress Enter to initialize it now, or press Esc to cancel.\n> "
+    );
+    expect(output.write).toHaveBeenNthCalledWith(2, "\n");
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
+    expect(input.resume).toHaveBeenCalledTimes(1);
+    expect(input.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels immediately on Ctrl+C when raw keypress input is available", async () => {
+    const input = createRawKeypressInput();
+    const output = {
+      isTTY: true,
+      write: vi.fn()
+    };
+    const resultPromise = promptToInitializeConfig({
+      configPath: "/tmp/archa-config.json",
+      input,
+      output
+    });
+
+    input.emit("keypress", "\u0003", {
+      name: "c",
+      ctrl: true
+    });
+
+    const result = await resultPromise;
+
+    expect(result).toBe(false);
+    expect(output.write).toHaveBeenNthCalledWith(
+      1,
+      "Archa is not initialized yet: /tmp/archa-config.json is missing.\nPress Enter to initialize it now, or press Esc to cancel.\n> "
+    );
+    expect(output.write).toHaveBeenNthCalledWith(2, "\n");
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
+    expect(input.resume).toHaveBeenCalledTimes(1);
+    expect(input.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pause raw keypress input that was already flowing", async () => {
+    const input = createRawKeypressInput({
+      paused: false
+    });
+    const output = {
+      isTTY: true,
+      write: vi.fn()
+    };
+    const resultPromise = promptToInitializeConfig({
+      configPath: "/tmp/archa-config.json",
+      input,
+      output
+    });
+
+    input.emit("keypress", "\u001b", {
+      name: "escape"
+    });
+
+    const result = await resultPromise;
+
+    expect(result).toBe(false);
+    expect(input.resume).toHaveBeenCalledTimes(1);
+    expect(input.pause).toHaveBeenCalledTimes(1);
+  });
+
   it("re-prompts for discovery confirmation until a valid answer is given", async () => {
-    const readline = createReadline(["wat", "no"]);
+    const readline = createReadline(["wat", "\u001b"]);
 
     const result = await promptToContinueGithubDiscovery({
       input: { isTTY: true },
@@ -48,11 +136,59 @@ describe("cli-bootstrap", () => {
     });
 
     expect(result).toBe(false);
-    expect(readline.write).toHaveBeenCalledWith('Please answer "yes" or "no".\n');
+    expect(readline.write).toHaveBeenCalledWith("Press Enter to continue, or press Esc to cancel.\n");
   });
 
-  it("requires a non-empty GitHub owner", async () => {
-    const readline = createReadline(["", " leanish "]);
+  it("defaults a blank GitHub owner prompt to accessible discovery", async () => {
+    const readline = createReadline([""]);
+
+    const result = await promptForGithubOwner({
+      input: { isTTY: true },
+      output: { isTTY: true },
+      createInterfaceFn: () => readline
+    });
+
+    expect(result).toBe("@accessible");
+    expect(readline.question).toHaveBeenCalledWith(
+      "GitHub owner to discover from (user or org).\nPress Enter to use all accessible repos from your authenticated GitHub access.\n> "
+    );
+  });
+
+  it("cancels the GitHub owner prompt immediately on Esc when raw keypress input is available", async () => {
+    const input = createRawKeypressInput();
+    const output = {
+      isTTY: true,
+      write: vi.fn()
+    };
+    const readlineFactory = createPendingReadlineFactory();
+    const resultPromise = promptForGithubOwner({
+      input,
+      output,
+      createInterfaceFn: readlineFactory.createInterfaceFn
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    input.emit("keypress", "\u001b", {
+      name: "escape"
+    });
+
+    const result = await resultPromise;
+
+    expect(result).toBeNull();
+    expect(readlineFactory.instances).toHaveLength(1);
+    expect(readlineFactory.instances[0].readline.question).toHaveBeenCalledWith(
+      "GitHub owner to discover from (user or org).\nPress Enter to use all accessible repos from your authenticated GitHub access.\n> "
+    );
+    expect(output.write).toHaveBeenCalledTimes(1);
+    expect(output.write).toHaveBeenCalledWith("\n");
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
+    expect(input.resume).toHaveBeenCalledTimes(1);
+    expect(input.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps explicit GitHub owners when provided", async () => {
+    const readline = createReadline([" leanish "]);
 
     const result = await promptForGithubOwner({
       input: { isTTY: true },
@@ -61,7 +197,6 @@ describe("cli-bootstrap", () => {
     });
 
     expect(result).toBe("leanish");
-    expect(readline.write).toHaveBeenCalledWith("Please enter a value.\n");
   });
 
   it("initializes and continues into discovery when config is missing", async () => {
@@ -96,7 +231,6 @@ describe("cli-bootstrap", () => {
     expect(initializeConfigFn).toHaveBeenCalledWith({ env: process.env });
     expect(runDiscoveryFn).toHaveBeenCalledWith({
       owner: "leanish",
-      apply: true,
       includeForks: true,
       includeArchived: false,
       addRepoNames: [],
@@ -124,7 +258,31 @@ describe("cli-bootstrap", () => {
 
     expect(result).toBe(false);
     expect(output.write).toHaveBeenCalledWith(
-      'GitHub discovery skipped. Add repos manually or run "archa config discover-github --owner <github-user-or-org> --apply" when you are ready.\n'
+      'GitHub discovery skipped. Add repos manually or run "archa config discover-github" when you are ready.\n'
+    );
+  });
+
+  it("skips discovery when the GitHub owner prompt is cancelled", async () => {
+    const output = { isTTY: true, write: vi.fn() };
+    const runDiscoveryFn = vi.fn();
+
+    const result = await ensureInteractiveConfigSetup({
+      env: process.env,
+      input: { isTTY: true },
+      output,
+      loadConfigFn: vi.fn(async () => ({ repos: [] })),
+      initializeConfigFn: vi.fn(),
+      getConfigPathFn: () => "/tmp/archa-config.json",
+      runDiscoveryFn,
+      canPromptInteractivelyFn: () => true,
+      promptToContinueGithubDiscoveryFn: vi.fn(async () => true),
+      promptForGithubOwnerFn: vi.fn(async () => null)
+    });
+
+    expect(result).toBe(false);
+    expect(runDiscoveryFn).not.toHaveBeenCalled();
+    expect(output.write).toHaveBeenCalledWith(
+      'GitHub discovery skipped. Add repos manually or run "archa config discover-github" when you are ready.\n'
     );
   });
 });
@@ -136,5 +294,50 @@ function createReadline(answers) {
     question: vi.fn(async () => queue.shift() ?? ""),
     write: vi.fn(),
     close: vi.fn()
+  };
+}
+
+function createRawKeypressInput({
+  paused = true
+} = {}) {
+  const input = new EventEmitter();
+
+  input.isTTY = true;
+  input.isRaw = false;
+  input._paused = paused;
+  input.setRawMode = vi.fn(enabled => {
+    input.isRaw = enabled;
+  });
+  input.isPaused = vi.fn(() => input._paused);
+  input.resume = vi.fn(() => {
+    input._paused = false;
+  });
+  input.pause = vi.fn(() => {
+    input._paused = true;
+  });
+
+  return input;
+}
+
+function createPendingReadlineFactory() {
+  const instances = [];
+
+  return {
+    instances,
+    createInterfaceFn() {
+      const instance = {
+        resolveQuestion: null,
+        readline: {
+          question: vi.fn(() => new Promise(resolve => {
+            instance.resolveQuestion = resolve;
+          })),
+          write: vi.fn(),
+          close: vi.fn()
+        }
+      };
+
+      instances.push(instance);
+      return instance.readline;
+    }
   };
 }

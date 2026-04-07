@@ -1,12 +1,9 @@
 import { createInterface } from "node:readline/promises";
 import process from "node:process";
 
-export function canPromptInteractively({
-  input = process.stdin,
-  output = process.stdout
-} = {}) {
-  return Boolean(input?.isTTY && output?.isTTY);
-}
+import { canPromptInteractively, promptEnterOrCancel, promptLineOrCancel } from "./interactive-prompts.js";
+
+export { canPromptInteractively };
 
 export async function promptToInitializeConfig({
   configPath,
@@ -14,15 +11,13 @@ export async function promptToInitializeConfig({
   output = process.stdout,
   createInterfaceFn = createInterface
 } = {}) {
-  return withReadline({
+  return promptEnterOrCancel({
     input,
     output,
-    createInterfaceFn
-  }, readline => promptYesNo(
-    readline,
-    `Archa is not initialized yet: ${configPath} is missing.\nInitialize it now? [Y/n]\n> `,
-    true
-  ));
+    createInterfaceFn,
+    prompt: `Archa is not initialized yet: ${configPath} is missing.\nPress Enter to initialize it now, or press Esc to cancel.\n> `,
+    nonInteractiveError: "Interactive Archa setup requires a TTY."
+  });
 }
 
 export async function promptToContinueGithubDiscovery({
@@ -30,15 +25,13 @@ export async function promptToContinueGithubDiscovery({
   output = process.stdout,
   createInterfaceFn = createInterface
 } = {}) {
-  return withReadline({
+  return promptEnterOrCancel({
     input,
     output,
-    createInterfaceFn
-  }, readline => promptYesNo(
-    readline,
-    "No repos are configured yet.\nContinue with GitHub discovery now? [Y/n]\n> ",
-    true
-  ));
+    createInterfaceFn,
+    prompt: "No repos are configured yet.\nPress Enter to continue with GitHub discovery, or press Esc to cancel.\n> ",
+    nonInteractiveError: "Interactive Archa setup requires a TTY."
+  });
 }
 
 export async function promptForGithubOwner({
@@ -46,14 +39,23 @@ export async function promptForGithubOwner({
   output = process.stdout,
   createInterfaceFn = createInterface
 } = {}) {
-  return withReadline({
+  const answer = await promptLineOrCancel({
     input,
     output,
-    createInterfaceFn
-  }, readline => promptRequiredValue(
-    readline,
-    "GitHub owner to discover from (user or org)\n> "
-  ));
+    createInterfaceFn,
+    prompt: "GitHub owner to discover from (user or org).\nPress Enter to use all accessible repos from your authenticated GitHub access.\n> ",
+    nonInteractiveError: "Interactive Archa setup requires a TTY."
+  });
+
+  if (answer === null) {
+    return null;
+  }
+
+  if (answer.trim() === "") {
+    return "@accessible";
+  }
+
+  return answer.trim();
 }
 
 export async function ensureInteractiveConfigSetup({
@@ -118,7 +120,7 @@ export async function ensureInteractiveConfigSetup({
 
     if (!shouldDiscover) {
       output.write(
-        'GitHub discovery skipped. Add repos manually or run "archa config discover-github --owner <github-user-or-org> --apply" when you are ready.\n'
+        'GitHub discovery skipped. Add repos manually or run "archa config discover-github" when you are ready.\n'
       );
       return allowProceedWithoutRepos;
     }
@@ -127,9 +129,14 @@ export async function ensureInteractiveConfigSetup({
       input,
       output
     });
+    if (owner === null) {
+      output.write(
+        'GitHub discovery skipped. Add repos manually or run "archa config discover-github" when you are ready.\n'
+      );
+      return allowProceedWithoutRepos;
+    }
     await runDiscoveryFn({
       owner,
-      apply: true,
       includeForks: true,
       includeArchived: false,
       addRepoNames: [],
@@ -143,7 +150,7 @@ export async function ensureInteractiveConfigSetup({
     }
 
     output.write(
-      'No repos were added. Configure repos manually or run "archa config discover-github --owner <github-user-or-org> --apply".\n'
+      'No repos were added. Configure repos manually or run "archa config discover-github".\n'
     );
     return allowProceedWithoutRepos;
   }
@@ -160,7 +167,7 @@ export function renderConfigInit(result, {
 
   if (includeNextStepSuggestion && result.repoCount === 0) {
     lines.push("");
-    lines.push('Next step: archa config discover-github --owner <github-user-or-org> --apply');
+    lines.push("Next step: archa config discover-github");
     lines.push("That imports GitHub metadata plus curated descriptions, topics, and classifications into your config.");
   }
 
@@ -169,57 +176,4 @@ export function renderConfigInit(result, {
 
 export function isMissingConfigError(error) {
   return error instanceof Error && error.message.includes("Archa config not found at ");
-}
-
-async function withReadline({
-  input,
-  output,
-  createInterfaceFn
-}, callback) {
-  if (!canPromptInteractively({ input, output })) {
-    throw new Error("Interactive Archa setup requires a TTY.");
-  }
-
-  const readline = createInterfaceFn({
-    input,
-    output
-  });
-
-  try {
-    return await callback(readline);
-  } finally {
-    readline.close();
-  }
-}
-
-async function promptYesNo(readline, prompt, defaultValue) {
-  while (true) {
-    const answer = (await readline.question(prompt)).trim().toLowerCase();
-
-    if (answer === "") {
-      return defaultValue;
-    }
-
-    if (answer === "y" || answer === "yes") {
-      return true;
-    }
-
-    if (answer === "n" || answer === "no") {
-      return false;
-    }
-
-    readline.write('Please answer "yes" or "no".\n');
-  }
-}
-
-async function promptRequiredValue(readline, prompt) {
-  while (true) {
-    const answer = (await readline.question(prompt)).trim();
-
-    if (answer !== "") {
-      return answer;
-    }
-
-    readline.write("Please enter a value.\n");
-  }
 }

@@ -4,8 +4,8 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { appendReposToConfig, applyGithubDiscoveryToConfig, initializeConfig, loadConfig } from "../src/config.js";
-import { getConfigPath, getDefaultManagedReposRoot } from "../src/config-paths.js";
+import { appendReposToConfig, applyGithubDiscoveryToConfig, initializeConfig, loadConfig } from "../src/core/config/config.js";
+import { getConfigPath, getDefaultManagedReposRoot } from "../src/core/config/config-paths.js";
 
 describe("config", () => {
   let tempRoot;
@@ -89,7 +89,67 @@ describe("config", () => {
         classifications: [],
         aliases: ["codec"],
         alwaysSelect: false,
-        directory: "/workspace/managed-repos/sqs-codec"
+        directory: "/workspace/managed-repos/leanish/sqs-codec"
+      }
+    ]);
+  });
+
+  it("maps owner-qualified repo names to owner-scoped checkout directories", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      repos: [
+        {
+          name: "leanish/nullability",
+          url: "https://github.com/leanish/nullability.git",
+          defaultBranch: "main"
+        }
+      ]
+    }, null, 2));
+
+    const loaded = await loadConfig(env);
+
+    expect(loaded.repos).toEqual([
+      {
+        name: "leanish/nullability",
+        url: "https://github.com/leanish/nullability.git",
+        defaultBranch: "main",
+        description: "",
+        topics: [],
+        classifications: [],
+        aliases: [],
+        alwaysSelect: false,
+        directory: path.join(tempRoot, "data", "archa", "repos", "leanish", "nullability")
+      }
+    ]);
+  });
+
+  it("derives GitHub checkout directories from the GitHub owner without lowercasing it", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      repos: [
+        {
+          name: "playcart",
+          url: "https://github.com/Nosto/playcart.git",
+          defaultBranch: "main"
+        }
+      ]
+    }, null, 2));
+
+    const loaded = await loadConfig(env);
+
+    expect(loaded.repos).toEqual([
+      {
+        name: "playcart",
+        url: "https://github.com/Nosto/playcart.git",
+        defaultBranch: "main",
+        description: "",
+        topics: [],
+        classifications: [],
+        aliases: [],
+        alwaysSelect: false,
+        directory: path.join(tempRoot, "data", "archa", "repos", "Nosto", "playcart")
       }
     ]);
   });
@@ -217,7 +277,7 @@ describe("config", () => {
           classifications: [],
           aliases: [],
           alwaysSelect: false,
-          directory: path.join(tempRoot, "data", "archa", "repos", "sqs-codec")
+          directory: path.join(tempRoot, "data", "archa", "repos", "leanish", "sqs-codec")
         }
       ]
     });

@@ -9,12 +9,17 @@ const mocks = vi.hoisted(() => ({
   ensureInteractiveConfigSetup: vi.fn(),
   renderConfigInit: vi.fn(),
   ensureCodexInstalled: vi.fn(),
+  ensureGitInstalled: vi.fn(),
+  ensureGithubDiscoveryAuthAvailable: vi.fn(),
   loadConfig: vi.fn(),
   initializeConfig: vi.fn(),
   applyGithubDiscoveryToConfig: vi.fn(),
+  buildAppliedGithubDiscoveryEntries: vi.fn(),
   discoverGithubOwnerRepos: vi.fn(),
-  mergeGithubDiscoveryResults: vi.fn(),
+  getGithubDiscoveryRepoKey: vi.fn(),
+  mergeGithubDiscoveryPlan: vi.fn(),
   planGithubRepoDiscovery: vi.fn(),
+  refineDiscoveredGithubRepos: vi.fn(),
   promptGithubDiscoverySelection: vi.fn(),
   selectGithubDiscoveryRepos: vi.fn(),
   answerQuestion: vi.fn(),
@@ -28,7 +33,7 @@ vi.mock("node:fs/promises", () => ({
   }
 }));
 
-vi.mock("../src/cli-bootstrap.js", () => ({
+vi.mock("../src/cli/setup/bootstrap.js", () => ({
   canPromptInteractively: mocks.canPromptInteractively,
   promptToInitializeConfig: mocks.promptToInitializeConfig,
   promptToContinueGithubDiscovery: mocks.promptToContinueGithubDiscovery,
@@ -37,40 +42,51 @@ vi.mock("../src/cli-bootstrap.js", () => ({
   renderConfigInit: mocks.renderConfigInit
 }));
 
-vi.mock("../src/config.js", () => ({
+vi.mock("../src/core/config/config.js", () => ({
   loadConfig: mocks.loadConfig,
   initializeConfig: mocks.initializeConfig,
   applyGithubDiscoveryToConfig: mocks.applyGithubDiscoveryToConfig
 }));
 
-vi.mock("../src/codex-installation.js", () => ({
+vi.mock("../src/core/codex/codex-installation.js", () => ({
   ensureCodexInstalled: mocks.ensureCodexInstalled
 }));
 
-vi.mock("../src/config-paths.js", () => ({
+vi.mock("../src/core/git/git-installation.js", () => ({
+  ensureGitInstalled: mocks.ensureGitInstalled
+}));
+
+vi.mock("../src/core/discovery/github-discovery-auth.js", () => ({
+  ensureGithubDiscoveryAuthAvailable: mocks.ensureGithubDiscoveryAuthAvailable
+}));
+
+vi.mock("../src/core/config/config-paths.js", () => ({
   getConfigPath: mocks.getConfigPath
 }));
 
-vi.mock("../src/github-catalog.js", () => ({
+vi.mock("../src/core/discovery/github-catalog.js", () => ({
+  buildAppliedGithubDiscoveryEntries: mocks.buildAppliedGithubDiscoveryEntries,
   discoverGithubOwnerRepos: mocks.discoverGithubOwnerRepos,
-  mergeGithubDiscoveryResults: mocks.mergeGithubDiscoveryResults,
-  planGithubRepoDiscovery: mocks.planGithubRepoDiscovery
+  getGithubDiscoveryRepoKey: mocks.getGithubDiscoveryRepoKey,
+  mergeGithubDiscoveryPlan: mocks.mergeGithubDiscoveryPlan,
+  planGithubRepoDiscovery: mocks.planGithubRepoDiscovery,
+  refineDiscoveredGithubRepos: mocks.refineDiscoveredGithubRepos
 }));
 
-vi.mock("../src/github-discovery-selection.js", () => ({
+vi.mock("../src/cli/setup/discovery-selection.js", () => ({
   promptGithubDiscoverySelection: mocks.promptGithubDiscoverySelection,
   selectGithubDiscoveryRepos: mocks.selectGithubDiscoveryRepos
 }));
 
-vi.mock("../src/question-answering.js", () => ({
+vi.mock("../src/core/answer/question-answering.js", () => ({
   answerQuestion: mocks.answerQuestion
 }));
 
-vi.mock("../src/repo-sync.js", () => ({
+vi.mock("../src/core/repos/repo-sync.js", () => ({
   syncRepos: mocks.syncRepos
 }));
 
-import { main } from "../src/cli.js";
+import { main } from "../src/cli/main.js";
 
 describe("cli", () => {
   let stdout;
@@ -94,6 +110,28 @@ describe("cli", () => {
     });
     mocks.getConfigPath.mockReturnValue("/tmp/archa-config.json");
     mocks.ensureCodexInstalled.mockImplementation(() => {});
+    mocks.ensureGitInstalled.mockImplementation(() => {});
+    mocks.ensureGithubDiscoveryAuthAvailable.mockImplementation(() => {});
+    mocks.getGithubDiscoveryRepoKey.mockImplementation(repo => repo.sourceFullName || repo.name);
+    mocks.buildAppliedGithubDiscoveryEntries.mockImplementation((plan, selection) => [
+      ...selection.reposToAdd.map(repo => plan.entries.find(entry => entry.repo === repo) || {
+        repo,
+        status: "new",
+        suggestions: []
+      }),
+      ...selection.reposToOverride.map(repo => plan.entries.find(entry => entry.repo === repo) || {
+        repo,
+        status: "configured",
+        suggestions: []
+      })
+    ]);
+    mocks.refineDiscoveredGithubRepos.mockResolvedValue({
+      owner: "leanish",
+      ownerType: "Organization",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: []
+    });
     mocks.canPromptInteractively.mockReturnValue(true);
     mocks.promptToInitializeConfig.mockResolvedValue(true);
     mocks.promptToContinueGithubDiscovery.mockResolvedValue(false);
@@ -108,7 +146,7 @@ describe("cli", () => {
 
       if (options.includeNextStepSuggestion !== false && result.repoCount === 0) {
         lines.push("");
-        lines.push('Next step: archa config discover-github --owner <github-user-or-org> --apply');
+        lines.push("Next step: archa config discover-github");
         lines.push("That imports GitHub metadata plus curated descriptions, topics, and classifications into your config.");
       }
 
@@ -155,13 +193,17 @@ describe("cli", () => {
         withSuggestions: 0
       }
     });
-    mocks.mergeGithubDiscoveryResults.mockImplementation((baseDiscovery, refinedDiscovery) => ({
-      ...baseDiscovery,
-      repos: baseDiscovery.repos.map(repo => {
-        const refinedRepo = refinedDiscovery.repos.find(candidate => candidate.name === repo.name);
-        return refinedRepo || repo;
-      })
-    }));
+    mocks.mergeGithubDiscoveryPlan.mockImplementation((basePlan, refinedPlan) => {
+      const refinedEntriesByName = new Map(
+        refinedPlan.entries.map(entry => [entry.repo.name, entry])
+      );
+
+      return {
+        ...basePlan,
+        entries: basePlan.entries.map(entry => refinedEntriesByName.get(entry.repo.name) || entry),
+        reposToAdd: (basePlan.reposToAdd || []).map(repo => refinedEntriesByName.get(repo.name)?.repo || repo)
+      };
+    });
     mocks.promptGithubDiscoverySelection.mockResolvedValue({
       reposToAdd: [],
       reposToOverride: []
@@ -206,6 +248,7 @@ describe("cli", () => {
 
     expect(stdout.join("")).toContain("Sync report:");
     expect(stdout.join("")).toContain("sqs-codec: updated (main)");
+    expect(mocks.ensureGitInstalled).toHaveBeenCalled();
   });
 
   it("fails repos sync when any selected repo failed to sync", async () => {
@@ -237,6 +280,7 @@ describe("cli", () => {
       })
     );
     expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGitInstalled).toHaveBeenCalled();
   });
 
   it("does not require Codex for retrieval-only ask mode", async () => {
@@ -250,6 +294,21 @@ describe("cli", () => {
     await main(["--no-synthesis", "What", "is", "x-codec-meta?"]);
 
     expect(mocks.ensureCodexInstalled).not.toHaveBeenCalled();
+    expect(mocks.ensureGitInstalled).toHaveBeenCalled();
+  });
+
+  it("does not require Git for no-sync retrieval-only ask mode", async () => {
+    mocks.answerQuestion.mockResolvedValue({
+      mode: "retrieval-only",
+      question: "What is x-codec-meta?",
+      selectedRepos: [{ name: "sqs-codec" }],
+      syncReport: []
+    });
+
+    await main(["--no-sync", "--no-synthesis", "What", "is", "x-codec-meta?"]);
+
+    expect(mocks.ensureCodexInstalled).not.toHaveBeenCalled();
+    expect(mocks.ensureGitInstalled).not.toHaveBeenCalled();
   });
 
   it("prints the active config path", async () => {
@@ -284,7 +343,7 @@ describe("cli", () => {
     expect(stdout.join("")).toContain("Initialized config at /tmp/archa-config.json");
     expect(stdout.join("")).toContain("Repos imported: 0");
     expect(stdout.join("")).toContain(
-      "Next step: archa config discover-github --owner <github-user-or-org> --apply"
+      "Next step: archa config discover-github"
     );
     expect(stdout.join("")).toContain(
       "That imports GitHub metadata plus curated descriptions, topics, and classifications into your config."
@@ -309,25 +368,20 @@ describe("cli", () => {
     await main(["repos", "list"]);
 
     expect(stdout.join("")).toContain("Managed repos:");
-    expect(stdout.join("")).toContain("sqs-codec [missing] main: aliases=codec SQS execution interceptor with compression and checksum metadata");
+    expect(stdout.join("")).toContain("sqs-codec [missing] main aliases=codec SQS execution interceptor with compression and checksum metadata");
   });
 
-  it("prints a GitHub discovery preview without changing config", async () => {
+  it("prints an unchanged discovery summary when nothing is selected", async () => {
     mocks.discoverGithubOwnerRepos.mockImplementation(async ({ onProgress }) => {
       onProgress?.({
         type: "discovery-listed",
         owner: "leanish",
         discoveredCount: 2,
         eligibleCount: 1,
+        inspectRepos: false,
+        hydrateMetadata: false,
         skippedForks: 1,
         skippedArchived: 0
-      });
-      onProgress?.({
-        type: "repo-processed",
-        owner: "leanish",
-        repoName: "archa",
-        processedCount: 1,
-        totalCount: 1
       });
 
       return {
@@ -383,20 +437,22 @@ describe("cli", () => {
     await main(["config", "discover-github", "--owner", "leanish"]);
 
     expect(stdout.join("")).toContain("GitHub repo discovery for leanish (User):");
-    expect(stdout.join("")).toContain("archa [new]");
-    expect(stdout.join("")).toContain("Run: archa config discover-github --owner leanish --apply");
+    expect(stdout.join("")).toContain("Repos selected: 0");
+    expect(stdout.join("")).toContain("Config unchanged: /tmp/archa-config.json");
     expect(stderr.join("")).toContain("Discovering GitHub repos for leanish...");
-    expect(stderr.join("")).toContain("Found 2 repo(s); loading GitHub metadata for 1 eligible repo(s)...");
-    expect(stderr.join("")).toContain("Loading repos: 1/1 (archa)");
+    expect(stderr.join("")).toContain("Found 2 repo(s); ready to choose from 1 eligible repo(s).");
     expect(mocks.applyGithubDiscoveryToConfig).not.toHaveBeenCalled();
-    expect(mocks.ensureCodexInstalled).not.toHaveBeenCalled();
+    expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGitInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGithubDiscoveryAuthAvailable).toHaveBeenCalled();
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenCalledWith(expect.objectContaining({
       inspectRepos: false,
+      hydrateMetadata: false,
       curateWithCodex: false
     }));
   });
 
-  it("does not require Codex before GitHub discovery preview", async () => {
+  it("requires Codex before GitHub discovery", async () => {
     mocks.discoverGithubOwnerRepos.mockResolvedValue({
       owner: "leanish",
       ownerType: "User",
@@ -407,10 +463,96 @@ describe("cli", () => {
 
     await main(["config", "discover-github", "--owner", "leanish"]);
 
-    expect(mocks.ensureCodexInstalled).not.toHaveBeenCalled();
+    expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGitInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGithubDiscoveryAuthAvailable).toHaveBeenCalled();
   });
 
-  it("applies interactively selected repo changes when requested", async () => {
+  it("prompts for the GitHub owner when discovery omits --owner on a TTY", async () => {
+    mocks.canPromptInteractively.mockReturnValue(true);
+    mocks.promptForGithubOwner.mockResolvedValue("leanish");
+    mocks.discoverGithubOwnerRepos.mockResolvedValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: []
+    });
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      entries: [],
+      counts: {
+        discovered: 0,
+        configured: 0,
+        new: 0,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+
+    await main(["config", "discover-github"]);
+
+    expect(mocks.promptForGithubOwner).toHaveBeenCalledWith({
+      input: process.stdin,
+      output: process.stdout
+    });
+    expect(mocks.discoverGithubOwnerRepos).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "leanish"
+    }));
+    expect(stderr.join("")).toContain("Discovering GitHub repos for leanish...");
+  });
+
+  it("cancels discovery when the interactive GitHub owner prompt is cancelled", async () => {
+    mocks.canPromptInteractively.mockReturnValue(true);
+    mocks.promptForGithubOwner.mockResolvedValue(null);
+
+    await main(["config", "discover-github"]);
+
+    expect(mocks.promptForGithubOwner).toHaveBeenCalledWith({
+      input: process.stdin,
+      output: process.stdout
+    });
+    expect(mocks.discoverGithubOwnerRepos).not.toHaveBeenCalled();
+    expect(stdout.join("")).toContain("GitHub discovery cancelled.");
+  });
+
+  it("defaults discovery to @accessible when --owner is omitted outside a TTY", async () => {
+    mocks.canPromptInteractively.mockReturnValue(false);
+    mocks.discoverGithubOwnerRepos.mockResolvedValue({
+      owner: "@accessible",
+      ownerType: "Accessible",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: []
+    });
+    mocks.planGithubRepoDiscovery.mockReturnValue({
+      owner: "@accessible",
+      ownerType: "Accessible",
+      skippedForks: 0,
+      skippedArchived: 0,
+      entries: [],
+      counts: {
+        discovered: 0,
+        configured: 0,
+        new: 0,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    });
+
+    await main(["config", "discover-github"]);
+
+    expect(mocks.promptForGithubOwner).not.toHaveBeenCalled();
+    expect(mocks.discoverGithubOwnerRepos).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "@accessible"
+    }));
+    expect(stderr.join("")).toContain("Discovering accessible GitHub repos...");
+  });
+
+  it("applies interactively selected repo changes", async () => {
     const reposToAdd = [
       {
         name: "java-conventions",
@@ -421,16 +563,40 @@ describe("cli", () => {
       }
     ];
     mocks.discoverGithubOwnerRepos
-      .mockResolvedValueOnce({
-        owner: "leanish",
-        ownerType: "Organization",
-        skippedForks: 0,
-        skippedArchived: 0,
-        repos: reposToAdd
-      })
       .mockImplementationOnce(async ({ onProgress }) => {
         onProgress?.({
-          type: "repo-curated",
+          type: "discovery-listed",
+          owner: "leanish",
+          discoveredCount: 1,
+          eligibleCount: 1,
+          inspectRepos: false,
+          hydrateMetadata: false,
+          skippedForks: 0,
+          skippedArchived: 0
+        });
+        return {
+          owner: "leanish",
+          ownerType: "Organization",
+          skippedForks: 0,
+          skippedArchived: 0,
+          repos: reposToAdd
+        };
+      });
+    mocks.refineDiscoveredGithubRepos.mockImplementationOnce(async ({ onProgress, selectedRepoNames }) => {
+        expect(selectedRepoNames).toEqual(["java-conventions"]);
+        onProgress?.({
+          type: "discovery-listed",
+          owner: "leanish",
+          discoveredCount: 1,
+          eligibleCount: 1,
+          inspectRepos: true,
+          hydrateMetadata: true,
+          skippedForks: 0,
+          skippedArchived: 0
+        });
+        onProgress?.({
+          type: "repo-hydrated",
+          inspectRepos: true,
           owner: "leanish",
           repoName: "java-conventions",
           processedCount: 1,
@@ -445,31 +611,7 @@ describe("cli", () => {
         };
       });
     mocks.planGithubRepoDiscovery
-      .mockReturnValueOnce({
-        owner: "leanish",
-        ownerType: "Organization",
-        skippedForks: 0,
-        skippedArchived: 0,
-        entries: [
-          {
-            status: "new",
-            repo: {
-              name: "java-conventions",
-              topics: ["gradle", "java"],
-              description: "Shared Gradle conventions for JDK-based projects"
-            },
-            suggestions: []
-          }
-        ],
-        counts: {
-          discovered: 1,
-          configured: 0,
-          new: 1,
-          conflicts: 0,
-          withSuggestions: 0
-        }
-      })
-      .mockReturnValueOnce({
+      .mockReturnValue({
         owner: "leanish",
         ownerType: "Organization",
         skippedForks: 0,
@@ -504,29 +646,101 @@ describe("cli", () => {
       totalCount: 2
     });
 
-    await main(["config", "discover-github", "--owner", "leanish", "--apply"]);
+    await main(["config", "discover-github", "--owner", "leanish"]);
 
     expect(mocks.ensureCodexInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGitInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGithubDiscoveryAuthAvailable).toHaveBeenCalled();
     expect(mocks.promptGithubDiscoverySelection).toHaveBeenCalled();
     expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(1, expect.objectContaining({
       inspectRepos: false,
+      hydrateMetadata: false,
       curateWithCodex: false
     }));
-    expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(mocks.refineDiscoveredGithubRepos).toHaveBeenCalledWith(expect.objectContaining({
+      discovery: expect.objectContaining({
+        owner: "leanish"
+      }),
       inspectRepos: true,
       curateWithCodex: true,
-      includeDiscoverySummary: false,
       selectedRepoNames: ["java-conventions"]
     }));
+    expect(mocks.applyGithubDiscoveryToConfig).toHaveBeenCalledTimes(1);
     expect(mocks.applyGithubDiscoveryToConfig).toHaveBeenCalledWith({
       env: process.env,
-      reposToAdd,
+      reposToAdd: [reposToAdd[0]],
       reposToOverride: []
     });
-    expect(stderr.join("")).toContain("Refining selected repo metadata for 1 repo(s)...");
-    expect(stderr.join("")).toContain("Refining repos: 1/1 (java-conventions)");
+    expect(stderr.join("")).toContain("Found 1 repo(s); ready to choose from 1 eligible repo(s).");
+    expect(stderr.join("")).toContain("Curating repos: 1/1 (java-conventions)");
     expect(stdout.join("")).toContain("Config updated: /tmp/archa-config.json");
     expect(stdout.join("")).toContain("Repos added: 1");
+  });
+
+  it("does not reload config before planning the applied discovery summary", async () => {
+    const selectedRepo = {
+      name: "java-conventions",
+      url: "https://github.com/leanish/java-conventions.git",
+      defaultBranch: "main",
+      description: "Shared Gradle conventions",
+      topics: ["gradle"],
+      classifications: ["library"]
+    };
+    const initialConfig = {
+      configPath: "/tmp/archa-config.json",
+      repos: []
+    };
+
+    mocks.loadConfig
+      .mockReset()
+      .mockResolvedValueOnce(initialConfig);
+    mocks.discoverGithubOwnerRepos.mockResolvedValueOnce({
+      owner: "leanish",
+      ownerType: "Organization",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: [selectedRepo]
+    });
+    mocks.planGithubRepoDiscovery.mockImplementation((config, discovery) => ({
+      owner: discovery.owner,
+      ownerType: discovery.ownerType,
+      skippedForks: discovery.skippedForks,
+      skippedArchived: discovery.skippedArchived,
+      entries: discovery.repos.map(repo => ({
+        repo,
+        status: config.repos.length === 0 ? "new" : "configured",
+        configuredRepo: config.repos.find(candidate => candidate.name === repo.name) || null,
+        suggestions: []
+      })),
+      reposToAdd: config.repos.length === 0 ? discovery.repos : [],
+      counts: {
+        discovered: discovery.repos.length,
+        configured: 0,
+        new: discovery.repos.length,
+        conflicts: 0,
+        withSuggestions: 0
+      }
+    }));
+    mocks.promptGithubDiscoverySelection.mockResolvedValue({
+      reposToAdd: [selectedRepo],
+      reposToOverride: []
+    });
+    mocks.refineDiscoveredGithubRepos.mockImplementationOnce(async () => {
+      return {
+        owner: "leanish",
+        ownerType: "Organization",
+        skippedForks: 0,
+        skippedArchived: 0,
+        repos: [selectedRepo]
+      };
+    });
+
+    await main(["config", "discover-github", "--owner", "leanish"]);
+
+    expect(mocks.loadConfig).toHaveBeenCalledTimes(1);
+    expect(mocks.planGithubRepoDiscovery).toHaveBeenNthCalledWith(2, initialConfig, expect.objectContaining({
+      owner: "leanish"
+    }));
   });
 
   it("applies explicit add and override selections without prompting", async () => {
@@ -548,6 +762,24 @@ describe("cli", () => {
         topics: ["aws", "sqs"]
       }
     ];
+    mocks.discoverGithubOwnerRepos
+      .mockResolvedValueOnce({
+        owner: "leanish",
+        ownerType: "Organization",
+        skippedForks: 0,
+        skippedArchived: 0,
+        repos: [...reposToAdd, ...reposToOverride]
+      });
+    mocks.refineDiscoveredGithubRepos.mockImplementationOnce(async ({ selectedRepoNames }) => {
+        expect(selectedRepoNames).toEqual(["java-conventions", "sqs-codec"]);
+        return {
+          owner: "leanish",
+          ownerType: "Organization",
+          skippedForks: 0,
+          skippedArchived: 0,
+          repos: [...reposToAdd, ...reposToOverride]
+        };
+      });
     mocks.planGithubRepoDiscovery.mockReturnValue({
       owner: "leanish",
       ownerType: "Organization",
@@ -589,7 +821,6 @@ describe("cli", () => {
       "discover-github",
       "--owner",
       "leanish",
-      "--apply",
       "--add",
       "java-conventions",
       "--override",
@@ -600,13 +831,40 @@ describe("cli", () => {
       addRepoNames: ["java-conventions"],
       overrideRepoNames: ["sqs-codec"]
     });
+    expect(mocks.ensureGitInstalled).toHaveBeenCalled();
+    expect(mocks.ensureGithubDiscoveryAuthAvailable).toHaveBeenCalled();
     expect(mocks.promptGithubDiscoverySelection).not.toHaveBeenCalled();
+    expect(mocks.discoverGithubOwnerRepos).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      inspectRepos: false,
+      hydrateMetadata: false,
+      curateWithCodex: false
+    }));
+    expect(mocks.refineDiscoveredGithubRepos).toHaveBeenCalledWith(expect.objectContaining({
+      discovery: expect.objectContaining({
+        owner: "leanish"
+      }),
+      inspectRepos: true,
+      curateWithCodex: true,
+      selectedRepoNames: ["java-conventions", "sqs-codec"]
+    }));
+    expect(mocks.applyGithubDiscoveryToConfig).toHaveBeenCalledTimes(1);
     expect(mocks.applyGithubDiscoveryToConfig).toHaveBeenCalledWith({
       env: process.env,
-      reposToAdd,
-      reposToOverride
+      reposToAdd: [reposToAdd[0]],
+      reposToOverride: [reposToOverride[0]]
     });
     expect(stdout.join("")).toContain("Repos overridden: 1");
+  });
+
+  it("fails discovery early when GitHub auth is unavailable", async () => {
+    mocks.ensureGithubDiscoveryAuthAvailable.mockImplementation(() => {
+      throw new Error("GitHub discovery requires either GH_TOKEN/GITHUB_TOKEN or a usable gh CLI session.");
+    });
+
+    await expect(main(["config", "discover-github", "--owner", "leanish"])).rejects.toThrow(
+      "GitHub discovery requires either GH_TOKEN/GITHUB_TOKEN or a usable gh CLI session."
+    );
+    expect(mocks.discoverGithubOwnerRepos).not.toHaveBeenCalled();
   });
 
   it("throws for unknown requested repos during sync", async () => {

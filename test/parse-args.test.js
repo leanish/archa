@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HelpError, parseArgs } from "../src/parse-args.js";
+import { HelpError, parseArgs } from "../src/cli/parse-args.js";
 
 describe("parseArgs", () => {
   it("defaults ask command to gpt-5.4 low", () => {
@@ -29,11 +29,19 @@ describe("parseArgs", () => {
         managedReposRoot: "/tmp/repos",
         force: true
       });
-    expect(parseArgs(["config", "discover-github", "--owner", "leanish", "--apply"], {}))
+    expect(parseArgs(["config", "discover-github", "--owner", "leanish"], {}))
       .toEqual({
         command: "config-discover-github",
         owner: "leanish",
-        apply: true,
+        includeForks: true,
+        includeArchived: false,
+        addRepoNames: [],
+        overrideRepoNames: []
+      });
+    expect(parseArgs(["config", "discover-github"], {}))
+      .toEqual({
+        command: "config-discover-github",
+        owner: null,
         includeForks: true,
         includeArchived: false,
         addRepoNames: [],
@@ -47,7 +55,6 @@ describe("parseArgs", () => {
       "discover-github",
       "--owner",
       "leanish",
-      "--apply",
       "--add",
       "archa,java-conventions",
       "--override",
@@ -57,12 +64,19 @@ describe("parseArgs", () => {
     ], {})).toEqual({
       command: "config-discover-github",
       owner: "leanish",
-      apply: true,
       includeForks: false,
       includeArchived: true,
       addRepoNames: ["archa", "java-conventions"],
       overrideRepoNames: ["foundation"]
     });
+  });
+
+  it("rejects the removed include-forks flag", () => {
+    expect(() => parseArgs([
+      "config",
+      "discover-github",
+      "--include-forks"
+    ], {})).toThrow("Unknown config discover-github option: --include-forks");
   });
 
   it("parses ask options and env overrides", () => {
@@ -210,24 +224,27 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["config", "discover-github", "--help"], {})).toThrow(HelpError);
   });
 
-  it("throws for missing config discover-github owner", () => {
-    expect(() => parseArgs(["config", "discover-github"], {})).toThrow("Missing value for --owner");
-  });
-
   it("throws for unknown config discover-github options", () => {
     expect(() => parseArgs(["config", "discover-github", "--owner", "leanish", "--wat"], {}))
       .toThrow(/Unknown config discover-github option: --wat/);
   });
 
-  it("throws when explicit GitHub discovery selections are passed without --apply", () => {
-    expect(() => parseArgs([
+  it("accepts explicit GitHub discovery selections without an apply flag", () => {
+    expect(parseArgs([
       "config",
       "discover-github",
       "--owner",
       "leanish",
       "--add",
       "archa"
-    ], {})).toThrow("Use --apply when passing --add or --override.");
+    ], {})).toEqual({
+      command: "config-discover-github",
+      owner: "leanish",
+      includeForks: true,
+      includeArchived: false,
+      addRepoNames: ["archa"],
+      overrideRepoNames: []
+    });
   });
 
 });
