@@ -1,16 +1,12 @@
 import { spawnSync } from "node:child_process";
 
+import { EXTERNAL_FACING_PHRASES, getMaxInferredTopics } from "./inference-constants.js";
 import { inspectRepoMetadata } from "./repo-classification-inspector.js";
 import { getGithubRepoDisplayIdentity } from "./repo-display-utils.js";
 
 const GITHUB_API_URL = "https://api.github.com";
 const PAGE_SIZE = 100;
 const ACCESSIBLE_GITHUB_OWNER = "@accessible";
-const SMALL_REPO_MAX_INFERRED_TOPICS = 3;
-const MEDIUM_REPO_MAX_INFERRED_TOPICS = 5;
-const LARGE_REPO_MAX_INFERRED_TOPICS = 8;
-const HUGE_REPO_MAX_INFERRED_TOPICS = 20;
-const MASSIVE_REPO_MAX_INFERRED_TOPICS = 30;
 const CLASSIFICATION_KEYWORDS = new Map([
   ["infra", ["infra", "infrastructure", "terraform", "helm", "kubernetes", "k8s", "ansible", "devops", "ops"]],
   ["library", ["library", "lib", "sdk", "module", "plugin", "package"]],
@@ -20,20 +16,6 @@ const CLASSIFICATION_KEYWORDS = new Map([
   ["backend", ["backend", "server", "api", "graphql", "rest"]],
   ["cli", ["cli", "terminal", "command"]]
 ]);
-const EXTERNAL_FACING_PHRASES = [
-  "external",
-  "customer-facing",
-  "user-facing",
-  "merchant-facing",
-  "partner-facing",
-  "storefront",
-  "checkout",
-  "onboarding",
-  "pricing",
-  "public api",
-  "public-api",
-  "public endpoint"
-];
 const STOP_WORDS = new Set([
   "about",
   "after",
@@ -1186,30 +1168,6 @@ function addExistingTopic(token, topics, seen) {
 
   seen.add(normalizedToken);
   topics.push(normalizedToken);
-}
-
-function getMaxInferredTopics(sizeKb) {
-  if (typeof sizeKb !== "number" || Number.isNaN(sizeKb)) {
-    return MEDIUM_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 512) {
-    return SMALL_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 5_000) {
-    return MEDIUM_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 20_000) {
-    return LARGE_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  if (sizeKb < 100_000) {
-    return HUGE_REPO_MAX_INFERRED_TOPICS;
-  }
-
-  return MASSIVE_REPO_MAX_INFERRED_TOPICS;
 }
 
 function inferRepoClassifications({ repo, sourceRepo, topics }) {
