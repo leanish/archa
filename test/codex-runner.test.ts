@@ -133,7 +133,8 @@ describe("codex-runner", () => {
     });
 
     expect(result).toEqual({ text: "Final answer from Codex" });
-    expect(onStatus).toHaveBeenCalledWith("Running Codex");
+    expect(onStatus).toHaveBeenCalledWith("Running Codex...");
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... done in 0s");
     expect(child.stdin.write).toHaveBeenCalledWith(expect.stringContaining(
       "Write for an engineer who can inspect this workspace."
     ));
@@ -224,7 +225,8 @@ describe("codex-runner", () => {
     });
 
     expect(result).toEqual({ text: "Codex did not produce a final answer." });
-    expect(onStatus).toHaveBeenCalledWith("Running Codex");
+    expect(onStatus).toHaveBeenCalledWith("Running Codex...");
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... done in 0s");
     expect(mocks.spawn).toHaveBeenCalledWith(
       "codex",
       expect.arrayContaining([
@@ -237,7 +239,7 @@ describe("codex-runner", () => {
     );
   });
 
-  it("waits 5 seconds before emitting elapsed codex progress updates", async () => {
+  it("emits the elapsed codex duration only after codex completes", async () => {
     vi.useFakeTimers();
     const child = createChildProcess({ autoCloseOnEnd: false });
     const onStatus = vi.fn();
@@ -260,21 +262,13 @@ describe("codex-runner", () => {
 
     onStatus.mockClear();
 
-    await vi.advanceTimersByTimeAsync(4_000);
+    await vi.advanceTimersByTimeAsync(65_000);
     expect(onStatus).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(onStatus).toHaveBeenCalledWith("Running Codex... (5s elapsed)");
-
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(onStatus).toHaveBeenCalledWith("Running Codex... (10s elapsed)");
-
-    await vi.advanceTimersByTimeAsync(55_000);
-    expect(onStatus).toHaveBeenCalledWith("Running Codex... (1m 5s elapsed)");
 
     child.close(0);
 
     await expect(resultPromise).resolves.toEqual({ text: "Final answer" });
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... done in 1m 5s");
   });
 
   it("times out codex after the configured deadline", async () => {

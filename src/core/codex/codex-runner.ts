@@ -17,8 +17,6 @@ import type { CodexSynthesis, Environment, ManagedRepo, RunCodexQuestionInput } 
 
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
 const FORCE_KILL_GRACE_PERIOD_MS = 5_000;
-const HEARTBEAT_INTERVAL_MS = 5_000;
-
 type StatusCallback = ((message: string) => void) | null | undefined;
 
 type RunCodexPromptInput = {
@@ -55,8 +53,6 @@ export async function runCodexQuestion({
   const resolvedModel = model || DEFAULT_CODEX_MODEL;
   const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
 
-  onStatus?.(formatCodexRunningStatus());
-
   return runCodexPrompt({
     prompt: executionContext.prompt,
     model: resolvedModel,
@@ -82,6 +78,8 @@ export async function runCodexPrompt({
   const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
 
   try {
+    onStatus?.(formatCodexRunningStatus());
+
     await runCodexExec({
       prompt,
       model: resolvedModel,
@@ -197,6 +195,7 @@ async function runCodexExec({
   onStatus,
   timeoutMs
 }: RunCodexExecInput): Promise<void> {
+  const startedAt = Date.now();
   const args = [
     "-c",
     `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`,
@@ -216,69 +215,64 @@ async function runCodexExec({
 
   args.push("-");
 
-  const stopHeartbeat = startCodexHeartbeat(onStatus);
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn("codex", args, {
-        stdio: ["pipe", "ignore", "pipe"]
-      });
-
-      let stderr = "";
-      let settled = false;
-      let forceKillTimer: NodeJS.Timeout | undefined;
-
-      const timeoutTimer = setTimeout(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        onStatus?.(`Codex timed out after ${formatDuration(timeoutMs)}; stopping...`);
-        child.kill("SIGTERM");
-        forceKillTimer = setTimeout(() => {
-          child.kill("SIGKILL");
-        }, FORCE_KILL_GRACE_PERIOD_MS);
-        cleanupTimedOutChild(child);
-        reject(new Error(formatCodexTimeoutError(timeoutMs, stderr)));
-      }, timeoutMs);
-      timeoutTimer.unref?.();
-
-      child.stdin.write(prompt);
-      child.stdin.end();
-
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-      child.on("error", (error: Error) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutTimer);
-        clearTimeout(forceKillTimer);
-        reject(normalizeCodexExecutionError(error));
-      });
-      child.on("close", (code: number | null) => {
-        clearTimeout(timeoutTimer);
-        clearTimeout(forceKillTimer);
-
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        if (code === 0) {
-          resolve();
-          return;
-        }
-        reject(new Error(formatCodexExecError(code, stderr)));
-      });
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("codex", args, {
+      stdio: ["pipe", "ignore", "pipe"]
     });
-  } finally {
-    stopHeartbeat();
-  }
+
+    let stderr = "";
+    let settled = false;
+    let forceKillTimer: NodeJS.Timeout | undefined;
+
+    const timeoutTimer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      onStatus?.(`Codex timed out after ${formatDuration(timeoutMs)}; stopping...`);
+      child.kill("SIGTERM");
+      forceKillTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, FORCE_KILL_GRACE_PERIOD_MS);
+      cleanupTimedOutChild(child);
+      reject(new Error(formatCodexTimeoutError(timeoutMs, stderr)));
+    }, timeoutMs);
+    timeoutTimer.unref?.();
+
+    child.stdin.write(prompt);
+    child.stdin.end();
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error: Error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(forceKillTimer);
+      reject(normalizeCodexExecutionError(error));
+    });
+    child.on("close", (code: number | null) => {
+      clearTimeout(timeoutTimer);
+      clearTimeout(forceKillTimer);
+
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      if (code === 0) {
+        onStatus?.(formatCodexCompletedStatus(Date.now() - startedAt));
+        resolve();
+        return;
+      }
+      reject(new Error(formatCodexExecError(code, stderr)));
+    });
+  });
 }
 
 export function summarizeCodexStderr(stderr: string): string {
@@ -342,27 +336,10 @@ function isRelevantTimeoutLine(line: string): boolean {
   ].some(pattern => pattern.test(line));
 }
 
-function startCodexHeartbeat(onStatus: StatusCallback): () => void {
-  if (!onStatus) {
-    return () => {};
-  }
-
-  const startedAt = Date.now();
-  const timer = setInterval(() => {
-    onStatus(formatCodexRunningStatus(Date.now() - startedAt));
-  }, HEARTBEAT_INTERVAL_MS);
-
-  timer.unref?.();
-
-  return () => {
-    clearInterval(timer);
-  };
+function formatCodexRunningStatus(): string {
+  return "Running Codex...";
 }
 
-function formatCodexRunningStatus(elapsedMs: number | null = null): string {
-  if (elapsedMs === null) {
-    return "Running Codex";
-  }
-
-  return `Running Codex... (${formatDuration(elapsedMs)} elapsed)`;
+function formatCodexCompletedStatus(elapsedMs: number): string {
+  return `Running Codex... done in ${formatDuration(elapsedMs)}`;
 }
