@@ -12,7 +12,7 @@ export type RepoClassification =
   | "cli"
   | "microservice";
 
-export interface RepoRecord {
+export interface RepoDefinitionFields {
   name: string;
   url: string;
   defaultBranch: string;
@@ -22,22 +22,31 @@ export interface RepoRecord {
   aliases: string[];
   alwaysSelect: boolean;
   branch?: string;
-  clone_url?: string;
-  directory?: string;
-  full_name?: string;
-  fork?: boolean;
-  html_url?: string;
-  owner?: {
-    login?: string;
-  };
-  size?: number;
+}
+
+export interface RepoSourceMetadata {
   sourceFullName?: string;
   sourceOwner?: string;
 }
 
-export interface ManagedRepoDefinition extends RepoRecord {}
+export interface GithubRepoOwner {
+  login?: string;
+}
 
-export interface ManagedRepo extends RepoRecord {
+export interface GithubRepoApiFields {
+  clone_url?: string;
+  full_name?: string;
+  fork?: boolean;
+  html_url?: string;
+  owner?: GithubRepoOwner;
+  size?: number;
+}
+
+export interface ManagedRepoDefinition extends RepoDefinitionFields, RepoSourceMetadata {}
+
+export interface RepoRecord extends ManagedRepoDefinition, GithubRepoApiFields {}
+
+export interface ManagedRepo extends ManagedRepoDefinition {
   directory: string;
 }
 
