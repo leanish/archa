@@ -2,9 +2,31 @@ import { emitKeypressEvents, type Key } from "node:readline";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline/promises";
 import process from "node:process";
 
-type PromptInput = NodeJS.ReadStream;
-type PromptOutput = NodeJS.WriteStream;
-type CreateInterfaceFn = typeof createInterface;
+export type PromptInput = {
+  isTTY?: boolean;
+  isRaw?: boolean;
+  on?(event: "keypress", listener: (input: string, key: Key) => void): unknown;
+  off?(event: "keypress", listener: (input: string, key: Key) => void): unknown;
+  setRawMode?(enabled: boolean): unknown;
+  resume?(): unknown;
+  pause?(): unknown;
+};
+
+export type PromptOutput = {
+  isTTY?: boolean;
+  write?(chunk: string): unknown;
+};
+
+export type ReadlineLike = Pick<ReadlineInterface, "question" | "write" | "close">;
+export type CreateInterfaceFn = (options: { input: PromptInput; output: PromptOutput }) => ReadlineLike;
+
+type RawKeypressPromptInput = PromptInput & {
+  on(event: "keypress", listener: (input: string, key: Key) => void): unknown;
+  off(event: "keypress", listener: (input: string, key: Key) => void): unknown;
+  setRawMode(enabled: boolean): unknown;
+  resume(): unknown;
+  pause(): unknown;
+};
 
 type PromptOptions = {
   input?: PromptInput;
@@ -13,6 +35,11 @@ type PromptOptions = {
   prompt: string;
   nonInteractiveError?: string;
 };
+
+export const defaultCreateInterface: CreateInterfaceFn = ({ input, output }) => createInterface({
+  input: input as NodeJS.ReadStream,
+  output: output as NodeJS.WriteStream
+});
 
 export function canPromptInteractively({
   input = process.stdin,
@@ -27,7 +54,7 @@ export function canPromptInteractively({
 export async function promptEnterOrCancel({
   input = process.stdin,
   output = process.stdout,
-  createInterfaceFn = createInterface,
+  createInterfaceFn = defaultCreateInterface,
   prompt,
   retryPrompt = "Press Enter to continue, or press Esc to cancel.\n",
   nonInteractiveError = "Interactive Archa setup requires a TTY."
@@ -80,7 +107,7 @@ export async function promptEnterOrCancel({
 export async function promptLineOrCancel({
   input = process.stdin,
   output = process.stdout,
-  createInterfaceFn = createInterface,
+  createInterfaceFn = defaultCreateInterface,
   prompt,
   nonInteractiveError = "Interactive Archa setup requires a TTY."
 }: PromptOptions): Promise<string | null> {
@@ -106,7 +133,7 @@ export async function promptLineOrCancel({
   }
 }
 
-async function promptLineOrCancelWithReadline(readline: ReadlineInterface, prompt: string): Promise<string | null> {
+async function promptLineOrCancelWithReadline(readline: ReadlineLike, prompt: string): Promise<string | null> {
   const answer = await readline.question(prompt);
   const normalizedAnswer = answer.trim().toLowerCase();
 
@@ -120,7 +147,7 @@ async function promptLineOrCancelWithReadline(readline: ReadlineInterface, promp
   return answer;
 }
 
-function supportsImmediateEscape(input: PromptInput | undefined): input is PromptInput {
+function supportsImmediateEscape(input: PromptInput | undefined): input is RawKeypressPromptInput {
   return Boolean(
     input
     && typeof input.on === "function"
@@ -134,12 +161,12 @@ async function promptEnterOrCancelWithEscape({
   output,
   prompt
 }: {
-  input: PromptInput;
+  input: RawKeypressPromptInput;
   output: PromptOutput;
   prompt: string;
 }): Promise<boolean> {
-  output.write(prompt);
-  emitKeypressEvents(input);
+  output.write?.(prompt);
+  emitKeypressEvents(input as NodeJS.ReadStream);
   const previousRawMode = input.isRaw === true;
   input.setRawMode?.(true);
   input.resume?.();
@@ -155,8 +182,8 @@ async function promptEnterOrCancelWithEscape({
       input.off("keypress", handleKeypress);
       handleKeypress = null;
     }
-    input.setRawMode?.(previousRawMode);
-    input.pause?.();
+    input.setRawMode(previousRawMode);
+    input.pause();
   };
 
   try {
@@ -164,21 +191,21 @@ async function promptEnterOrCancelWithEscape({
       handleKeypress = (_: string, key: Key) => {
         if (key?.name === "c" && key?.ctrl) {
           cleanup();
-          output.write("\n");
+      output.write?.("\n");
           resolve(false);
           return;
         }
 
         if (key?.name === "return" || key?.name === "enter") {
           cleanup();
-          output.write("\n");
+          output.write?.("\n");
           resolve(true);
           return;
         }
 
         if (key?.name === "escape") {
           cleanup();
-          output.write("\n");
+          output.write?.("\n");
           resolve(false);
         }
       };
@@ -191,16 +218,16 @@ async function promptEnterOrCancelWithEscape({
   }
 }
 
-async function promptLineOrCancelWithEscape(readline: ReadlineInterface, {
+async function promptLineOrCancelWithEscape(readline: ReadlineLike, {
   input,
   output,
   prompt
 }: {
-  input: PromptInput;
+  input: RawKeypressPromptInput;
   output: PromptOutput;
   prompt: string;
 }): Promise<string | null> {
-  emitKeypressEvents(input);
+  emitKeypressEvents(input as NodeJS.ReadStream);
   const previousRawMode = input.isRaw === true;
   input.setRawMode?.(true);
   input.resume?.();
@@ -217,8 +244,8 @@ async function promptLineOrCancelWithEscape(readline: ReadlineInterface, {
       input.off("keypress", handleKeypress);
       handleKeypress = null;
     }
-    input.setRawMode?.(previousRawMode);
-    input.pause?.();
+    input.setRawMode(previousRawMode);
+    input.pause();
   };
 
   try {
@@ -230,7 +257,7 @@ async function promptLineOrCancelWithEscape(readline: ReadlineInterface, {
           }
           settled = true;
           cleanup();
-          output.write("\n");
+          output.write?.("\n");
           resolve(null);
           return;
         }
@@ -241,7 +268,7 @@ async function promptLineOrCancelWithEscape(readline: ReadlineInterface, {
           }
           settled = true;
           cleanup();
-          output.write("\n");
+          output.write?.("\n");
           resolve(null);
         }
       };

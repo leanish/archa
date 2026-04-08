@@ -8,8 +8,8 @@ import { appendReposToConfig, applyGithubDiscoveryToConfig, initializeConfig, lo
 import { getConfigPath, getDefaultManagedReposRoot } from "../src/core/config/config-paths.js";
 
 describe("config", () => {
-  let tempRoot;
-  let env;
+  let tempRoot: string;
+  let env: NodeJS.ProcessEnv;
 
   beforeEach(async () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "archa-config-"));

@@ -11,7 +11,7 @@ import {
 import { normalizeCodexExecutionError } from "./codex-installation.js";
 import { DEFAULT_CODEX_MODEL, DEFAULT_CODEX_REASONING_EFFORT } from "./codex-defaults.js";
 import { formatDuration } from "../time/duration-format.js";
-import type { CodexSynthesis, Environment, ManagedRepo, RunCodexQuestionInput } from "../types.js";
+import type { CodexScopeRepo, CodexSynthesis, Environment, RunCodexQuestionInput } from "../types.js";
 
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
 const FORCE_KILL_GRACE_PERIOD_MS = 5_000;
@@ -49,7 +49,12 @@ export async function runCodexQuestion({
   onStatus,
   timeoutMs = DEFAULT_CODEX_TIMEOUT_MS
 }: RunCodexQuestionInput): Promise<CodexSynthesis> {
-  const executionContext = getCodexExecutionContext({ question, audience, selectedRepos, workspaceRoot });
+  const executionContext = getCodexExecutionContext({
+    question,
+    ...(audience === undefined ? {} : { audience }),
+    selectedRepos,
+    workspaceRoot
+  });
   const resolvedModel = model || DEFAULT_CODEX_MODEL;
   const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
 
@@ -145,7 +150,7 @@ export function getCodexExecutionContext({
 
 function buildPrompt(
   question: string,
-  selectedRepos: ManagedRepo[],
+  selectedRepos: CodexScopeRepo[],
   audience: AnswerAudience | null | undefined
 ): string {
   const resolvedAudience = resolveAnswerAudience(audience);

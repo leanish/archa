@@ -12,17 +12,22 @@ export type RepoClassification =
   | "cli"
   | "microservice";
 
-export interface RepoDefinitionFields {
+export interface RepoIdentityFields {
   name: string;
   url: string;
   defaultBranch: string;
+  branch?: string;
+}
+
+export interface RepoMetadataFields {
   description: string;
   topics: string[];
   classifications: RepoClassification[];
   aliases: string[];
   alwaysSelect: boolean;
-  branch?: string;
 }
+
+export interface RepoDefinitionFields extends RepoIdentityFields, RepoMetadataFields {}
 
 export interface RepoSourceMetadata {
   sourceFullName?: string;
@@ -34,17 +39,22 @@ export interface GithubRepoOwner {
 }
 
 export interface GithubRepoApiFields {
+  archived?: boolean;
   clone_url?: string;
+  default_branch?: string;
   full_name?: string;
   fork?: boolean;
   html_url?: string;
   owner?: GithubRepoOwner;
+  private?: boolean;
   size?: number;
 }
 
 export interface ManagedRepoDefinition extends RepoDefinitionFields, RepoSourceMetadata {}
 
-export interface RepoRecord extends ManagedRepoDefinition, GithubRepoApiFields {}
+export interface RepoRecord extends Partial<RepoIdentityFields>, Partial<RepoMetadataFields>, RepoSourceMetadata, GithubRepoApiFields {
+  name: string;
+}
 
 export interface ManagedRepo extends ManagedRepoDefinition {
   directory: string;
@@ -72,7 +82,7 @@ export interface ConfigMutationResult {
 export interface AskRequest {
   question: string;
   repoNames: string[] | null;
-  audience: AnswerAudience;
+  audience?: AnswerAudience | null;
   model: string | null;
   reasoningEffort: string | null;
   noSync: boolean;
@@ -131,16 +141,24 @@ export interface ServerCommandOptions {
 export type RepoSyncAction = "cloned" | "updated" | "skipped" | "failed";
 export type RepoSyncStartAction = "clone" | "update";
 
+export interface RepoSyncTarget {
+  name: string;
+  url?: string;
+  directory: string;
+  defaultBranch: string;
+  branch?: string;
+}
+
 export interface SyncReportItem {
   name: string;
-  directory: string;
+  directory?: string;
   action: RepoSyncAction;
   detail?: string;
 }
 
 export interface RepoSyncCallbacks {
-  onRepoStart?: (repo: ManagedRepo, action: RepoSyncStartAction, trunkBranch: string) => void;
-  onRepoWait?: (repo: ManagedRepo, trunkBranch: string) => void;
+  onRepoStart?: (repo: RepoSyncTarget, action: RepoSyncStartAction, trunkBranch: string) => void;
+  onRepoWait?: (repo: RepoSyncTarget, trunkBranch: string) => void;
   onRepoResult?: (item: SyncReportItem) => void;
 }
 
@@ -153,28 +171,40 @@ export interface CodexSynthesis {
   text: string;
 }
 
+export interface CodexScopeRepo {
+  name: string;
+  directory: string;
+  description?: string;
+  defaultBranch?: string;
+  branch?: string;
+}
+
 export interface RunCodexQuestionInput {
   question: string;
-  audience: AnswerAudience | null | undefined;
+  audience?: AnswerAudience | null;
   model: string | null;
   reasoningEffort: string | null;
-  selectedRepos: ManagedRepo[];
+  selectedRepos: CodexScopeRepo[];
   workspaceRoot: string;
   timeoutMs?: number;
   onStatus?: (message: string) => void;
 }
 
+export interface SelectedRepoSummary {
+  name: string;
+}
+
 export interface RetrievalOnlyResult {
   mode: "retrieval-only";
   question: string;
-  selectedRepos: ManagedRepo[];
+  selectedRepos: SelectedRepoSummary[];
   syncReport: SyncReportItem[];
 }
 
 export interface AnswerResult {
   mode: "answer";
   question: string;
-  selectedRepos: ManagedRepo[];
+  selectedRepos: SelectedRepoSummary[];
   syncReport: SyncReportItem[];
   synthesis: CodexSynthesis;
 }
@@ -186,7 +216,7 @@ export interface QuestionExecutionOptions {
   statusReporter: StatusReporter | null;
   loadConfigFn: (env: Environment) => Promise<LoadedConfig>;
   selectReposFn: (config: LoadedConfig, question: string, requestedRepoNames: string[] | null) => ManagedRepo[];
-  syncReposFn: (repos: ManagedRepo[], callbacks?: RepoSyncCallbacks) => Promise<SyncReportItem[]>;
+  syncReposFn: (repos: RepoSyncTarget[], callbacks?: RepoSyncCallbacks) => Promise<SyncReportItem[]>;
   existsSyncFn: (targetPath: string) => boolean;
   getCodexTimeoutMsFn: (env: Environment) => number;
   runCodexQuestionFn: (input: RunCodexQuestionInput) => Promise<CodexSynthesis>;
@@ -245,19 +275,26 @@ export type GithubDiscoveryProgressEvent =
     }
   | {
       type: "discovery-page";
+      owner?: string;
       page: number;
       fetchedCount: number;
       hasMorePages: boolean;
     }
   | {
       type: "discovery-listed";
+      owner?: string;
       discoveredCount: number;
       eligibleCount: number;
       hydrateMetadata: boolean;
       inspectRepos: boolean;
+      curateWithCodex?: boolean;
+      skippedForks?: number;
+      skippedArchived?: number;
+      skippedDisabled?: number;
     }
   | {
       type: "repo-hydrated";
+      owner?: string;
       inspectRepos: boolean;
       processedCount: number;
       totalCount: number;

@@ -12,12 +12,44 @@ import type {
   GithubDiscoveryProgressEvent,
   GithubDiscoverySelection,
   LoadedConfig,
+  RepoClassification,
   RepoRecord
 } from "../types.js";
 
 const GITHUB_API_URL = "https://api.github.com";
 const PAGE_SIZE = 100;
 const ACCESSIBLE_GITHUB_OWNER = "@accessible";
+type GithubFetchResponseLike = {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+};
+type GithubFetchFn = (input: string, init?: unknown) => Promise<GithubFetchResponseLike>;
+type RepoMetadataResult = {
+  description: string;
+  topics: string[];
+  classifications: RepoClassification[];
+};
+type RepoInspectorFn = (options: {
+  directory: string;
+  repo: RepoRecord;
+  sourceRepo?: Partial<RepoRecord>;
+  env?: Environment;
+}) => Promise<RepoMetadataResult | unknown>;
+type GithubDiscoveryResult = {
+  owner: string;
+  ownerDisplay?: string;
+  ownerType: string;
+  skippedForks: number;
+  skippedArchived: number;
+  repos: RepoRecord[];
+  discoveryContext?: {
+    discoveredRepos: unknown[];
+    includeSourceMetadata: boolean;
+    sourceOwnerFallback?: string;
+  };
+};
 // This lightweight keyword map is intentionally narrower than the inspector-side
 // heuristics. It only classifies from GitHub metadata and generic inferred topics,
 // while deeper repo inspection can use richer file-system-specific signals.
@@ -124,8 +156,8 @@ export async function discoverGithubOwnerRepos({
 }: {
   owner: string;
   env?: Environment;
-  fetchFn?: typeof globalThis.fetch;
-  inspectRepoFn?: typeof inspectRepoMetadata;
+  fetchFn?: GithubFetchFn;
+  inspectRepoFn?: RepoInspectorFn;
   resolveGithubAuthTokenFn?: (...args: any[]) => Promise<string | null> | string | null;
   curateWithCodex?: boolean;
   onProgress?: ((event: GithubDiscoveryProgressEvent) => void) | null;
@@ -135,14 +167,7 @@ export async function discoverGithubOwnerRepos({
   inspectRepos?: boolean;
   hydrateMetadata?: boolean;
   selectedRepoNames?: string[];
-}): Promise<{
-  owner: string;
-  ownerDisplay?: string;
-  ownerType: string;
-  skippedForks: number;
-  skippedArchived: number;
-  repos: RepoRecord[];
-}> {
+}): Promise<GithubDiscoveryResult> {
   const normalizedOwner = normalizeOwner(owner);
 
   if (typeof fetchFn !== "function") {
@@ -266,17 +291,10 @@ export async function refineDiscoveredGithubRepos({
   hydrateMetadata = true,
   selectedRepoNames = []
 }: {
-  discovery: {
-    owner: string;
-    ownerDisplay?: string;
-    ownerType: string;
-    repos: RepoRecord[];
-    skippedForks: number;
-    skippedArchived: number;
-  };
+  discovery: GithubDiscoveryResult;
   env?: Environment;
-  fetchFn?: typeof globalThis.fetch;
-  inspectRepoFn?: typeof inspectRepoMetadata;
+  fetchFn?: GithubFetchFn;
+  inspectRepoFn?: RepoInspectorFn;
   resolveGithubAuthTokenFn?: (...args: any[]) => Promise<string | null> | string | null;
   curateWithCodex?: boolean;
   onProgress?: ((event: GithubDiscoveryProgressEvent) => void) | null;
@@ -286,14 +304,7 @@ export async function refineDiscoveredGithubRepos({
   inspectRepos?: boolean;
   hydrateMetadata?: boolean;
   selectedRepoNames?: string[];
-}): Promise<{
-  owner: string;
-  ownerDisplay?: string;
-  ownerType: string;
-  skippedForks: number;
-  skippedArchived: number;
-  repos: RepoRecord[];
-}> {
+}): Promise<GithubDiscoveryResult> {
   const context = discovery?.discoveryContext;
 
   if (!context || !Array.isArray(context.discoveredRepos)) {

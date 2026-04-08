@@ -33,6 +33,7 @@ vi.mock("../src/core/repos/repo-sync.js", () => ({
 }));
 
 import { answerQuestion } from "../src/core/answer/question-answering.js";
+import { createSyncReportItem } from "./test-helpers.js";
 
 describe("answerQuestion", () => {
   const config = {
@@ -225,23 +226,21 @@ describe("answerQuestion", () => {
     });
     const selectReposFn = vi.fn().mockReturnValue(selectedRepos);
     const syncReposFn = vi.fn(async (repos, callbacks) => {
-      callbacks.onRepoStart(repos[0], "update", "main");
-      callbacks.onRepoWait(repos[0], "main");
-      callbacks.onRepoResult({
+      callbacks?.onRepoStart?.(repos[0], "update", "main");
+      callbacks?.onRepoWait?.(repos[0], "main");
+      callbacks?.onRepoResult?.(createSyncReportItem({
         name: "sqs-codec",
         directory: "/workspace/repos/sqs-codec",
         action: "updated",
         detail: "main"
-      });
+      }));
 
-      return [
-        {
-          name: "sqs-codec",
-          directory: "/workspace/repos/sqs-codec",
-          action: "updated",
-          detail: "main"
-        }
-      ];
+      return [createSyncReportItem({
+        name: "sqs-codec",
+        directory: "/workspace/repos/sqs-codec",
+        action: "updated",
+        detail: "main"
+      })];
     });
     const runCodexQuestionFn = vi.fn(async ({ onStatus }) => {
       onStatus("Synthesizing...");
