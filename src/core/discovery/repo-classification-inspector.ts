@@ -1,3 +1,4 @@
+// TODO(typescript-6-migration): remove this once the repo inspection flow is fully typed.
 // @ts-nocheck
 import fs from "node:fs/promises";
 import os from "node:os";

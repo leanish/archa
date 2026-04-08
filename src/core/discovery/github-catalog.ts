@@ -1,3 +1,4 @@
+// TODO(typescript-6-migration): remove this once the GitHub discovery pipeline is fully typed.
 // @ts-nocheck
 import { spawnSync } from "node:child_process";
 

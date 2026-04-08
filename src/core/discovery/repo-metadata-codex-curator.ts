@@ -1,3 +1,4 @@
+// TODO(typescript-6-migration): remove this once the Codex metadata curation flow is fully typed.
 // @ts-nocheck
 import { runCodexPrompt } from "../codex/codex-runner.js";
 import type { RepoClassification, RepoRecord } from "../types.js";
