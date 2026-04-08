@@ -239,7 +239,7 @@ describe("codex-runner", () => {
     );
   });
 
-  it("emits the elapsed codex duration only after codex completes", async () => {
+  it("emits elapsed codex progress updates before the final completion status", async () => {
     vi.useFakeTimers();
     const child = createChildProcess({ autoCloseOnEnd: false });
     const onStatus = vi.fn();
@@ -262,8 +262,17 @@ describe("codex-runner", () => {
 
     onStatus.mockClear();
 
-    await vi.advanceTimersByTimeAsync(65_000);
+    await vi.advanceTimersByTimeAsync(4_000);
     expect(onStatus).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... (5s elapsed)");
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... (10s elapsed)");
+
+    await vi.advanceTimersByTimeAsync(55_000);
+    expect(onStatus).toHaveBeenCalledWith("Running Codex... (1m 5s elapsed)");
 
     child.close(0);
 

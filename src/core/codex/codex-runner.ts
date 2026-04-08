@@ -17,6 +17,7 @@ import type { CodexSynthesis, Environment, ManagedRepo, RunCodexQuestionInput } 
 
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
 const FORCE_KILL_GRACE_PERIOD_MS = 5_000;
+const HEARTBEAT_INTERVAL_MS = 5_000;
 type StatusCallback = ((message: string) => void) | null | undefined;
 
 type RunCodexPromptInput = {
@@ -215,64 +216,70 @@ async function runCodexExec({
 
   args.push("-");
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("codex", args, {
-      stdio: ["pipe", "ignore", "pipe"]
+  const stopHeartbeat = startCodexHeartbeat(onStatus, startedAt);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn("codex", args, {
+        stdio: ["pipe", "ignore", "pipe"]
+      });
+
+      let stderr = "";
+      let settled = false;
+      let forceKillTimer: NodeJS.Timeout | undefined;
+
+      const timeoutTimer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        onStatus?.(`Codex timed out after ${formatDuration(timeoutMs)}; stopping...`);
+        child.kill("SIGTERM");
+        forceKillTimer = setTimeout(() => {
+          child.kill("SIGKILL");
+        }, FORCE_KILL_GRACE_PERIOD_MS);
+        cleanupTimedOutChild(child);
+        reject(new Error(formatCodexTimeoutError(timeoutMs, stderr)));
+      }, timeoutMs);
+      timeoutTimer.unref?.();
+
+      child.stdin.write(prompt);
+      child.stdin.end();
+
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", (error: Error) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutTimer);
+        clearTimeout(forceKillTimer);
+        reject(normalizeCodexExecutionError(error));
+      });
+      child.on("close", (code: number | null) => {
+        clearTimeout(timeoutTimer);
+        clearTimeout(forceKillTimer);
+
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        if (code === 0) {
+          onStatus?.(formatCodexCompletedStatus(Date.now() - startedAt));
+          resolve();
+          return;
+        }
+        reject(new Error(formatCodexExecError(code, stderr)));
+      });
     });
-
-    let stderr = "";
-    let settled = false;
-    let forceKillTimer: NodeJS.Timeout | undefined;
-
-    const timeoutTimer = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      onStatus?.(`Codex timed out after ${formatDuration(timeoutMs)}; stopping...`);
-      child.kill("SIGTERM");
-      forceKillTimer = setTimeout(() => {
-        child.kill("SIGKILL");
-      }, FORCE_KILL_GRACE_PERIOD_MS);
-      cleanupTimedOutChild(child);
-      reject(new Error(formatCodexTimeoutError(timeoutMs, stderr)));
-    }, timeoutMs);
-    timeoutTimer.unref?.();
-
-    child.stdin.write(prompt);
-    child.stdin.end();
-
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (error: Error) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      clearTimeout(timeoutTimer);
-      clearTimeout(forceKillTimer);
-      reject(normalizeCodexExecutionError(error));
-    });
-    child.on("close", (code: number | null) => {
-      clearTimeout(timeoutTimer);
-      clearTimeout(forceKillTimer);
-
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      if (code === 0) {
-        onStatus?.(formatCodexCompletedStatus(Date.now() - startedAt));
-        resolve();
-        return;
-      }
-      reject(new Error(formatCodexExecError(code, stderr)));
-    });
-  });
+  } finally {
+    stopHeartbeat();
+  }
 }
 
 export function summarizeCodexStderr(stderr: string): string {
@@ -336,8 +343,28 @@ function isRelevantTimeoutLine(line: string): boolean {
   ].some(pattern => pattern.test(line));
 }
 
+function startCodexHeartbeat(onStatus: StatusCallback, startedAt: number): () => void {
+  if (!onStatus) {
+    return () => {};
+  }
+
+  const timer = setInterval(() => {
+    onStatus(formatCodexElapsedStatus(Date.now() - startedAt));
+  }, HEARTBEAT_INTERVAL_MS);
+
+  timer.unref?.();
+
+  return () => {
+    clearInterval(timer);
+  };
+}
+
 function formatCodexRunningStatus(): string {
   return "Running Codex...";
+}
+
+function formatCodexElapsedStatus(elapsedMs: number): string {
+  return `Running Codex... (${formatDuration(elapsedMs)} elapsed)`;
 }
 
 function formatCodexCompletedStatus(elapsedMs: number): string {
