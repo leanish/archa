@@ -5,9 +5,7 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
 import {
-  isSupportedAnswerAudience,
   resolveAnswerAudience,
-  SUPPORTED_ANSWER_AUDIENCES,
   type AnswerAudience
 } from "../answer/answer-audience.js";
 import { normalizeCodexExecutionError } from "./codex-installation.js";
@@ -145,14 +143,12 @@ export function getCodexExecutionContext({
   };
 }
 
-function buildPrompt(question: string, selectedRepos: ManagedRepo[], audience: string | null | undefined): string {
+function buildPrompt(
+  question: string,
+  selectedRepos: ManagedRepo[],
+  audience: AnswerAudience | null | undefined
+): string {
   const resolvedAudience = resolveAnswerAudience(audience);
-  if (!isSupportedAnswerAudience(resolvedAudience)) {
-    throw new Error(
-      `Unsupported answer audience: ${resolvedAudience}. Use one of: ${SUPPORTED_ANSWER_AUDIENCES.join(", ")}.`
-    );
-  }
-
   const repoNames = selectedRepos.map(repo => repo.name).join(", ");
 
   return [

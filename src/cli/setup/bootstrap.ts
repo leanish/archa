@@ -197,7 +197,7 @@ export async function ensureInteractiveConfigSetup({
   }
 }
 
-export function renderConfigInit(result, {
+export function renderConfigInit(result: InitializeConfigResult, {
   includeNextStepSuggestion = true
 }: {
   includeNextStepSuggestion?: boolean;

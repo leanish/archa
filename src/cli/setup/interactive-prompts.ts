@@ -191,7 +191,7 @@ async function promptEnterOrCancelWithEscape({
   }
 }
 
-async function promptLineOrCancelWithEscape(readline, {
+async function promptLineOrCancelWithEscape(readline: ReadlineInterface, {
   input,
   output,
   prompt
@@ -248,7 +248,7 @@ async function promptLineOrCancelWithEscape(readline, {
 
       input.on("keypress", handleKeypress);
       readline.question(prompt)
-        .then(answer => {
+        .then((answer: string) => {
           if (settled) {
             return;
           }
@@ -256,7 +256,7 @@ async function promptLineOrCancelWithEscape(readline, {
           cleanup();
           resolve(answer);
         })
-        .catch(error => {
+        .catch((error: unknown) => {
           if (settled) {
             return;
           }

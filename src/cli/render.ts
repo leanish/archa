@@ -11,18 +11,15 @@ import type {
   AnswerResult,
   GithubDiscoveryPipelineResult,
   GithubDiscoveryPlanEntry,
+  GithubDiscoveryPlan,
   ManagedRepo,
   RetrievalOnlyResult,
   SyncReportItem
 } from "../core/types.js";
 
-type GithubDiscoveryRenderResult = GithubDiscoveryPipelineResult["plan"] & {
-  appliedEntries?: GithubDiscoveryPlanEntry[];
-  selectedCount?: number;
-  configPath: string | null;
-  addedCount: number;
-  overriddenCount?: number;
-};
+type GithubDiscoveryRenderResult =
+  Pick<GithubDiscoveryPipelineResult, "appliedEntries" | "selectedCount" | "configPath" | "addedCount" | "overriddenCount">
+  & GithubDiscoveryPlan;
 
 export async function renderRepoList(repos: ManagedRepo[]): Promise<string> {
   const lines: string[] = ["Managed repos:"];
@@ -146,7 +143,7 @@ function formatDiscoveryRepoLabel(repo: GithubDiscoveryPlanEntry["repo"], useSou
   return repo.name;
 }
 
-function formatDiscoveryEntry(entry, {
+function formatDiscoveryEntry(entry: GithubDiscoveryPlanEntry, {
   useSourceLabels
 }: {
   useSourceLabels: boolean;

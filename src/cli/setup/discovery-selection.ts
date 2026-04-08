@@ -133,6 +133,7 @@ function resolveSelectedRepos(
 
   const selectionOptions = buildRepoSelectionOptions(
     availableRepos.map(repo => ({
+      status: "new" as const,
       repo
     })),
     {
@@ -318,7 +319,8 @@ async function promptForSelection({
           .filter(repo => configuredRepoSet.has(repo))
       };
     } catch (error) {
-      output.write?.(`${error.message}\n`);
+      const message = error instanceof Error ? error.message : String(error);
+      output.write?.(`${message}\n`);
     }
   }
 }
@@ -362,13 +364,13 @@ async function promptAddAllOrCustomize({
   };
 }
 
-function buildRepoSelectionOptions(entries, {
+function buildRepoSelectionOptions<T extends DisplayEntry>(entries: T[], {
   defaultSourceOwner = null,
   allEntries = entries
 }: {
   defaultSourceOwner?: string | null;
   allEntries?: DisplayEntry[];
-} = {}): SelectionOption[] {
+} = {}): Array<T & Pick<SelectionOption, "label" | "identifiers">> {
   const repoNameCounts = buildRepoNameCounts(allEntries);
 
   return entries.map(entry => {

@@ -19,7 +19,7 @@ export const EXTERNAL_FACING_PHRASES = [
   "public endpoint"
 ];
 
-export function getMaxInferredTopics(sizeKb) {
+export function getMaxInferredTopics(sizeKb: number | null | undefined): number {
   if (typeof sizeKb !== "number" || Number.isNaN(sizeKb)) {
     return MEDIUM_REPO_MAX_INFERRED_TOPICS;
   }

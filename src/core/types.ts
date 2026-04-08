@@ -146,7 +146,7 @@ export interface CodexSynthesis {
 
 export interface RunCodexQuestionInput {
   question: string;
-  audience: string | null | undefined;
+  audience: AnswerAudience | null | undefined;
   model: string | null;
   reasoningEffort: string | null;
   selectedRepos: ManagedRepo[];

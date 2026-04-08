@@ -37,7 +37,7 @@ export function formatMissingGithubDiscoveryAuthMessage() {
   ].join(" ");
 }
 
-function isMissingGhError(error) {
+function isMissingGhError(error: unknown): error is NodeJS.ErrnoException {
   return Boolean(
     error
     && typeof error === "object"
