@@ -4,15 +4,25 @@
   "description": "Your personal code archaeologist for repo-aware engineering Q&A",
   "type": "module",
   "bin": {
-    "archa": "./bin/archa.js",
-    "archa-server": "./bin/archa-server.js"
+    "archa": "./dist/bin/archa.js",
+    "archa-server": "./dist/bin/archa-server.js"
   },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run build",
+    "prepack": "npm run build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@types/node": "^25.5.2",
     "@vitest/coverage-v8": "^4.1.2",
+    "typescript": "^6.0.2",
     "vitest": "^4.1.2"
   },
   "engines": {
