@@ -1,4 +1,4 @@
-import type { LoadedConfig, ManagedRepo, RepoClassification } from "../types.js";
+import type { ManagedRepo, RepoClassification } from "../types.js";
 
 const MAX_AUTOMATIC_REPOS = 4;
 const CLASSIFICATION_ALIASES = new Map<RepoClassification, string[]>([
@@ -22,11 +22,18 @@ function tokenizeRepoName(name: string): string[] {
   ));
 }
 
-export function selectRepos(
-  config: LoadedConfig,
+type SelectableRepo = Pick<ManagedRepo, "name" | "description"> & {
+  topics?: string[];
+  classifications?: RepoClassification[];
+  aliases?: string[];
+  alwaysSelect?: boolean;
+};
+
+export function selectRepos<T extends SelectableRepo>(
+  config: { repos: T[] },
   question: string,
   requestedRepoNames: string[] | null
-): ManagedRepo[] {
+): T[] {
   if (requestedRepoNames && requestedRepoNames.length > 0) {
     const requested = new Set(requestedRepoNames.map(name => name.toLowerCase()));
     const selectedRepos = config.repos.filter(repo => repoMatchesAnyName(repo, requested));
@@ -59,14 +66,12 @@ export function selectRepos(
   return mergeRepos(alwaysSelectedRepos, scoredRepos);
 }
 
-function repoMatchesName(repo: ManagedRepo, name: string): boolean {
+function repoMatchesName(repo: SelectableRepo, name: string): boolean {
   return repoMatchesAnyName(repo, new Set([name.toLowerCase()]));
 }
 
 function repoMatchesAnyName(
-  repo: Pick<ManagedRepo, "name"> & {
-    aliases?: string[];
-  },
+  repo: Pick<SelectableRepo, "name" | "aliases">,
   requestedNames: Set<string>
 ): boolean {
   if (requestedNames.has(repo.name.toLowerCase())) {
@@ -77,10 +82,7 @@ function repoMatchesAnyName(
 }
 
 function scoreRepo(
-  repo: Pick<ManagedRepo, "name" | "description"> & {
-    topics?: string[];
-    classifications?: RepoClassification[];
-  },
+  repo: SelectableRepo,
   questionTokens: string[]
 ): number {
   const repoNameTokens = new Set(tokenizeRepoName(repo.name));
@@ -111,9 +113,9 @@ function scoreRepo(
   return score;
 }
 
-function mergeRepos(preferredRepos: ManagedRepo[], fallbackRepos: ManagedRepo[]): ManagedRepo[] {
+function mergeRepos<T extends Pick<SelectableRepo, "name">>(preferredRepos: T[], fallbackRepos: T[]): T[] {
   const seenNames = new Set<string>();
-  const mergedRepos: ManagedRepo[] = [];
+  const mergedRepos: T[] = [];
 
   for (const repo of [...preferredRepos, ...fallbackRepos]) {
     if (seenNames.has(repo.name)) {

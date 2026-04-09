@@ -33,6 +33,7 @@ vi.mock("../src/core/repos/repo-sync.js", () => ({
 }));
 
 import { answerQuestion } from "../src/core/answer/question-answering.js";
+import { createSyncReportItem } from "./test-helpers.js";
 
 describe("answerQuestion", () => {
   const config = {
@@ -225,23 +226,21 @@ describe("answerQuestion", () => {
     });
     const selectReposFn = vi.fn().mockReturnValue(selectedRepos);
     const syncReposFn = vi.fn(async (repos, callbacks) => {
-      callbacks.onRepoStart(repos[0], "update", "main");
-      callbacks.onRepoWait(repos[0], "main");
-      callbacks.onRepoResult({
+      callbacks?.onRepoStart?.(repos[0], "update", "main");
+      callbacks?.onRepoWait?.(repos[0], "main");
+      callbacks?.onRepoResult?.(createSyncReportItem({
         name: "sqs-codec",
         directory: "/workspace/repos/sqs-codec",
         action: "updated",
         detail: "main"
-      });
+      }));
 
-      return [
-        {
-          name: "sqs-codec",
-          directory: "/workspace/repos/sqs-codec",
-          action: "updated",
-          detail: "main"
-        }
-      ];
+      return [createSyncReportItem({
+        name: "sqs-codec",
+        directory: "/workspace/repos/sqs-codec",
+        action: "updated",
+        detail: "main"
+      })];
     });
     const runCodexQuestionFn = vi.fn(async ({ onStatus }) => {
       onStatus("Synthesizing...");
@@ -289,5 +288,27 @@ describe("answerQuestion", () => {
       "sqs-codec: updated (main)",
       "Synthesizing..."
     ]));
+  });
+
+  it("preserves the legacy three-argument call shape when a status reporter is provided", async () => {
+    const statusReporter = {
+      info: vi.fn()
+    };
+
+    await answerQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      noSync: true,
+      noSynthesis: true,
+      repoNames: null
+    }, {
+      env: { ARCHA_CODEX_TIMEOUT_MS: "12345" },
+      loadConfigFn: mocks.loadConfig,
+      selectReposFn: mocks.selectRepos
+    }, statusReporter);
+
+    expect(mocks.loadConfig).toHaveBeenCalledWith(process.env);
+    expect(statusReporter.info).toHaveBeenCalledWith("Selected repos: sqs-codec");
   });
 });

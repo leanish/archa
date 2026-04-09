@@ -5,19 +5,18 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
 import {
-  isSupportedAnswerAudience,
   resolveAnswerAudience,
-  SUPPORTED_ANSWER_AUDIENCES,
   type AnswerAudience
 } from "../answer/answer-audience.js";
 import { normalizeCodexExecutionError } from "./codex-installation.js";
 import { DEFAULT_CODEX_MODEL, DEFAULT_CODEX_REASONING_EFFORT } from "./codex-defaults.js";
 import { formatDuration } from "../time/duration-format.js";
-import type { CodexSynthesis, Environment, ManagedRepo, RunCodexQuestionInput } from "../types.js";
+import type { CodexScopeRepo, CodexSynthesis, Environment, RunCodexQuestionInput } from "../types.js";
 
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
 const FORCE_KILL_GRACE_PERIOD_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 5_000;
+
 type StatusCallback = ((message: string) => void) | null | undefined;
 
 type RunCodexPromptInput = {
@@ -50,9 +49,16 @@ export async function runCodexQuestion({
   onStatus,
   timeoutMs = DEFAULT_CODEX_TIMEOUT_MS
 }: RunCodexQuestionInput): Promise<CodexSynthesis> {
-  const executionContext = getCodexExecutionContext({ question, audience, selectedRepos, workspaceRoot });
+  const executionContext = getCodexExecutionContext({
+    question,
+    ...(audience === undefined ? {} : { audience }),
+    selectedRepos,
+    workspaceRoot
+  });
   const resolvedModel = model || DEFAULT_CODEX_MODEL;
   const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
+
+  onStatus?.(formatCodexRunningStatus());
 
   return runCodexPrompt({
     prompt: executionContext.prompt,
@@ -79,8 +85,6 @@ export async function runCodexPrompt({
   const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
 
   try {
-    onStatus?.(formatCodexRunningStatus());
-
     await runCodexExec({
       prompt,
       model: resolvedModel,
@@ -144,14 +148,12 @@ export function getCodexExecutionContext({
   };
 }
 
-function buildPrompt(question: string, selectedRepos: ManagedRepo[], audience: string | null | undefined): string {
+function buildPrompt(
+  question: string,
+  selectedRepos: CodexScopeRepo[],
+  audience: AnswerAudience | null | undefined
+): string {
   const resolvedAudience = resolveAnswerAudience(audience);
-  if (!isSupportedAnswerAudience(resolvedAudience)) {
-    throw new Error(
-      `Unsupported answer audience: ${resolvedAudience}. Use one of: ${SUPPORTED_ANSWER_AUDIENCES.join(", ")}.`
-    );
-  }
-
   const repoNames = selectedRepos.map(repo => repo.name).join(", ");
 
   return [

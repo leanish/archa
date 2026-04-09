@@ -1,5 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type ChildResult = number | Error;
+type StderrHandler = (chunk: Buffer) => void;
+type CloseHandler = (code: number | null) => void;
+type ErrorHandler = (error: Error) => void;
+type ChildProcessDouble = {
+  stdin: {
+    write: ReturnType<typeof vi.fn>;
+    end: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  };
+  kill: ReturnType<typeof vi.fn>;
+  unref: ReturnType<typeof vi.fn>;
+  stderr: {
+    destroy: ReturnType<typeof vi.fn>;
+    on: ReturnType<typeof vi.fn>;
+  };
+  on: ReturnType<typeof vi.fn>;
+  close(code: number): void;
+};
+
 const mocks = vi.hoisted(() => ({
   readFile: vi.fn(),
   rm: vi.fn(),
@@ -42,7 +62,7 @@ describe("codex-runner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
-    mocks.rm.mockResolvedValue();
+    mocks.rm.mockResolvedValue(undefined);
     mocks.readFile.mockResolvedValue("Final answer");
     mocks.randomUUID.mockReturnValue("uuid-fixed");
   });
@@ -113,6 +133,7 @@ describe("codex-runner", () => {
   it("runs codex and returns the final answer text", async () => {
     const child = createChildProcess({ code: 0 });
     const onStatus = vi.fn();
+    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(1_234_567_890);
     mocks.spawn.mockReturnValue(child);
     mocks.readFile.mockResolvedValue("  Final answer from Codex  ");
 
@@ -159,6 +180,8 @@ describe("codex-runner", () => {
     );
     expect(mocks.readFile).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), "utf8");
     expect(mocks.rm).toHaveBeenCalledWith(expect.stringContaining("/tmp/archa-codex-"), { force: true });
+
+    dateNowSpy.mockRestore();
   });
 
   it("runs a generic Codex prompt in the provided working directory", async () => {
@@ -459,12 +482,20 @@ describe("codex-runner", () => {
   });
 });
 
-function createChildProcess({ code = 0, stderrChunks = [], autoCloseOnEnd = true }) {
-  const stderrHandlers = [];
-  const closeHandlers = [];
-  const errorHandlers = [];
+function createChildProcess({
+  code = 0,
+  stderrChunks = [],
+  autoCloseOnEnd = true
+}: {
+  code?: ChildResult;
+  stderrChunks?: string[];
+  autoCloseOnEnd?: boolean;
+}): ChildProcessDouble {
+  const stderrHandlers: StderrHandler[] = [];
+  const closeHandlers: CloseHandler[] = [];
+  const errorHandlers: ErrorHandler[] = [];
 
-  const child = {
+  const child: ChildProcessDouble = {
     stdin: {
       write: vi.fn(),
       end: vi.fn(() => {
@@ -479,29 +510,28 @@ function createChildProcess({ code = 0, stderrChunks = [], autoCloseOnEnd = true
     unref: vi.fn(),
     stderr: {
       destroy: vi.fn(),
-      on: vi.fn((event, handler) => {
+      on: vi.fn((event: "data", handler: StderrHandler) => {
         if (event === "data") {
           stderrHandlers.push(handler);
         }
       })
     },
-    on: vi.fn((event, handler) => {
+    on: vi.fn((event: "close" | "error", handler: CloseHandler | ErrorHandler) => {
       if (event === "close") {
-        closeHandlers.push(handler);
+        closeHandlers.push(handler as CloseHandler);
       }
       if (event === "error") {
-        errorHandlers.push(handler);
+        errorHandlers.push(handler as ErrorHandler);
       }
-    })
-  };
-
-  child.close = closeCode => {
-    emitResult(closeCode);
+    }),
+    close(closeCode: number) {
+      emitResult(closeCode);
+    }
   };
 
   return child;
 
-  function emitResult(resultCode) {
+  function emitResult(resultCode: ChildResult): void {
     queueMicrotask(() => {
       stderrChunks.forEach(chunk => {
         stderrHandlers.forEach(handler => handler(Buffer.from(chunk)));
