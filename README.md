@@ -78,6 +78,12 @@ npm run server
 
 That path does not require rebuilding `dist/`, so rerunning it after source edits will pick up the latest `src/` changes.
 
+To run the CLI directly from TypeScript source during development, use:
+
+```bash
+npm run cli -- "How does this codebase behave?"
+```
+
 ## Configuration
 
 By default, `archa` reads config from:
