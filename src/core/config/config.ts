@@ -20,6 +20,21 @@ type RawConfig = {
 
 type RawRepo = Record<string, unknown>;
 
+const VALID_REPO_CLASSIFICATIONS = new Set<string>([
+  "infra",
+  "library",
+  "internal",
+  "external",
+  "frontend",
+  "backend",
+  "cli",
+  "microservice"
+]);
+
+function isRepoClassification(value: string): value is RepoClassification {
+  return VALID_REPO_CLASSIFICATIONS.has(value);
+}
+
 export async function loadConfig(env: Environment = process.env): Promise<LoadedConfig> {
   const configPath = getConfigPath(env);
   const raw = await readConfigFile(configPath);
@@ -313,7 +328,15 @@ function normalizeClassifications(value: unknown, repoName: string, sourcePath: 
     throw new Error(`Invalid Archa config at ${sourcePath}: repo "${repoName}" has non-string or empty classifications.`);
   }
 
-  return value.map(item => item.trim().toLowerCase()) as RepoClassification[];
+  const normalizedClassifications = value.map(item => item.trim().toLowerCase());
+  const invalidClassification = normalizedClassifications.find(classification => !isRepoClassification(classification));
+  if (invalidClassification) {
+    throw new Error(
+      `Invalid Archa config at ${sourcePath}: repo "${repoName}" has unsupported classification "${invalidClassification}".`
+    );
+  }
+
+  return normalizedClassifications.filter(isRepoClassification);
 }
 
 function validateUniqueRepoIdentifiers(repos: Array<Pick<ManagedRepoDefinition, "name" | "aliases">>, sourcePath: string): void {
