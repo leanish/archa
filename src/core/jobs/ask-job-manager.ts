@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { DEFAULT_ANSWER_AUDIENCE } from "../answer/answer-audience.js";
 import { answerQuestion } from "../answer/question-answering.js";
+import { CODEX_COMPLETED_STATUS_PREFIX } from "../codex/codex-runner.js";
 import { createRepoSyncCoordinator } from "../repos/repo-sync-coordinator.js";
 import { createCallbackStatusReporter } from "../status/status-reporter.js";
 import { formatDuration } from "../time/duration-format.js";
@@ -207,7 +208,7 @@ export function createAskJobManager({
       job.status = "completed";
       job.finishedAt = toTimestamp(now());
       job.result = result;
-      appendEvent(job, "completed", `Job completed. (${formatElapsedSinceCreation(job)} total)`);
+      appendEvent(job, "completed", getCompletedMessage(job));
     }).catch(error => {
       job.status = "failed";
       job.finishedAt = toTimestamp(now());
@@ -242,6 +243,26 @@ export function createAskJobManager({
     job.nextEventSequence += 1;
     job.events.push(event);
     publishEvent(job.id, event);
+  }
+
+  function getCompletedMessage(job: MutableAskJob): string {
+    const latestStatusMessage = findLatestStatusMessage(job);
+    if (latestStatusMessage?.startsWith(CODEX_COMPLETED_STATUS_PREFIX)) {
+      return latestStatusMessage;
+    }
+
+    return `Job completed. (${formatElapsedSinceCreation(job)} total)`;
+  }
+
+  function findLatestStatusMessage(job: MutableAskJob): string | null {
+    for (let index = job.events.length - 1; index >= 0; index -= 1) {
+      const event = job.events[index];
+      if (event?.type === "status") {
+        return event.message;
+      }
+    }
+
+    return null;
   }
 
   function publishEvent(jobId: string, event: AskJobEvent): void {

@@ -304,8 +304,9 @@ describe("cli", () => {
       value: true
     });
     mocks.answerQuestion.mockImplementation(async (_options, { statusReporter }) => {
-      statusReporter.info("Running Codex");
+      statusReporter.info("Running Codex...");
       statusReporter.info("Running Codex... (5s elapsed)");
+      statusReporter.info("Running Codex... done in 5s");
 
       return {
         mode: "answer",
@@ -319,7 +320,9 @@ describe("cli", () => {
 
     await main(["What", "is", "x-codec-meta?"]);
 
-    expect(stderr.join("")).toBe("[archa] Running Codex\r\x1b[2K[archa] Running Codex... (5s elapsed)\n");
+    expect(stderr.join("")).toBe(
+      "[archa] Running Codex...\r\x1b[2K[archa] Running Codex... (5s elapsed)\r\x1b[2K[archa] Running Codex... done in 5s\n"
+    );
     expect(stdout.join("")).toContain("Final answer");
   });
 

@@ -16,6 +16,7 @@ import type { CodexScopeRepo, CodexSynthesis, Environment, RunCodexQuestionInput
 const DEFAULT_CODEX_TIMEOUT_MS = 300_000;
 const FORCE_KILL_GRACE_PERIOD_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 5_000;
+export const CODEX_COMPLETED_STATUS_PREFIX = "Running Codex... done in ";
 
 type StatusCallback = ((message: string) => void) | null | undefined;
 
@@ -198,6 +199,7 @@ async function runCodexExec({
   onStatus,
   timeoutMs
 }: RunCodexExecInput): Promise<void> {
+  const startedAt = Date.now();
   const args = [
     "-c",
     `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`,
@@ -217,7 +219,7 @@ async function runCodexExec({
 
   args.push("-");
 
-  const stopHeartbeat = startCodexHeartbeat(onStatus);
+  const stopHeartbeat = startCodexHeartbeat(onStatus, startedAt);
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -271,6 +273,7 @@ async function runCodexExec({
 
         settled = true;
         if (code === 0) {
+          onStatus?.(formatCodexCompletedStatus(Date.now() - startedAt));
           resolve();
           return;
         }
@@ -343,14 +346,13 @@ function isRelevantTimeoutLine(line: string): boolean {
   ].some(pattern => pattern.test(line));
 }
 
-function startCodexHeartbeat(onStatus: StatusCallback): () => void {
+function startCodexHeartbeat(onStatus: StatusCallback, startedAt: number): () => void {
   if (!onStatus) {
     return () => {};
   }
 
-  const startedAt = Date.now();
   const timer = setInterval(() => {
-    onStatus(formatCodexRunningStatus(Date.now() - startedAt));
+    onStatus(formatCodexElapsedStatus(Date.now() - startedAt));
   }, HEARTBEAT_INTERVAL_MS);
 
   timer.unref?.();
@@ -360,10 +362,14 @@ function startCodexHeartbeat(onStatus: StatusCallback): () => void {
   };
 }
 
-function formatCodexRunningStatus(elapsedMs: number | null = null): string {
-  if (elapsedMs === null) {
-    return "Running Codex";
-  }
+function formatCodexRunningStatus(): string {
+  return "Running Codex...";
+}
 
+function formatCodexElapsedStatus(elapsedMs: number): string {
   return `Running Codex... (${formatDuration(elapsedMs)} elapsed)`;
+}
+
+function formatCodexCompletedStatus(elapsedMs: number): string {
+  return `${CODEX_COMPLETED_STATUS_PREFIX}${formatDuration(elapsedMs)}`;
 }
