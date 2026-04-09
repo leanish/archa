@@ -4,7 +4,7 @@ const LARGE_REPO_MAX_INFERRED_TOPICS = 8;
 const HUGE_REPO_MAX_INFERRED_TOPICS = 20;
 const MASSIVE_REPO_MAX_INFERRED_TOPICS = 30;
 
-export const EXTERNAL_FACING_PHRASES = [
+export const EXTERNAL_FACING_PHRASES: readonly string[] = [
   "external",
   "customer-facing",
   "user-facing",
