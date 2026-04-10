@@ -1830,6 +1830,63 @@ describe("github-catalog", () => {
     expect(plan.entries[0]!.suggestions).not.toContain("review routing");
   });
 
+  it("does not suggest routing review when routing field order differs", () => {
+    const plan = planGithubRepoDiscovery(createLoadedConfig({
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          defaultBranch: "main",
+          description: "",
+          routing: {
+            role: "frontend-application",
+            reach: [],
+            responsibilities: [],
+            owns: ["React"],
+            exposes: [],
+            consumes: [],
+            workflows: [],
+            boundaries: [],
+            selectWhen: [],
+            selectWithOtherReposWhen: []
+          },
+          aliases: [],
+          alwaysSelect: false,
+          directory: "/repos/foundation"
+        }
+      ]
+    }), {
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          defaultBranch: "main",
+          description: "",
+          routing: {
+            owns: ["React"],
+            role: "frontend-application",
+            selectWhen: [],
+            boundaries: [],
+            exposes: [],
+            consumes: [],
+            workflows: [],
+            responsibilities: [],
+            reach: [],
+            selectWithOtherReposWhen: []
+          }
+        }
+      ]
+    });
+
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0]!.status).toBe("configured");
+    expect(plan.entries[0]!.suggestions).not.toContain("review routing");
+  });
+
   it("qualifies owner-colliding repo names so they can coexist", () => {
     const plan = planGithubRepoDiscovery(createLoadedConfig({
       repos: [

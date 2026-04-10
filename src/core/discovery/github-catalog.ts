@@ -1582,5 +1582,25 @@ function mergeRepoRoutingDraft(draft: RepoRoutingMetadata, inspected: RepoRoutin
 }
 
 function sameRouting(left: RepoRoutingMetadata | undefined, right: RepoRoutingMetadata | undefined): boolean {
-  return JSON.stringify(left || createEmptyRepoRouting()) === JSON.stringify(right || createEmptyRepoRouting());
+  const leftRouting = left || createEmptyRepoRouting();
+  const rightRouting = right || createEmptyRepoRouting();
+
+  return leftRouting.role === rightRouting.role
+    && sameRoutingList(leftRouting.reach, rightRouting.reach)
+    && sameRoutingList(leftRouting.responsibilities, rightRouting.responsibilities)
+    && sameRoutingList(leftRouting.owns, rightRouting.owns)
+    && sameRoutingList(leftRouting.exposes, rightRouting.exposes)
+    && sameRoutingList(leftRouting.consumes, rightRouting.consumes)
+    && sameRoutingList(leftRouting.workflows, rightRouting.workflows)
+    && sameRoutingList(leftRouting.boundaries, rightRouting.boundaries)
+    && sameRoutingList(leftRouting.selectWhen, rightRouting.selectWhen)
+    && sameRoutingList(leftRouting.selectWithOtherReposWhen, rightRouting.selectWithOtherReposWhen);
+}
+
+function sameRoutingList(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
 }
