@@ -19,6 +19,8 @@ import type {
   SyncReportItem
 } from "../types.js";
 
+const REPO_SELECTION_COMPARISON_TIMEOUT_MS = 30_000;
+
 export const answerQuestion: AnswerQuestionFn = async (
   options: AskRequest,
   envOrExecution: Environment | QuestionExecutionOverrides = process.env,
@@ -45,6 +47,7 @@ export const answerQuestion: AnswerQuestionFn = async (
     formatRepoSelectionStatus(selection.mode, selectedRepos, selectionElapsedMs)
   );
   execution.statusReporter?.info(formatRepoSyncModeStatus(options.noSync));
+  const finalizedSelectionPromise = finalizeRepoSelection(selection, execution.statusReporter);
 
   const syncReport: SyncReportItem[] = options.noSync
     ? selectedRepos.map(repo => ({
@@ -67,9 +70,8 @@ export const answerQuestion: AnswerQuestionFn = async (
         }
       });
 
-  const finalizedSelection = await finalizeRepoSelection(selection, execution.statusReporter);
-
   if (options.noSynthesis) {
+    const finalizedSelection = await finalizedSelectionPromise;
     return {
       mode: "retrieval-only",
       question: options.question,
@@ -103,6 +105,7 @@ export const answerQuestion: AnswerQuestionFn = async (
       execution.statusReporter?.info(message);
     }
   });
+  const finalizedSelection = await finalizedSelectionPromise;
 
   return {
     mode: "answer",
@@ -147,12 +150,47 @@ async function finalizeRepoSelection(
     return selection.selection;
   }
 
-  const finalizedSelection = await selection.selectionPromise;
+  const finalizedSelection = await waitForRepoSelectionComparison(
+    selection.selectionPromise,
+    selection.selection,
+    statusReporter
+  );
   if (finalizedSelection && shouldReportSelectionComparison(finalizedSelection)) {
     statusReporter?.info(formatSelectionComparisonStatus(finalizedSelection));
   }
 
   return finalizedSelection;
+}
+
+async function waitForRepoSelectionComparison(
+  selectionPromise: Promise<RepoSelectionSummary | null>,
+  fallbackSelection: RepoSelectionSummary | null,
+  statusReporter: StatusReporter | null
+): Promise<RepoSelectionSummary | null> {
+  const timeoutResult = Symbol("repo-selection-comparison-timeout");
+  let timeoutHandle: NodeJS.Timeout | null = null;
+
+  try {
+    const result = await Promise.race<RepoSelectionSummary | null | typeof timeoutResult>([
+      selectionPromise,
+      new Promise<typeof timeoutResult>(resolve => {
+        timeoutHandle = setTimeout(() => resolve(timeoutResult), REPO_SELECTION_COMPARISON_TIMEOUT_MS);
+      })
+    ]);
+
+    if (result === timeoutResult) {
+      statusReporter?.info("Repo selection comparison timed out; returning initial selection diagnostics.");
+      return fallbackSelection;
+    }
+
+    return result;
+  } catch {
+    return fallbackSelection;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 }
 
 function shouldReportSelectionComparison(selection: RepoSelectionSummary): boolean {

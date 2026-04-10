@@ -8,7 +8,13 @@ vi.mock("../src/core/codex/codex-runner.js", () => ({
   runCodexPrompt: mocks.runCodexPrompt
 }));
 
-import { selectRepos, selectReposHeuristically } from "../src/core/repos/repo-selection.js";
+import {
+  buildRepoSelectionPrompt,
+  isUsableCodexRun,
+  parseRepoSelectionRunResult,
+  selectRepos,
+  selectReposHeuristically
+} from "../src/core/repos/repo-selection.js";
 import { createLoadedConfig, createManagedRepo } from "./test-helpers.js";
 
 const config = createLoadedConfig({
@@ -115,6 +121,7 @@ describe("selectRepos", () => {
         usedForFinal: true
       })
     ]);
+    expect(result.selectionPromise).toBeUndefined();
   });
 
   it("merges alwaysSelect repos into the codex selection", async () => {
@@ -222,6 +229,223 @@ describe("selectRepos", () => {
       finalEffort: "none"
     });
     expect(finalizedSelection?.runs.map(run => run.effort)).toEqual(["none", "low", "high"]);
+  });
+});
+
+describe("buildRepoSelectionPrompt", () => {
+  it("builds a routing-focused prompt and filters noisy consumes values", () => {
+    expect(buildRepoSelectionPrompt(createLoadedConfig({
+      configPath: "/workspace/.config/archa/config.json",
+      repos: [
+        createManagedRepo({
+          name: "java-conventions",
+          description: "Java conventions and build defaults",
+          routing: {
+            role: "shared-library",
+            reach: ["shared-library"],
+            responsibilities: ["Owns shared Java build conventions."],
+            owns: ["Gradle conventions", "Java build defaults"],
+            exposes: ["Gradle plugin"],
+            consumes: ["Gradle", "Node.js", "GitHub API"],
+            workflows: ["Shared Java build setup"],
+            boundaries: [],
+            selectWhen: ["The question is about conventions or build defaults."],
+            selectWithOtherReposWhen: []
+          }
+        })
+      ]
+    }), "How do the conventions work?")).toMatchInlineSnapshot(`
+      "Select the configured repositories that should be searched to answer the user question.
+      Select repos by ownership and exposed surfaces, not by generic keyword overlap.
+      Strong evidence: description, routing.role, routing.reach, routing.responsibilities, routing.owns, routing.exposes, routing.workflows, routing.selectWhen, and aliases.
+      Weaker evidence: routing.consumes and generic ecosystem overlap.
+      Negative evidence: routing.boundaries and routing.selectWithOtherReposWhen when the question does not cross repo boundaries.
+      Prefer precision over recall. Only choose repos that are likely to contain the answer.
+      Return at most 4 configured repos.
+      Return JSON only with exactly this shape: {"selectedRepoNames":["repo-a","repo-b"],"confidence":0.0}.
+      Confidence must be a number from 0.0 to 1.0 for how confident you are that the selected set is sufficient.
+      Use configured repo names exactly as provided.
+      Return an empty array when no extra repos are clearly relevant.
+      There are no alwaysSelect repos.
+
+      Configured repositories from /workspace/.config/archa/config.json:
+      [
+        {
+          "name": "java-conventions",
+          "description": "Java conventions and build defaults",
+          "routing": {
+            "role": "shared-library",
+            "reach": [
+              "shared-library"
+            ],
+            "responsibilities": [
+              "Owns shared Java build conventions."
+            ],
+            "owns": [
+              "Gradle conventions",
+              "Java build defaults"
+            ],
+            "exposes": [
+              "Gradle plugin"
+            ],
+            "consumes": [
+              "GitHub API"
+            ],
+            "workflows": [
+              "Shared Java build setup"
+            ],
+            "boundaries": [],
+            "selectWhen": [
+              "The question is about conventions or build defaults."
+            ],
+            "selectWithOtherReposWhen": []
+          },
+          "aliases": [],
+          "alwaysSelect": false
+        }
+      ]
+
+      User question:
+      """
+      How do the conventions work?
+      """"
+    `);
+  });
+});
+
+describe("parseRepoSelectionRunResult", () => {
+  it("treats empty or malformed selector output as unusable", () => {
+    expect(parseRepoSelectionRunResult("", config, "none", 12)).toEqual({
+      effort: "none",
+      repoNames: [],
+      repos: null,
+      confidence: null,
+      latencyMs: 12
+    });
+    expect(parseRepoSelectionRunResult("{", config, "none", 13)).toEqual({
+      effort: "none",
+      repoNames: [],
+      repos: null,
+      confidence: null,
+      latencyMs: 13
+    });
+  });
+
+  it("rejects outputs that omit selectedRepoNames", () => {
+    expect(parseRepoSelectionRunResult(JSON.stringify({
+      confidence: 0.9
+    }), config, "low", 14)).toEqual({
+      effort: "low",
+      repoNames: [],
+      repos: null,
+      confidence: null,
+      latencyMs: 14
+    });
+  });
+
+  it("normalizes invalid confidence values to null while keeping matched repos", () => {
+    expect(parseRepoSelectionRunResult(JSON.stringify({
+      selectedRepoNames: ["archa"],
+      confidence: 1.2
+    }), config, "low", 15)).toEqual({
+      effort: "low",
+      repoNames: ["archa"],
+      repos: [config.repos[1]],
+      confidence: null,
+      latencyMs: 15
+    });
+  });
+
+  it("rejects unknown or over-limit repo selections", () => {
+    expect(parseRepoSelectionRunResult(JSON.stringify({
+      selectedRepoNames: ["missing-repo"],
+      confidence: 0.8
+    }), config, "none", 16)).toEqual({
+      effort: "none",
+      repoNames: ["missing-repo"],
+      repos: null,
+      confidence: 0.8,
+      latencyMs: 16
+    });
+
+    expect(parseRepoSelectionRunResult(JSON.stringify({
+      selectedRepoNames: ["a", "b", "c", "d", "e"],
+      confidence: 0.8
+    }), config, "none", 17)).toEqual({
+      effort: "none",
+      repoNames: ["a", "b", "c", "d", "e"],
+      repos: null,
+      confidence: 0.8,
+      latencyMs: 17
+    });
+  });
+});
+
+describe("isUsableCodexRun", () => {
+  it("applies the per-effort confidence thresholds", () => {
+    const baseRun = {
+      repoNames: ["archa"],
+      repos: [config.repos[1]!],
+      latencyMs: 10
+    };
+
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "none",
+      confidence: 0.77
+    }, 0, "none")).toBe(false);
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "none",
+      confidence: 0.78
+    }, 0, "none")).toBe(true);
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "minimal",
+      confidence: 0.73
+    }, 0, "minimal")).toBe(false);
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "minimal",
+      confidence: 0.74
+    }, 0, "minimal")).toBe(true);
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "low",
+      confidence: 0.67
+    }, 0, "low")).toBe(false);
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "low",
+      confidence: 0.68
+    }, 0, "low")).toBe(true);
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "medium",
+      confidence: 0.57
+    }, 0, "medium")).toBe(false);
+    expect(isUsableCodexRun({
+      ...baseRun,
+      effort: "medium",
+      confidence: 0.58
+    }, 0, "medium")).toBe(true);
+  });
+
+  it("allows high-effort runs without confidence and rejects empty repo sets", () => {
+    expect(isUsableCodexRun({
+      effort: "high",
+      repoNames: ["archa"],
+      repos: [config.repos[1]!],
+      confidence: null,
+      latencyMs: 20
+    }, 0, "high")).toBe(true);
+    expect(isUsableCodexRun({
+      effort: "high",
+      repoNames: [],
+      repos: [],
+      confidence: null,
+      latencyMs: 21
+    }, 0, "high")).toBe(false);
   });
 });
 

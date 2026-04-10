@@ -468,6 +468,66 @@ describe("answerQuestion", () => {
     );
   });
 
+  it("falls back to the immediate selection summary when background comparison does not finish in time", async () => {
+    vi.useFakeTimers();
+    const statusReporter = { info: vi.fn() };
+    const immediateSelection = {
+      mode: "single" as const,
+      shadowCompare: true,
+      source: "codex" as const,
+      finalEffort: "none" as const,
+      finalRepoNames: ["sqs-codec"],
+      runs: [
+        {
+          effort: "none" as const,
+          repoNames: ["sqs-codec"],
+          latencyMs: 5,
+          confidence: 0.91,
+          usedForFinal: true
+        }
+      ]
+    };
+
+    mocks.selectRepos.mockResolvedValue({
+      repos: selectedRepos,
+      mode: "resolved",
+      selection: immediateSelection,
+      selectionPromise: new Promise(() => {})
+    });
+
+    try {
+      const resultPromise = answerQuestion({
+        question: "How does x-codec-meta work?",
+        model: "gpt-5.4",
+        reasoningEffort: "low",
+        noSync: true,
+        noSynthesis: true,
+        repoNames: null
+      }, {
+        env: process.env,
+        statusReporter,
+        loadConfigFn: mocks.loadConfig,
+        selectReposFn: mocks.selectRepos,
+        syncReposFn: mocks.syncRepos,
+        existsSyncFn: mocks.existsSync,
+        getCodexTimeoutMsFn: mocks.getCodexTimeoutMs,
+        runCodexQuestionFn: mocks.runCodexQuestion,
+        nowFn: () => 0
+      });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      await expect(resultPromise).resolves.toMatchObject({
+        selection: immediateSelection
+      });
+      expect(statusReporter.info).toHaveBeenCalledWith(
+        "Repo selection comparison timed out; returning initial selection diagnostics."
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("preserves the legacy three-argument call shape when a status reporter is provided", async () => {
     const statusReporter = {
       info: vi.fn()

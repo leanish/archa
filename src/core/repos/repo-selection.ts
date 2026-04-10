@@ -30,6 +30,10 @@ type RepoSelectionDependencies = {
   runCodexPromptFn?: typeof runCodexPrompt;
   nowFn?: () => number;
 };
+type RepoSelectionOptions = {
+  selectionMode?: RepoSelectionStrategy | null;
+  selectionShadowCompare?: boolean;
+};
 
 type RepoSelectionRunResult = {
   effort: RepoSelectionCodexEffort;
@@ -46,13 +50,7 @@ export async function selectRepos(
   {
     selectionMode = null,
     selectionShadowCompare = false
-  }: {
-    selectionMode: RepoSelectionStrategy | null;
-    selectionShadowCompare: boolean;
-  } = {
-    selectionMode: null,
-    selectionShadowCompare: false
-  },
+  }: RepoSelectionOptions = {},
   {
     runCodexPromptFn = runCodexPrompt,
     nowFn = Date.now
@@ -230,19 +228,34 @@ async function selectAutomaticRepos(
     ...baseSelection,
     runs: buildSelectionRuns(completedRuns, selectedRun.effort)
   };
+  const hasAdditionalBackgroundRuns = Array.from(runPromises.keys()).some(
+    effort => !completedRuns.some(run => run.effort === effort)
+  );
+
+  const selectionPromise = hasAdditionalBackgroundRuns
+    ? collectAllRuns(runPromises).then(allRuns => ({
+        ...baseSelection,
+        runs: buildSelectionRuns(allRuns, selectedRun?.effort ?? null)
+      }))
+    : null;
+
+  if (!selectionPromise) {
+    return {
+      repos,
+      mode: repos.length === config.repos.length ? "all" : "resolved",
+      selection: immediateSelection
+    };
+  }
 
   return {
     repos,
     mode: repos.length === config.repos.length ? "all" : "resolved",
     selection: immediateSelection,
-    selectionPromise: collectAllRuns(runPromises).then(allRuns => ({
-      ...baseSelection,
-      runs: buildSelectionRuns(allRuns, selectedRun?.effort ?? null)
-    }))
+    selectionPromise
   };
 }
 
-function buildRepoSelectionPrompt(config: LoadedConfig, question: string): string {
+export function buildRepoSelectionPrompt(config: LoadedConfig, question: string): string {
   const repoSummaries = config.repos.map(repo => ({
     name: repo.name,
     description: repo.description,
@@ -283,7 +296,7 @@ function buildRepoSelectionPrompt(config: LoadedConfig, question: string): strin
   ].join("\n");
 }
 
-function parseRepoSelectionRunResult(
+export function parseRepoSelectionRunResult(
   text: string,
   config: LoadedConfig,
   effort: RepoSelectionCodexEffort,
@@ -380,7 +393,7 @@ function normalizeConfidence(value: unknown): number | null {
   return value;
 }
 
-function isUsableCodexRun(
+export function isUsableCodexRun(
   run: RepoSelectionRunResult,
   alwaysSelectedRepoCount: number,
   effort: RepoSelectionCodexEffort
