@@ -208,6 +208,7 @@ describe("selectRepos", () => {
       finalRepoNames: ["java-conventions"]
     });
     expect(result.selection?.runs.map(run => run.effort)).toEqual(["none", "minimal", "low"]);
+    expect(mocks.runCodexPrompt).toHaveBeenCalledTimes(3);
   });
 
   it("keeps background comparison runs available through selectionPromise", async () => {
@@ -268,48 +269,47 @@ describe("buildRepoSelectionPrompt", () => {
       Return an empty array when no extra repos are clearly relevant.
       There are no alwaysSelect repos.
 
-      Configured repositories from /workspace/.config/archa/config.json:
-      [
-        {
-          "name": "java-conventions",
-          "description": "Java conventions and build defaults",
-          "routing": {
-            "role": "shared-library",
-            "reach": [
-              "shared-library"
-            ],
-            "responsibilities": [
-              "Owns shared Java build conventions."
-            ],
-            "owns": [
-              "Gradle conventions",
-              "Java build defaults"
-            ],
-            "exposes": [
-              "Gradle plugin"
-            ],
-            "consumes": [
-              "GitHub API"
-            ],
-            "workflows": [
-              "Shared Java build setup"
-            ],
-            "boundaries": [],
-            "selectWhen": [
-              "The question is about conventions or build defaults."
-            ],
-            "selectWithOtherReposWhen": []
-          },
-          "aliases": [],
-          "alwaysSelect": false
-        }
-      ]
+      Using full routing summaries for the configured repos.
+      Configured repositories from /workspace/.config/archa/config.json (one JSON object per line):
+      {"name":"java-conventions","description":"Java conventions and build defaults","routing":{"role":"shared-library","reach":["shared-library"],"owns":["Gradle conventions","Java build defaults"],"exposes":["Gradle plugin"],"selectWhen":["The question is about conventions or build defaults."],"responsibilities":["Owns shared Java build conventions."],"workflows":["Shared Java build setup"],"consumes":["GitHub API"]}}
 
       User question:
       """
       How do the conventions work?
       """"
     `);
+  });
+
+  it("compacts repo summaries when many repos are configured", () => {
+    const largeConfig = createLoadedConfig({
+      configPath: "/workspace/.config/archa/config.json",
+      repos: Array.from({ length: 17 }, (_, index) => createManagedRepo({
+        name: `repo-${index + 1}`,
+        description: `Service ${index + 1}`,
+        routing: {
+          role: "service-application",
+          reach: ["service-api"],
+          responsibilities: [`Owns backend behavior ${index + 1}.`],
+          owns: [`domain-${index + 1}`],
+          exposes: [`GET /api/${index + 1}`],
+          consumes: ["GitHub API"],
+          workflows: [`Workflow ${index + 1}`],
+          boundaries: [`Boundary ${index + 1}`],
+          selectWhen: [`The question is about domain-${index + 1}.`],
+          selectWithOtherReposWhen: [`Use with repo-${index + 1}-worker when flows cross boundaries.`]
+        }
+      }))
+    });
+
+    const prompt = buildRepoSelectionPrompt(largeConfig, "Which repo owns domain-1?");
+
+    expect(prompt).toContain("Large repo set detected; omitting lower-signal routing fields to control prompt size.");
+    expect(prompt).not.toContain("\"responsibilities\"");
+    expect(prompt).not.toContain("\"workflows\"");
+    expect(prompt).not.toContain("\"consumes\"");
+    expect(prompt).not.toContain("\"selectWithOtherReposWhen\"");
+    expect(prompt).toContain("{\"name\":\"repo-1\"");
+    expect(prompt).toContain("\"owns\":[\"domain-1\"]");
   });
 });
 

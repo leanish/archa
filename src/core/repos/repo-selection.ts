@@ -18,6 +18,19 @@ const REPO_SELECTION_CODEX_MODEL = DEFAULT_CODEX_MODEL;
 const REPO_SELECTION_SINGLE_EFFORT: RepoSelectionCodexEffort = "none";
 const REPO_SELECTION_CASCADE_EFFORTS: RepoSelectionCodexEffort[] = ["none", "minimal", "low", "medium", "high"];
 const REPO_SELECTION_SHADOW_COMPARE_EFFORTS: RepoSelectionCodexEffort[] = ["none", "low", "high"];
+const REPO_SELECTION_PROMPT_COMPACT_REPO_THRESHOLD = 16;
+const REPO_SELECTION_PROMPT_LIMITS = {
+  aliases: 4,
+  reach: 4,
+  responsibilities: 2,
+  owns: 6,
+  exposes: 6,
+  consumes: 3,
+  workflows: 3,
+  boundaries: 3,
+  selectWhen: 3,
+  selectWithOtherReposWhen: 2
+} as const;
 const REPO_SELECTION_CONFIDENCE_THRESHOLDS: Record<RepoSelectionCodexEffort, number> = {
   none: 0.78,
   minimal: 0.74,
@@ -256,15 +269,9 @@ async function selectAutomaticRepos(
 }
 
 export function buildRepoSelectionPrompt(config: LoadedConfig, question: string): string {
-  const repoSummaries = config.repos.map(repo => ({
-    name: repo.name,
-    description: repo.description,
-    routing: {
-      ...repo.routing,
-      consumes: filterRepoRoutingConsumes(repo.routing.consumes)
-    },
-    aliases: repo.aliases,
-    alwaysSelect: repo.alwaysSelect
+  const useCompactSummaries = config.repos.length > REPO_SELECTION_PROMPT_COMPACT_REPO_THRESHOLD;
+  const repoSummaries = config.repos.map(repo => summarizeRepoForSelectionPrompt(repo, {
+    compact: useCompactSummaries
   }));
   const alwaysSelectedRepoNames = config.repos
     .filter(repo => repo.alwaysSelect)
@@ -286,14 +293,109 @@ export function buildRepoSelectionPrompt(config: LoadedConfig, question: string)
       ? `Repos marked alwaysSelect are already included automatically: ${alwaysSelectedRepoNames.join(", ")}.`
       : "There are no alwaysSelect repos.",
     "",
-    `Configured repositories from ${config.configPath}:`,
-    JSON.stringify(repoSummaries, null, 2),
+    useCompactSummaries
+      ? "Large repo set detected; omitting lower-signal routing fields to control prompt size."
+      : "Using full routing summaries for the configured repos.",
+    `Configured repositories from ${config.configPath} (one JSON object per line):`,
+    ...repoSummaries.map(summary => JSON.stringify(summary)),
     "",
     "User question:",
     '"""',
     question,
     '"""'
   ].join("\n");
+}
+
+function summarizeRepoForSelectionPrompt(
+  repo: ManagedRepo,
+  {
+    compact
+  }: {
+    compact: boolean;
+  }
+): Record<string, unknown> {
+  const summary: Record<string, unknown> = {
+    name: repo.name
+  };
+  const description = normalizePromptText(repo.description);
+  if (description !== "") {
+    summary.description = description;
+  }
+
+  const routing = summarizeRoutingForSelectionPrompt(repo, {
+    compact
+  });
+  if (Object.keys(routing).length > 0) {
+    summary.routing = routing;
+  }
+
+  if (repo.aliases.length > 0) {
+    summary.aliases = repo.aliases.slice(0, REPO_SELECTION_PROMPT_LIMITS.aliases);
+  }
+
+  if (repo.alwaysSelect) {
+    summary.alwaysSelect = true;
+  }
+
+  return summary;
+}
+
+function summarizeRoutingForSelectionPrompt(
+  repo: ManagedRepo,
+  {
+    compact
+  }: {
+    compact: boolean;
+  }
+): Record<string, unknown> {
+  const routingSummary: Record<string, unknown> = {};
+  const consumes = filterRepoRoutingConsumes(repo.routing.consumes);
+
+  if (repo.routing.role !== "") {
+    routingSummary.role = repo.routing.role;
+  }
+
+  addPromptRoutingList(routingSummary, "reach", repo.routing.reach, REPO_SELECTION_PROMPT_LIMITS.reach);
+  addPromptRoutingList(routingSummary, "owns", repo.routing.owns, REPO_SELECTION_PROMPT_LIMITS.owns);
+  addPromptRoutingList(routingSummary, "exposes", repo.routing.exposes, REPO_SELECTION_PROMPT_LIMITS.exposes);
+  addPromptRoutingList(routingSummary, "selectWhen", repo.routing.selectWhen, REPO_SELECTION_PROMPT_LIMITS.selectWhen);
+  addPromptRoutingList(routingSummary, "boundaries", repo.routing.boundaries, REPO_SELECTION_PROMPT_LIMITS.boundaries);
+
+  if (!compact) {
+    addPromptRoutingList(
+      routingSummary,
+      "responsibilities",
+      repo.routing.responsibilities,
+      REPO_SELECTION_PROMPT_LIMITS.responsibilities
+    );
+    addPromptRoutingList(routingSummary, "workflows", repo.routing.workflows, REPO_SELECTION_PROMPT_LIMITS.workflows);
+    addPromptRoutingList(routingSummary, "consumes", consumes, REPO_SELECTION_PROMPT_LIMITS.consumes);
+    addPromptRoutingList(
+      routingSummary,
+      "selectWithOtherReposWhen",
+      repo.routing.selectWithOtherReposWhen,
+      REPO_SELECTION_PROMPT_LIMITS.selectWithOtherReposWhen
+    );
+  }
+
+  return routingSummary;
+}
+
+function addPromptRoutingList(
+  target: Record<string, unknown>,
+  label: string,
+  values: string[],
+  limit: number
+): void {
+  if (values.length === 0) {
+    return;
+  }
+
+  target[label] = values.slice(0, limit);
+}
+
+function normalizePromptText(value: string): string {
+  return value.replace(/\s+/gu, " ").trim();
 }
 
 export function parseRepoSelectionRunResult(
