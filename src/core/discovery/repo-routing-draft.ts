@@ -41,7 +41,7 @@ export function buildRepoRoutingDraft({
     ...normalizedEndpoints
   ], MAX_ROUTING_ITEMS);
   const workflows = dedupeEntries([
-    ...describeWorkflows(normalizedTopics, normalizedEndpoints, classifications)
+    ...describeWorkflows(normalizedEndpoints, classifications)
   ], 6);
   const boundaries = describeBoundaries(classifications, normalizedConsumes);
   const selectWhen = dedupeEntries([
@@ -132,7 +132,7 @@ export function inferRepoReach(
     reach.push("internal-surface");
   }
 
-  if (routeEndpoints.some(endpoint => endpoint.startsWith("GET/POST ") || endpoint.includes("/graphql"))) {
+  if (routeEndpoints.some(endpoint => isPublicApiEndpoint(endpoint))) {
     reach.push("public-api");
   }
 
@@ -181,18 +181,14 @@ function describeResponsibilities(classifications: RepoClassification[], routeEn
   return responsibilities;
 }
 
-function describeWorkflows(
-  topics: string[],
-  routeEndpoints: string[],
-  classifications: RepoClassification[]
-): string[] {
-  const workflows = topics.slice(0, 4).map(topic => `Handles ${topic} workflows.`);
+function describeWorkflows(routeEndpoints: string[], classifications: RepoClassification[]): string[] {
+  const workflows: string[] = [];
 
   if (routeEndpoints.some(endpoint => endpoint.includes("/admin/"))) {
     workflows.push("Handles admin-facing workflows.");
   }
 
-  if (routeEndpoints.some(endpoint => endpoint.includes("/order"))) {
+  if (routeEndpoints.some(endpoint => /\/orders?\b/u.test(endpoint))) {
     workflows.push("Handles order-related workflows.");
   }
 
@@ -253,6 +249,10 @@ function describeSelectWithOtherReposWhen(consumes: string[]): string[] {
   }
 
   return [`Use with related repos when the question crosses into ${consumes.slice(0, 3).join(", ")} ownership.`];
+}
+
+function isPublicApiEndpoint(endpoint: string): boolean {
+  return /^[A-Z]+\s+\//u.test(endpoint) || endpoint.includes("/graphql");
 }
 
 function dedupeEntries(values: string[], limit: number): string[] {
