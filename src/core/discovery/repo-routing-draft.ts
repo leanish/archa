@@ -132,7 +132,7 @@ export function inferRepoReach(
     reach.push("internal-surface");
   }
 
-  if (routeEndpoints.some(endpoint => isPublicApiEndpoint(endpoint))) {
+  if (routeEndpoints.some(endpoint => hasHttpRouteSurface(endpoint))) {
     reach.push("public-api");
   }
 
@@ -251,7 +251,7 @@ function describeSelectWithOtherReposWhen(consumes: string[]): string[] {
   return [`Use with related repos when the question crosses into ${consumes.slice(0, 3).join(", ")} ownership.`];
 }
 
-function isPublicApiEndpoint(endpoint: string): boolean {
+function hasHttpRouteSurface(endpoint: string): boolean {
   return /^[A-Z]+\s+\//u.test(endpoint) || endpoint.includes("/graphql");
 }
 
