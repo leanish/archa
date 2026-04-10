@@ -11,6 +11,7 @@ import type {
   AskRequest,
   Environment,
   ManagedRepo,
+  RepoSelectionSummary,
   QuestionExecutionOptions,
   QuestionExecutionOverrides,
   RepoSelectionMode,
@@ -29,7 +30,10 @@ export const answerQuestion: AnswerQuestionFn = async (
   execution.statusReporter?.info("Selecting repos...");
 
   const selectionStartedAt = execution.nowFn();
-  const selection = await execution.selectReposFn(config, options.question, options.repoNames);
+  const selection = await execution.selectReposFn(config, options.question, options.repoNames, {
+    selectionMode: options.selectionMode ?? null,
+    selectionShadowCompare: Boolean(options.selectionShadowCompare)
+  });
   const selectionElapsedMs = execution.nowFn() - selectionStartedAt;
   const selectedRepos = selection.repos;
 
@@ -63,11 +67,14 @@ export const answerQuestion: AnswerQuestionFn = async (
         }
       });
 
+  const finalizedSelection = await finalizeRepoSelection(selection, execution.statusReporter);
+
   if (options.noSynthesis) {
     return {
       mode: "retrieval-only",
       question: options.question,
       selectedRepos,
+      selection: finalizedSelection,
       syncReport
     };
   }
@@ -101,6 +108,7 @@ export const answerQuestion: AnswerQuestionFn = async (
     mode: "answer",
     question: options.question,
     selectedRepos,
+    selection: finalizedSelection,
     syncReport,
     synthesis
   };
@@ -129,6 +137,37 @@ function formatRepoSelectionStatus(
 
 function formatRepoSyncModeStatus(noSync: boolean): string {
   return `Skip repo sync: ${noSync ? "yes" : "no"}`;
+}
+
+async function finalizeRepoSelection(
+  selection: Awaited<ReturnType<QuestionExecutionOptions["selectReposFn"]>>,
+  statusReporter: StatusReporter | null
+): Promise<RepoSelectionSummary | null> {
+  if (!selection.selectionPromise) {
+    return selection.selection;
+  }
+
+  const finalizedSelection = await selection.selectionPromise;
+  if (finalizedSelection && shouldReportSelectionComparison(finalizedSelection)) {
+    statusReporter?.info(formatSelectionComparisonStatus(finalizedSelection));
+  }
+
+  return finalizedSelection;
+}
+
+function shouldReportSelectionComparison(selection: RepoSelectionSummary): boolean {
+  return selection.runs.length >= 2;
+}
+
+function formatSelectionComparisonStatus(selection: RepoSelectionSummary): string {
+  const parts = selection.runs.map(run => {
+    const confidence = run.confidence == null ? "?" : run.confidence.toFixed(2);
+    const repoNames = run.repoNames.length > 0 ? run.repoNames.join(", ") : "(none)";
+    const suffix = run.usedForFinal ? " final" : "";
+    return `${run.effort}=${repoNames} confidence=${confidence}${suffix}`;
+  });
+
+  return `Repo selection comparison: ${parts.join(" | ")}`;
 }
 
 function normalizeExecutionOptions(

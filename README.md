@@ -101,7 +101,7 @@ export ARCHA_CONFIG_PATH=/path/to/config.json
 The config file contains:
 
 - `managedReposRoot`: where local clones live
-- `repos`: the curated repo list, including URL, branch, description, generic `topics`, high-signal `classifications`, and optional aliases
+- `repos`: the curated repo list, including URL, branch, description, a structured `routing` card, and optional aliases
 
 Repo names and aliases must be unique case-insensitively. Aliases must be non-empty strings.
 GitHub repos are always stored under an owner-scoped path inside `managedReposRoot`, such as `.../repos/leanish/nullability` or `.../repos/OtherCo/dtv`, using the owner casing from GitHub.
@@ -117,8 +117,32 @@ Example using a few public `leanish` repos:
       "url": "https://github.com/leanish/sqs-codec.git",
       "defaultBranch": "main",
       "description": "automatic compression+encoding for SQS Messages",
-      "topics": ["aws-sqs", "aws-sdk-v2", "message-compression"],
-      "classifications": ["library"],
+      "routing": {
+        "role": "shared-library",
+        "reach": ["java-library"],
+        "responsibilities": [
+          "Encodes and decodes SQS payload metadata."
+        ],
+        "owns": [
+          "message compression and checksum behavior"
+        ],
+        "exposes": [
+          "Java library APIs"
+        ],
+        "consumes": [
+          "AWS SQS"
+        ],
+        "workflows": [
+          "message encode and decode flows"
+        ],
+        "boundaries": [
+          "Do not select for SQS infrastructure provisioning."
+        ],
+        "selectWhen": [
+          "The question is about SQS payload encoding, compression, or checksum behavior."
+        ],
+        "selectWithOtherReposWhen": []
+      },
       "aliases": [],
       "alwaysSelect": false
     },
@@ -127,8 +151,30 @@ Example using a few public `leanish` repos:
       "url": "https://github.com/leanish/java-conventions.git",
       "defaultBranch": "main",
       "description": "Shared Gradle conventions for Java projects",
-      "topics": ["gradle-plugin", "build-conventions"],
-      "classifications": ["library"],
+      "routing": {
+        "role": "build-tooling",
+        "reach": ["gradle-plugin"],
+        "responsibilities": [
+          "Defines shared Gradle conventions for Java builds."
+        ],
+        "owns": [
+          "build conventions and plugin defaults"
+        ],
+        "exposes": [
+          "Gradle plugins"
+        ],
+        "consumes": [
+          "Gradle"
+        ],
+        "workflows": [
+          "shared Java build setup"
+        ],
+        "boundaries": [],
+        "selectWhen": [
+          "The question is about shared Gradle plugin behavior or Java build defaults."
+        ],
+        "selectWithOtherReposWhen": []
+      },
       "aliases": [],
       "alwaysSelect": false
     },
@@ -137,8 +183,35 @@ Example using a few public `leanish` repos:
       "url": "https://github.com/leanish/archa.git",
       "defaultBranch": "main",
       "description": "Archa is your personal code archaeologist. Ask your codebase how it behaves.",
-      "topics": ["codex", "repo-selection", "developer-tools"],
-      "classifications": ["internal", "backend", "cli"],
+      "routing": {
+        "role": "developer-cli",
+        "reach": ["cli", "http-server"],
+        "responsibilities": [
+          "Runs repo-aware question answering through a CLI and HTTP server."
+        ],
+        "owns": [
+          "repo discovery",
+          "repo selection",
+          "codex execution"
+        ],
+        "exposes": [
+          "archa CLI",
+          "archa-server"
+        ],
+        "consumes": [
+          "Codex CLI",
+          "GitHub API",
+          "git"
+        ],
+        "workflows": [
+          "repo-aware engineering Q&A"
+        ],
+        "boundaries": [],
+        "selectWhen": [
+          "The question is about Archa CLI, server, discovery, selection, or Codex integration behavior."
+        ],
+        "selectWithOtherReposWhen": []
+      },
       "aliases": [],
       "alwaysSelect": false
     }
@@ -146,8 +219,7 @@ Example using a few public `leanish` repos:
 }
 ```
 
-Repos may also set `"alwaysSelect": true` to stay in scope during automatic repo selection. This is useful for foundational repos that should always be available when Archa narrows to likely matches. Automatic selection first asks Codex with `reasoningEffort: "none"` to choose from the configured repo metadata, merges any `alwaysSelect` repos into that result, and falls back to local heuristic scoring when the selector call fails or returns unusable output. If nothing scores positively in that fallback, Archa still uses all configured repos.
-`classifications` are handled separately from free-form `topics` and weighted more strongly during automatic repo selection for cues like `infra`, `library`, `internal`, `external`, and `microservice`. `external` is reserved for outward-facing applications or service surfaces; repos are not marked `external` just because they mention or integrate with GraphQL, REST, or APIs. Classifications are additive rather than exclusive, so a repo can carry multiple accurate roles when the evidence supports that.
+Repos may also set `"alwaysSelect": true` to stay in scope during automatic repo selection. This is useful for foundational repos that should always be available when Archa narrows to likely matches. Automatic selection now routes on ownership-oriented metadata such as `routing.role`, `routing.owns`, `routing.exposes`, `routing.workflows`, and explicit boundaries instead of relying on flat topic bags. By default, Archa uses `--selection-mode single`, which runs one `reasoningEffort: "none"` selector pass, merges any `alwaysSelect` repos into that result, and falls back to local heuristic scoring when the selector call fails or returns unusable output. `--selection-mode cascade` escalates through `none`, `minimal`, `low`, `medium`, and `high` until the selector returns a confident usable result. When `--selection-shadow-compare` is enabled, Archa also runs `none`, `low`, and `high` selection passes in the background and records the finished comparison in the result diagnostics.
 
 Bootstrap an empty config:
 
@@ -161,7 +233,7 @@ When `config init` creates a config with zero repos, it prints the next step:
 archa config discover-github
 ```
 
-That flow discovers repos with GitHub metadata plus curated descriptions, topics, and `classifications`. Discovery uses `GH_TOKEN` / `GITHUB_TOKEN` when available, and otherwise can fall back to a usable `gh` login. It can include private repos visible to that credential. When GitHub leaves descriptions or topics blank, Archa can fill them from README/source inspection. It keeps GitHub topics first, supplements them with a locally inferred topic set from repo descriptions or inspected repo content, and then runs a Codex cleanup pass over the draft metadata to improve precision.
+That flow discovers repos with GitHub metadata plus curated descriptions and routing cards. Discovery uses `GH_TOKEN` / `GITHUB_TOKEN` when available, and otherwise can fall back to a usable `gh` login. It can include private repos visible to that credential. When GitHub metadata is sparse, Archa inspects README text, routes, manifests, and dependencies to draft routing metadata, then runs a Codex cleanup pass over that draft to improve precision.
 
 Initialize config from an existing catalog file:
 
@@ -199,7 +271,7 @@ archa config discover-github
 
 When the command runs in a terminal, Archa prompts once with the combined list of new and already configured repos. If you did not pass `--owner`, that flow first prompts for a GitHub owner and accepts Enter for `@accessible`. Multi-owner discovery groups repos by owner for readability, and only falls back to owner-qualified names when repo names collide. If two GitHub repos would otherwise collide by plain name, Archa automatically uses an owner-qualified config name such as `otherco/nullability` so both can coexist. Managed checkouts are owner-scoped on disk for GitHub repos even when the configured name stays plain. Press Enter to add all new repos, or type names to customize the selection; a confirmation prompt avoids doing that silently. Anything you pick gets added or overridden as needed. For scripted use, pass `--owner`, `--add <names>`, and `--override <names>`, or use `*` to select all repos of that kind. Owner-qualified names such as `leanish/nullability` are accepted case-insensitively when you want to be explicit.
 
-By default, GitHub discovery includes forks and skips archived or disabled repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. GitHub may also report some archived repos as disabled, so that flag can surface both. Discovery uses `GH_TOKEN` / `GITHUB_TOKEN` when available, or an existing `gh` login otherwise. Discovery includes private repos visible to that credential. The first pass is intentionally names-first: Archa lists the eligible repos so you can choose what to add or override without paying for per-repo topic lookups up front. After selection, Archa refines only the chosen subset: it fills blank descriptions or topics from README/source inspection when needed, derives additional topics with a size-aware topic budget, derives separate `classifications` like `infra`, `library`, `internal`, `external`, `frontend`, `backend`, and `microservice`, and then runs a Codex cleanup pass before saving the selected repos into config in one write. `external` is kept high-precision: it means the repo clearly exposes an outward-facing app or service surface, not merely that it mentions or consumes APIs. Repo names are handled separately during selection instead of being copied into `topics`. When a selected repo is already cloned under the managed repos root, discovery inspects that local checkout; otherwise it can shallow-clone the repo temporarily to inspect and curate metadata from source structure and README cues. Overrides update the configured repo's URL, default branch, description, topics, and classifications while preserving local-only fields such as aliases and `alwaysSelect`.
+By default, GitHub discovery includes forks and skips archived or disabled repos. Use `--exclude-forks` to hide forks, and `--include-archived` to keep archived repos in scope. GitHub may also report some archived repos as disabled, so that flag can surface both. Discovery uses `GH_TOKEN` / `GITHUB_TOKEN` when available, or an existing `gh` login otherwise. Discovery includes private repos visible to that credential. The first pass is intentionally names-first: Archa lists the eligible repos so you can choose what to add or override without paying for per-repo inspection up front. After selection, Archa refines only the chosen subset: it fills blank descriptions when needed, drafts routing cards from GitHub metadata plus inspected README, route, manifest, and dependency signals, and then runs a Codex cleanup pass before saving the selected repos into config in one write. The routing card separates owned behavior from consumed technologies, exposed surfaces, and explicit selection boundaries so repo selection can prefer ownership over keyword overlap. When a selected repo is already cloned under the managed repos root, discovery inspects that local checkout; otherwise it can shallow-clone the repo temporarily to inspect and curate metadata from source structure and README cues. Overrides update the configured repo's URL, default branch, description, and routing while preserving local-only fields such as aliases and `alwaysSelect`.
 
 When either `archa` or `archa-server` starts with no `config.json` and stdin/stdout are attached to a TTY, Archa prompts to initialize the config instead of only failing with a command suggestion. If that new config still has zero repos, it can then prompt to continue directly into `discover-github`, ask for the GitHub owner, and resume the original command after discovery. Pressing Enter at that owner prompt uses `@accessible`, which discovers all repos visible through your authenticated GitHub access across personal and organization scopes. Outside that interactive CLI flow, `config init`, `archa-server` startup, repo-listing output, and the web UI empty state still surface `archa config discover-github` as the recovery path.
 
@@ -232,9 +304,11 @@ archa repos sync sqs-codec,java-conventions
 Ask a question. By default `archa` will:
 
 1. ask Codex to choose likely repos from the configured repo metadata with `reasoningEffort: "none"`, while keeping any repos marked with `"alwaysSelect": true` in scope
-   If that selector pass fails or returns unusable output, Archa falls back to local heuristic scoring. If nothing scores positively there, all configured repos are used.
+   If that selector pass fails or returns unusable output, Archa falls back to local heuristic scoring over repo names, descriptions, and routing metadata. If nothing scores positively there, all configured repos are used.
 2. sync them to the latest tracked trunk tip
 3. run `codex exec` with `gpt-5.4-mini` and `low` reasoning effort
+
+Use `--selection-mode cascade` when you want repo selection itself to escalate from `none` through higher reasoning efforts before falling back, and `--selection-shadow-compare` when you want Archa to keep running `none`, `low`, and `high` repo selection in the background for comparison diagnostics.
 
 By default, answers target non-engineering readers who need the system behavior explained clearly. When the reader can inspect the repositories directly, use `--audience codebase` to get a more implementation-oriented answer.
 
@@ -330,6 +404,7 @@ The response includes a job id plus links:
 
 When `model` or `reasoningEffort` are omitted from the HTTP request, the server uses the same defaults as the CLI: `gpt-5.4-mini` and `low`.
 When `audience` is omitted, the server defaults to `general`, which assumes no knowledge of source code or implementation details and avoids unnecessary references to the analyzed workspace's files or symbols. Service and integration examples are still allowed when they help explain behavior. Use `codebase` when the reader can inspect the managed repos directly and wants file- and symbol-level detail.
+When `selectionMode` is omitted, the server defaults to `single`. Set `selectionMode` to `cascade` to escalate repo selection effort before falling back, and set `selectionShadowCompare` to `true` to keep background `none`/`low`/`high` selector runs for comparison diagnostics.
 
 Poll job state:
 
@@ -360,7 +435,7 @@ When the HTTP server shuts down through its returned handle, queued jobs fail fa
 
 Open `http://127.0.0.1:8787` in a browser to use the built-in web UI. The UI streams job status updates in real time using server-sent events and loads the configured repo catalog so the repo filter can be selected from a searchable multi-select instead of typed manually.
 
-Advanced web UI controls are hidden by default and only shown when the page is opened with `?admin=true`, for example `http://127.0.0.1:8787/?admin=true`. In admin mode, you can choose the answer audience, model, and reasoning effort. The default audience is `general`.
+Advanced web UI controls are hidden by default and only shown when the page is opened with `?admin=true`, for example `http://127.0.0.1:8787/?admin=true`. In admin mode, you can choose the answer audience, model, reasoning effort, repo selection mode, and optional background shadow comparison. The default audience is `general`.
 
 Programmatic clients that do not send `Accept: text/html` continue to receive the JSON endpoint listing at `GET /`.
 
@@ -411,7 +486,7 @@ GitHub Actions CI runs `npm ci` and `npm test -- --coverage` on pull requests an
 
 ## Current limits
 
-- automatic repo selection depends on a best-effort Codex pre-pass over repo metadata, with fallback to local heuristic scoring based on repo names, descriptions, topics, classifications, and any repos pinned with `alwaysSelect`
+- automatic repo selection depends on a best-effort Codex pre-pass over repo metadata, with fallback to local heuristic scoring based on repo names, descriptions, routing metadata, and any repos pinned with `alwaysSelect`
 - syncing assumes the managed clones can fast-forward cleanly
 - the configured repo set is explicit and must be maintained in local config
 - HTTP job state is in-memory only and is lost when the server process restarts

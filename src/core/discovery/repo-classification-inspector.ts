@@ -6,9 +6,11 @@ import { spawn } from "node:child_process";
 import { getDefaultManagedReposRoot } from "../config/config-paths.js";
 import { normalizeGitExecutionError } from "../git/git-installation.js";
 import { getManagedRepoDirectory, getManagedRepoRelativePath } from "../repos/repo-paths.js";
+import { createEmptyRepoRouting } from "../repos/repo-routing.js";
 import { EXTERNAL_FACING_PHRASES, getMaxInferredTopics } from "./inference-constants.js";
+import { buildRepoRoutingDraft } from "./repo-routing-draft.js";
 import { curateRepoMetadataWithCodex } from "./repo-metadata-codex-curator.js";
-import type { Environment, RepoClassification, RepoRecord } from "../types.js";
+import type { Environment, RepoClassification, RepoRecord, RepoRoutingMetadata } from "../types.js";
 
 const FRONTEND_CONFIG_FILES = [
   "next.config.js",
@@ -152,8 +154,16 @@ const SERVICE_TERMS = ["microservice", "worker", "daemon"];
 const PLAY_FRAMEWORK_TERMS = ["playframework", "com.typesafe.play", "play.mvc", "play.api"];
 type RepoMetadata = {
   description: string;
+  routing: RepoRoutingMetadata;
+};
+type LegacyRepoMetadata = {
+  description: string;
   topics: string[];
   classifications: RepoClassification[];
+  routeEndpoints: string[];
+  consumedTechnologies: string[];
+  readmeLeadText: string;
+  readmeDomains: string[];
 };
 type RunCommandFn = (command: string, args: string[]) => Promise<void>;
 type FsModule = typeof fs;
@@ -198,7 +208,7 @@ export async function inspectRepoClassifications({
   curateMetadataFn = curateRepoMetadataWithCodex,
   useCodexCleanup = true
 }: InspectRepoMetadataOptions): Promise<RepoClassification[]> {
-  const metadata = await inspectRepoMetadata({
+  const metadata = await inspectLegacyRepoMetadata({
     repo,
     sourceRepo,
     env,
@@ -231,12 +241,13 @@ export async function inspectRepoMetadata({
   });
 
   try {
-    const inferredMetadata = await inferMetadataFromDirectory({
+    const inferredDraft = await inferMetadataFromDirectory({
       directory: inspection.directory,
       repo,
       sourceRepo,
       fsModule
     });
+    const inferredMetadata = toRepoMetadata(repo, inferredDraft);
     if (useCodexCleanup) {
       try {
         return await curateMetadataFn({
@@ -254,8 +265,45 @@ export async function inspectRepoMetadata({
   } catch {
     return {
       description: "",
+      routing: createEmptyRepoRouting()
+    };
+  } finally {
+    await inspection.cleanup?.();
+  }
+}
+
+async function inspectLegacyRepoMetadata({
+  repo,
+  sourceRepo = {},
+  env = process.env,
+  runCommandFn = runCommand,
+  fsModule = fs,
+  tempDirRoot = os.tmpdir()
+}: InspectRepoMetadataOptions): Promise<LegacyRepoMetadata> {
+  const inspection = await prepareInspectionDirectory({
+    repo,
+    env,
+    fsModule,
+    runCommandFn,
+    tempDirRoot
+  });
+
+  try {
+    return await inferMetadataFromDirectory({
+      directory: inspection.directory,
+      repo,
+      sourceRepo,
+      fsModule
+    });
+  } catch {
+    return {
+      description: "",
       topics: [],
-      classifications: []
+      classifications: [],
+      routeEndpoints: [],
+      consumedTechnologies: [],
+      readmeLeadText: "",
+      readmeDomains: []
     };
   } finally {
     await inspection.cleanup?.();
@@ -319,12 +367,16 @@ async function inferMetadataFromDirectory({
   repo,
   sourceRepo,
   fsModule
-}: InferMetadataFromDirectoryOptions): Promise<RepoMetadata> {
+}: InferMetadataFromDirectoryOptions): Promise<LegacyRepoMetadata> {
   if (!(await exists(fsModule, directory))) {
     return {
       description: "",
       topics: [],
-      classifications: []
+      classifications: [],
+      routeEndpoints: [],
+      consumedTechnologies: [],
+      readmeLeadText: "",
+      readmeDomains: []
     };
   }
 
@@ -345,6 +397,7 @@ async function inferMetadataFromDirectory({
   const goModText = await readTextIfExists(fsModule, path.join(directory, "go.mod"));
   const readmeText = await readFirstExisting(fsModule, directory, README_CANDIDATES);
   const readmeLeadText = extractReadmeLeadText(readmeText);
+  const routeEndpoints = await collectRouteEndpoints(fsModule, directory);
 
   addWords(signals, repo.name);
   addWords(signals, repo.description);
@@ -430,6 +483,13 @@ async function inferMetadataFromDirectory({
   }
 
   const normalizedClassifications = Array.from(new Set(classifications));
+  const consumedTechnologies = inferConsumedTechnologies({
+    dependencyNames,
+    gradleSource,
+    pomSource,
+    goSource,
+    readmeSource
+  });
 
   return {
     description: inferDescriptionFromReadme(readmeText),
@@ -439,7 +499,27 @@ async function inferMetadataFromDirectory({
       buildExcludedTopicTokens(repo),
       sourceRepo.size
     ),
-    classifications: normalizedClassifications
+    classifications: normalizedClassifications,
+    routeEndpoints,
+    consumedTechnologies,
+    readmeLeadText,
+    readmeDomains: extractDomains(readmeText)
+  };
+}
+
+function toRepoMetadata(repo: RepoRecord, metadata: LegacyRepoMetadata): RepoMetadata {
+  return {
+    description: metadata.description,
+    routing: buildRepoRoutingDraft({
+      repoName: repo.name,
+      description: metadata.description,
+      topics: metadata.topics,
+      classifications: metadata.classifications,
+      routeEndpoints: metadata.routeEndpoints,
+      consumedTechnologies: metadata.consumedTechnologies,
+      readmeLeadText: metadata.readmeLeadText,
+      readmeDomains: metadata.readmeDomains
+    })
   };
 }
 
@@ -550,6 +630,26 @@ async function readFirstExisting(fsModule: FsModule, rootDirectory: string, file
   return "";
 }
 
+async function collectRouteEndpoints(fsModule: FsModule, rootDirectory: string): Promise<string[]> {
+  const endpoints: string[] = [];
+
+  for (const relativePath of BACKEND_SURFACE_PATHS) {
+    const routeText = await readTextIfExists(fsModule, path.join(rootDirectory, relativePath));
+    if (!routeText) {
+      continue;
+    }
+
+    for (const endpoint of extractRouteEndpoints(routeText)) {
+      endpoints.push(endpoint);
+      if (endpoints.length >= 12) {
+        return endpoints;
+      }
+    }
+  }
+
+  return endpoints;
+}
+
 async function readTextIfExists(fsModule: FsModule, targetPath: string): Promise<string> {
   try {
     return await fsModule.readFile(targetPath, "utf8");
@@ -576,6 +676,66 @@ function collectPackageDependencies(packageJson: PackageJsonLike | null): string
     ...Object.keys(packageJson.devDependencies || {}),
     ...Object.keys(packageJson.peerDependencies || {})
   ];
+}
+
+function inferConsumedTechnologies({
+  dependencyNames,
+  gradleSource,
+  pomSource,
+  goSource,
+  readmeSource
+}: {
+  dependencyNames: string[];
+  gradleSource: string;
+  pomSource: string;
+  goSource: string;
+  readmeSource: string;
+}): string[] {
+  const technologies = new Set<string>();
+
+  for (const dependencyName of dependencyNames) {
+    const normalizedDependency = dependencyName.toLowerCase();
+
+    if (
+      normalizedDependency.includes("react")
+      || normalizedDependency.includes("next")
+      || normalizedDependency.includes("vue")
+      || normalizedDependency.includes("spring")
+      || normalizedDependency.includes("graphql")
+      || normalizedDependency.includes("play")
+      || normalizedDependency.includes("express")
+      || normalizedDependency.includes("koa")
+      || normalizedDependency.includes("cobra")
+    ) {
+      technologies.add(dependencyName);
+    }
+  }
+
+  for (const source of [gradleSource, pomSource, goSource, readmeSource]) {
+    if (source.includes("redis")) {
+      technologies.add("Redis");
+    }
+    if (source.includes("mongo")) {
+      technologies.add("MongoDB");
+    }
+    if (source.includes("postgres")) {
+      technologies.add("Postgres");
+    }
+    if (source.includes("kafka")) {
+      technologies.add("Kafka");
+    }
+    if (source.includes("sqs")) {
+      technologies.add("SQS");
+    }
+    if (source.includes("s3")) {
+      technologies.add("S3");
+    }
+    if (source.includes("graphql")) {
+      technologies.add("GraphQL");
+    }
+  }
+
+  return [...technologies].slice(0, 8);
 }
 
 function hasMatchingDependency(dependencyNames: string[], knownNames: Set<string>): boolean {
@@ -681,6 +841,31 @@ function extractReadmeLeadText(readmeText: string): string {
     .filter(paragraph => !paragraph.toLowerCase().includes("table of contents"));
 
   return paragraphs.find(candidate => candidate.length >= 20) || "";
+}
+
+function extractDomains(value: string): string[] {
+  const matches = value.match(/\b[a-z0-9.-]+\.[a-z]{2,}(?:\/[a-z0-9._~:/?#[\]@!$&'()*+,;=-]*)?/giu) || [];
+  return [...new Set(matches.map(match => match.replace(/[),.;]+$/u, "")))].slice(0, 8);
+}
+
+function extractRouteEndpoints(routeText: string): string[] {
+  const endpoints: string[] = [];
+
+  for (const rawLine of routeText.split(/\r?\n/gu)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const match = line.match(/^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\S+)/u);
+    if (!match || !match[1] || !match[2]) {
+      continue;
+    }
+
+    endpoints.push(`${match[1]} ${match[2]}`);
+  }
+
+  return endpoints;
 }
 
 function hasAnyTerm(signals: Set<string>, terms: string[]): boolean {

@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { EXTERNAL_FACING_PHRASES, getMaxInferredTopics } from "./inference-constants.js";
 import { inspectRepoMetadata } from "./repo-classification-inspector.js";
 import { getGithubRepoDisplayIdentity } from "./repo-display-utils.js";
+import { buildRepoRoutingDraft } from "./repo-routing-draft.js";
+import { createEmptyRepoRouting, hasRepoRoutingContent } from "../repos/repo-routing.js";
 import type {
   Environment,
   GithubDiscoveryPlan,
@@ -11,7 +13,8 @@ import type {
   GithubDiscoverySelection,
   LoadedConfig,
   RepoClassification,
-  RepoRecord
+  RepoRecord,
+  RepoRoutingMetadata
 } from "../types.js";
 
 const GITHUB_API_URL = "https://api.github.com";
@@ -26,8 +29,7 @@ type GithubFetchResponseLike = {
 type GithubFetchFn = (input: string, init?: RequestInit) => Promise<GithubFetchResponseLike>;
 type RepoMetadataResult = {
   description: string;
-  topics: string[];
-  classifications: RepoClassification[];
+  routing: RepoRoutingMetadata;
 };
 type RepoInspectorFn = (options: {
   repo: RepoRecord;
@@ -134,8 +136,7 @@ type DiscoveryContextOptions = {
 type NormalizedGithubRepo = RepoRecord & {
   defaultBranch: string;
   description: string;
-  topics: string[];
-  classifications: RepoClassification[];
+  routing: RepoRoutingMetadata;
 };
 // This lightweight keyword map is intentionally narrower than the inspector-side
 // heuristics. It only classifies from GitHub metadata and generic inferred topics,
@@ -992,8 +993,7 @@ function normalizeGithubRepo(repo: RepoRecord, {
       ? repo.default_branch
       : "main",
     description: typeof repo.description === "string" ? repo.description : "",
-    topics: Array.isArray(repo.topics) ? repo.topics : [],
-    classifications: []
+    routing: createEmptyRepoRouting()
   };
 
   if (typeof repo.clone_url === "string" && repo.clone_url.trim() !== "") {
@@ -1050,26 +1050,30 @@ async function hydrateGithubRepoTopics({
     ...normalizedRepo,
     description
   };
+  const githubTopics = Array.isArray(repo.topics) ? repo.topics : [];
 
-  if (normalizedRepo.topics.length > 0) {
+  if (githubTopics.length > 0) {
     const topics = resolveTopics({
-      rawGithubTopics: normalizedRepo.topics,
+      rawGithubTopics: githubTopics,
       repo: repoWithDescription,
       sizeKb: repo.size,
-      inspectedTopics: inspectedMetadata.topics
+      inspectedTopics: []
     });
-    const classifications = mergeClassifications(
-      inferRepoClassifications({
-        repo: repoWithDescription,
-        sourceRepo: repo,
-        topics
-      }),
-      inspectedMetadata.classifications
-    );
     return {
       ...repoWithDescription,
-      topics,
-      classifications
+      routing: mergeRepoRoutingDraft(
+        buildRepoRoutingDraft({
+          repoName: repoWithDescription.name,
+          description,
+          topics,
+          classifications: inferRepoClassifications({
+            repo: repoWithDescription,
+            sourceRepo: repo,
+            topics
+          })
+        }),
+        inspectedMetadata.routing
+      )
     };
   }
 
@@ -1086,21 +1090,24 @@ async function hydrateGithubRepoTopics({
     rawGithubTopics: topicsResponse?.names,
     repo: repoWithDescription,
     sizeKb: repo.size,
-    inspectedTopics: inspectedMetadata.topics
+    inspectedTopics: []
   });
-  const classifications = mergeClassifications(
-    inferRepoClassifications({
-      repo: repoWithDescription,
-      sourceRepo: repo,
-      topics
-    }),
-    inspectedMetadata.classifications
-  );
 
   return {
     ...repoWithDescription,
-    topics,
-    classifications
+    routing: mergeRepoRoutingDraft(
+      buildRepoRoutingDraft({
+        repoName: repoWithDescription.name,
+        description,
+        topics,
+        classifications: inferRepoClassifications({
+          repo: repoWithDescription,
+          sourceRepo: repo,
+          topics
+        })
+      }),
+      inspectedMetadata.routing
+    )
   };
 }
 
@@ -1462,11 +1469,14 @@ async function safeInspectMetadata(
     if (Array.isArray(result)) {
       return {
         description: "",
-        topics: [],
-        classifications: result.filter(
-          (classification): classification is RepoClassification =>
-            typeof classification === "string" && classification.trim() !== ""
-        )
+        routing: buildRepoRoutingDraft({
+          repoName: context.repo.name,
+          description: "",
+          classifications: result.filter(
+            (classification): classification is RepoClassification =>
+              typeof classification === "string" && classification.trim() !== ""
+          )
+        })
       };
     }
 
@@ -1478,15 +1488,7 @@ async function safeInspectMetadata(
 
     return {
       description: typeof resultObject.description === "string" ? resultObject.description : "",
-      topics: Array.isArray(resultObject.topics)
-        ? resultObject.topics.filter((topic): topic is string => typeof topic === "string" && topic.trim() !== "")
-        : [],
-      classifications: Array.isArray(resultObject.classifications)
-        ? resultObject.classifications.filter(
-            (classification): classification is RepoClassification =>
-              typeof classification === "string" && classification.trim() !== ""
-          )
-        : []
+      routing: normalizeRoutingResult(resultObject.routing)
     };
   } catch {
     return emptyInspectionMetadata();
@@ -1496,8 +1498,7 @@ async function safeInspectMetadata(
 function emptyInspectionMetadata(): RepoMetadataResult {
   return {
     description: "",
-    topics: [],
-    classifications: []
+    routing: createEmptyRepoRouting()
   };
 }
 
@@ -1522,21 +1523,66 @@ function buildRepoSuggestions(configuredRepo: LoadedConfig["repos"][number], git
     suggestions.push("review description");
   }
 
-  const configuredTopics = new Set(
-    (configuredRepo.topics || [])
-      .map(topic => topic.toLowerCase())
-  );
-  const missingTopics = (githubRepo.topics || []).filter(topic => !configuredTopics.has(topic.toLowerCase()));
-  if (missingTopics.length > 0) {
-    suggestions.push(`consider topics: ${missingTopics.join(", ")}`);
-  }
-
-  const missingClassifications = (githubRepo.classifications || []).filter(
-    classification => !(configuredRepo.classifications || []).includes(classification)
-  );
-  if (missingClassifications.length > 0) {
-    suggestions.push(`consider classifications: ${missingClassifications.join(", ")}`);
+  if (!sameRouting(configuredRepo.routing, githubRepo.routing)) {
+    suggestions.push("review routing");
   }
 
   return suggestions;
+}
+
+function normalizeRoutingResult(value: unknown): RepoRoutingMetadata {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return createEmptyRepoRouting();
+  }
+
+  const rawRouting = value as Record<string, unknown>;
+
+  return {
+    ...createEmptyRepoRouting(),
+    role: typeof rawRouting.role === "string" ? rawRouting.role.trim() : "",
+    reach: normalizeRoutingList(rawRouting.reach),
+    responsibilities: normalizeRoutingList(rawRouting.responsibilities),
+    owns: normalizeRoutingList(rawRouting.owns),
+    exposes: normalizeRoutingList(rawRouting.exposes),
+    consumes: normalizeRoutingList(rawRouting.consumes),
+    workflows: normalizeRoutingList(rawRouting.workflows),
+    boundaries: normalizeRoutingList(rawRouting.boundaries),
+    selectWhen: normalizeRoutingList(rawRouting.selectWhen),
+    selectWithOtherReposWhen: normalizeRoutingList(rawRouting.selectWithOtherReposWhen)
+  };
+}
+
+function normalizeRoutingList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string" && item.trim() !== "");
+}
+
+function mergeRepoRoutingDraft(draft: RepoRoutingMetadata, inspected: RepoRoutingMetadata): RepoRoutingMetadata {
+  if (!hasRepoRoutingContent(inspected)) {
+    return draft;
+  }
+
+  return {
+    ...draft,
+    ...inspected,
+    role: inspected.role || draft.role,
+    reach: inspected.reach.length > 0 ? inspected.reach : draft.reach,
+    responsibilities: inspected.responsibilities.length > 0 ? inspected.responsibilities : draft.responsibilities,
+    owns: inspected.owns.length > 0 ? inspected.owns : draft.owns,
+    exposes: inspected.exposes.length > 0 ? inspected.exposes : draft.exposes,
+    consumes: inspected.consumes.length > 0 ? inspected.consumes : draft.consumes,
+    workflows: inspected.workflows.length > 0 ? inspected.workflows : draft.workflows,
+    boundaries: inspected.boundaries.length > 0 ? inspected.boundaries : draft.boundaries,
+    selectWhen: inspected.selectWhen.length > 0 ? inspected.selectWhen : draft.selectWhen,
+    selectWithOtherReposWhen: inspected.selectWithOtherReposWhen.length > 0
+      ? inspected.selectWithOtherReposWhen
+      : draft.selectWithOtherReposWhen
+  };
+}
+
+function sameRouting(left: RepoRoutingMetadata | undefined, right: RepoRoutingMetadata | undefined): boolean {
+  return JSON.stringify(left || createEmptyRepoRouting()) === JSON.stringify(right || createEmptyRepoRouting());
 }

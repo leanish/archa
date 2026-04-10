@@ -105,13 +105,13 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/cli/setup/discovery-selection.ts`
   Resolves explicit or interactive discovery selections so GitHub imports can add only chosen repos and override only chosen configured repos, using a combined interactive list of new and already configured repos with an Enter-to-add-all-new confirmation path and owner-grouped multi-owner displays that only fall back to owner-qualified repo labels when names collide, while still accepting owner-qualified identifiers case-insensitively for explicit selections.
 - `src/core/discovery/repo-classification-inspector.ts`
-  Reuses an existing managed checkout when available, otherwise shallow-clones a selected repo temporarily, then inspects repo structure, manifests, dependencies, and README cues to infer fallback descriptions, fallback topics, and high-signal classifications such as `external`, `internal`, `infra`, `frontend`, `backend`, and `cli`, keeping `external` limited to clearly outward-facing surfaces rather than generic API mentions.
+  Reuses an existing managed checkout when available, otherwise shallow-clones a selected repo temporarily, then inspects repo structure, manifests, dependencies, routes, and README cues to infer fallback descriptions plus a draft routing card describing owned behavior, exposed surfaces, consumed technologies, workflows, and selection boundaries.
 - `src/core/discovery/repo-metadata-codex-curator.ts`
-  Runs a Codex cleanup pass in the inspected repo checkout to refine the heuristic discovery draft into the final description, topics, and classifications written during selected-repo discovery apply flows.
+  Runs a Codex cleanup pass in the inspected repo checkout to refine the heuristic discovery draft into the final description and routing card written during selected-repo discovery apply flows.
 - `src/core/answer/question-answering.ts`
   Implements the transport-agnostic ask flow and accepts injectable adapters such as status reporters and sync functions.
 - `src/core/repos/repo-selection.ts`
-  Resolves explicit repo names and aliases, or asks Codex to choose from configured repo metadata with a heuristic fallback that scores likely repos from repo-name tokens, descriptions, topics, and separately weighted classifications while keeping repos marked `alwaysSelect` in scope and falling back to all configured repos when nothing scores positively.
+  Resolves explicit repo names and aliases, or asks Codex to choose from configured repo metadata with a routing-aware heuristic fallback that scores likely repos from repo-name tokens, descriptions, and routing evidence while keeping repos marked `alwaysSelect` in scope, optionally cascading selector reasoning effort, and falling back to all configured repos when nothing scores positively.
 - `src/core/repos/repo-sync.ts`
   Clones missing repos and fast-forwards existing repos to the latest remote configured tracked branch tip, first unshallowing any shallow managed checkout.
 - `src/core/git/git-installation.ts`
@@ -146,9 +146,8 @@ Repo definitions include:
 - `url`
 - `defaultBranch`
 - `description`
-- `topics`
-- `classifications`
-  Additive high-signal roles such as `library`, `infra`, `internal`, or `external`; multiple values may coexist when supported by the metadata and inspected repo structure.
+- `routing`
+  A structured routing card with `role`, `reach`, `responsibilities`, `owns`, `exposes`, `consumes`, `workflows`, `boundaries`, `selectWhen`, and `selectWithOtherReposWhen`.
 - optional `aliases`
 - optional `alwaysSelect`
 

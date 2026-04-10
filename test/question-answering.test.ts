@@ -53,7 +53,8 @@ describe("answerQuestion", () => {
   ];
   const resolvedSelection = {
     repos: selectedRepos,
-    mode: "resolved"
+    mode: "resolved",
+    selection: null
   } as const;
 
   beforeEach(() => {
@@ -137,6 +138,7 @@ describe("answerQuestion", () => {
       mode: "retrieval-only",
       question: "How does x-codec-meta work?",
       selectedRepos,
+      selection: null,
       syncReport: [
         {
           name: "sqs-codec",
@@ -171,6 +173,7 @@ describe("answerQuestion", () => {
       mode: "retrieval-only",
       question: "How does x-codec-meta work?",
       selectedRepos,
+      selection: null,
       syncReport: [
         {
           name: "sqs-codec",
@@ -186,7 +189,8 @@ describe("answerQuestion", () => {
   it("fails when no managed repositories are selected", async () => {
     mocks.selectRepos.mockResolvedValue({
       repos: [],
-      mode: "resolved"
+      mode: "resolved",
+      selection: null
     });
 
     await expect(answerQuestion({
@@ -314,7 +318,8 @@ describe("answerQuestion", () => {
 
     mocks.selectRepos.mockResolvedValue({
       repos: selectedRepos,
-      mode: "requested"
+      mode: "requested",
+      selection: null
     });
 
     await answerQuestion({
@@ -365,7 +370,8 @@ describe("answerQuestion", () => {
     mocks.loadConfig.mockResolvedValue(allReposConfig);
     mocks.selectRepos.mockResolvedValue({
       repos: allReposConfig.repos,
-      mode: "all"
+      mode: "all",
+      selection: null
     });
 
     await answerQuestion({

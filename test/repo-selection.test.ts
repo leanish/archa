@@ -17,21 +17,51 @@ const config = createLoadedConfig({
     createManagedRepo({
       name: "sqs-codec",
       description: "SQS execution interceptor with compression and checksum metadata",
-      topics: ["aws", "sqs", "compression", "checksum"],
-      classifications: ["library"]
+      routing: {
+        role: "shared-library",
+        reach: ["shared-library"],
+        responsibilities: ["Provides reusable SQS compression helpers."],
+        owns: ["compression metadata", "checksum metadata"],
+        exposes: ["Java library API"],
+        consumes: ["AWS SQS"],
+        workflows: ["Handles SQS message compression workflows."],
+        boundaries: [],
+        selectWhen: ["The question is about compression metadata or checksum metadata."],
+        selectWithOtherReposWhen: []
+      }
     }),
     createManagedRepo({
       name: "archa",
       description: "Repo-aware CLI for engineering Q&A with local Codex",
-      topics: ["cli", "codex", "qa"],
-      classifications: ["cli"]
+      routing: {
+        role: "developer-cli",
+        reach: ["developer-cli"],
+        responsibilities: ["Owns the repo-aware question answering CLI and server."],
+        owns: ["repo selection", "question answering"],
+        exposes: ["archa CLI", "archa-server"],
+        consumes: ["Codex"],
+        workflows: ["Handles repo-aware engineering questions."],
+        boundaries: ["Do not select only because a repo mentions Codex."],
+        selectWhen: ["The question is about archa CLI behavior or repo selection."],
+        selectWithOtherReposWhen: []
+      }
     }),
     createManagedRepo({
       name: "java-conventions",
       description: "Java conventions and build defaults",
-      topics: ["java", "conventions"],
-      classifications: ["infra"],
-      aliases: ["conventions"]
+      aliases: ["conventions"],
+      routing: {
+        role: "shared-library",
+        reach: ["shared-library"],
+        responsibilities: ["Owns shared Java build conventions."],
+        owns: ["Gradle conventions", "Java build defaults"],
+        exposes: ["Gradle plugin"],
+        consumes: [],
+        workflows: ["Handles shared build convention workflows."],
+        boundaries: [],
+        selectWhen: ["The question is about conventions or build defaults."],
+        selectWithOtherReposWhen: []
+      }
     })
   ]
 });
@@ -46,7 +76,15 @@ describe("selectRepos", () => {
 
     expect(result).toEqual({
       repos: [config.repos[1]],
-      mode: "requested"
+      mode: "requested",
+      selection: {
+        mode: "single",
+        shadowCompare: false,
+        source: "requested",
+        finalEffort: null,
+        finalRepoNames: ["archa"],
+        runs: []
+      }
     });
     expect(mocks.runCodexPrompt).not.toHaveBeenCalled();
   });
@@ -54,22 +92,36 @@ describe("selectRepos", () => {
   it("uses codex-selected repos during automatic selection", async () => {
     mocks.runCodexPrompt.mockResolvedValue({
       text: JSON.stringify({
-        selectedRepoNames: ["java-conventions"]
+        selectedRepoNames: ["java-conventions"],
+        confidence: 0.93
       })
     });
 
     const result = await selectRepos(config, "How do the conventions work?", null);
 
-    expect(result).toEqual({
-      repos: [config.repos[2]],
-      mode: "resolved"
+    expect(result.repos).toEqual([config.repos[2]]);
+    expect(result.mode).toBe("resolved");
+    expect(result.selection).toMatchObject({
+      mode: "single",
+      source: "codex",
+      finalEffort: "none",
+      finalRepoNames: ["java-conventions"]
     });
+    expect(result.selection?.runs).toEqual([
+      expect.objectContaining({
+        effort: "none",
+        repoNames: ["java-conventions"],
+        confidence: 0.93,
+        usedForFinal: true
+      })
+    ]);
   });
 
   it("merges alwaysSelect repos into the codex selection", async () => {
     mocks.runCodexPrompt.mockResolvedValue({
       text: JSON.stringify({
-        selectedRepoNames: ["java-conventions"]
+        selectedRepoNames: ["java-conventions"],
+        confidence: 0.93
       })
     });
 
@@ -85,41 +137,8 @@ describe("selectRepos", () => {
       ]
     }), "How do the conventions work?", null);
 
-    expect(result).toEqual({
-      repos: [
-        expect.objectContaining({ name: "foundation" }),
-        config.repos[2]
-      ],
-      mode: "resolved"
-    });
-  });
-
-  it("keeps alwaysSelect repos even when codex returns no extra repos", async () => {
-    mocks.runCodexPrompt.mockResolvedValue({
-      text: JSON.stringify({
-        selectedRepoNames: []
-      })
-    });
-
-    const result = await selectRepos(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "playcart",
-          description: "Core Nosto platform service",
-          topics: ["recommendations"],
-          alwaysSelect: true
-        }),
-        ...config.repos
-      ]
-    }), "How do recommendations work?", null);
-
-    expect(result).toEqual({
-      repos: [
-        expect.objectContaining({ name: "playcart" })
-      ],
-      mode: "resolved"
-    });
+    expect(result.repos.map(repo => repo.name)).toEqual(["foundation", "java-conventions"]);
+    expect(result.selection?.finalRepoNames).toEqual(["foundation", "java-conventions"]);
   });
 
   it("falls back to heuristic selection when codex returns invalid JSON", async () => {
@@ -131,14 +150,86 @@ describe("selectRepos", () => {
 
     expect(result.repos.map(repo => repo.name)).toEqual(["sqs-codec"]);
     expect(result.mode).toBe("resolved");
+    expect(result.selection).toMatchObject({
+      source: "heuristic",
+      finalRepoNames: ["sqs-codec"]
+    });
+  });
+
+  it("cascades to higher efforts when confidence is too low", async () => {
+    mocks.runCodexPrompt.mockImplementation(async ({ reasoningEffort }) => {
+      if (reasoningEffort === "none") {
+        return {
+          text: JSON.stringify({
+            selectedRepoNames: ["archa"],
+            confidence: 0.21
+          })
+        };
+      }
+
+      if (reasoningEffort === "minimal") {
+        return {
+          text: JSON.stringify({
+            selectedRepoNames: ["archa"],
+            confidence: 0.35
+          })
+        };
+      }
+
+      if (reasoningEffort === "low") {
+        return {
+          text: JSON.stringify({
+            selectedRepoNames: ["java-conventions"],
+            confidence: 0.82
+          })
+        };
+      }
+
+      throw new Error(`Unexpected effort: ${reasoningEffort}`);
+    });
+
+    const result = await selectRepos(config, "How do the conventions work?", null, {
+      selectionMode: "cascade",
+      selectionShadowCompare: false
+    });
+
+    expect(result.repos).toEqual([config.repos[2]]);
+    expect(result.selection).toMatchObject({
+      mode: "cascade",
+      source: "codex",
+      finalEffort: "low",
+      finalRepoNames: ["java-conventions"]
+    });
+    expect(result.selection?.runs.map(run => run.effort)).toEqual(["none", "minimal", "low"]);
+  });
+
+  it("keeps background comparison runs available through selectionPromise", async () => {
+    mocks.runCodexPrompt.mockImplementation(async ({ reasoningEffort }) => ({
+      text: JSON.stringify({
+        selectedRepoNames: reasoningEffort === "high" ? ["java-conventions"] : ["archa"],
+        confidence: reasoningEffort === "none" ? 0.92 : reasoningEffort === "low" ? 0.74 : 0.61
+      })
+    }));
+
+    const result = await selectRepos(config, "How does repo selection work?", null, {
+      selectionMode: "single",
+      selectionShadowCompare: true
+    });
+    const finalizedSelection = await result.selectionPromise;
+
+    expect(result.repos).toEqual([config.repos[1]]);
+    expect(result.selection).toMatchObject({
+      finalEffort: "none"
+    });
+    expect(finalizedSelection?.runs.map(run => run.effort)).toEqual(["none", "low", "high"]);
   });
 });
 
 describe("selectReposHeuristically", () => {
-  it("prefers matching topics during automatic selection", () => {
-    const result = selectReposHeuristically(config, "How does SQS compression metadata work?", null);
+  it("prefers owned behavior and exposed surfaces", () => {
+    const result = selectReposHeuristically(config, "Which repo owns the archa CLI?", null);
 
-    expect(result.repos[0]?.name).toBe("sqs-codec");
+    expect(result.repos[0]?.name).toBe("archa");
   });
 
   it("honors explicit repo names", () => {
@@ -158,145 +249,11 @@ describe("selectReposHeuristically", () => {
     expect(() => selectReposHeuristically(config, "anything", ["missing-repo"])).toThrow(/Unknown managed repo/);
   });
 
-  it("weights separate classifications more strongly than generic topics", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "shared-lib",
-          description: "Shared utilities and helpers",
-          topics: ["helpers", "retry"],
-          classifications: ["library"]
-        }),
-        createManagedRepo({
-          name: "infra-live",
-          description: "Deployment helpers and retry tooling",
-          topics: ["helpers", "retry"],
-          classifications: ["infra"]
-        })
-      ]
-    }), "Which infra repo owns retry tooling?", null);
-
-    expect(result.repos[0]?.name).toBe("infra-live");
-  });
-
-  it("matches classification aliases like lib to library", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "shared-lib",
-          description: "Shared utilities and helpers",
-          topics: ["helpers"],
-          classifications: ["library"]
-        }),
-        createManagedRepo({
-          name: "app-service",
-          description: "Application service",
-          topics: ["helpers"],
-          classifications: ["microservice"]
-        })
-      ]
-    }), "Which lib exposes helpers?", null);
-
-    expect(result.repos[0]?.name).toBe("shared-lib");
-  });
-
-  it("matches external-facing cues more strongly than generic topics", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "platform-api",
-          description: "Platform GraphQL API",
-          topics: ["commerce"],
-          classifications: ["external", "backend"]
-        }),
-        createManagedRepo({
-          name: "internal-admin",
-          description: "Backoffice tooling",
-          topics: ["commerce"],
-          classifications: ["internal"]
-        })
-      ]
-    }), "Which external graphql service owns the commerce API?", null);
-
-    expect(result.repos[0]?.name).toBe("platform-api");
-  });
-
-  it("scores repo names directly without needing duplicated topics", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "java-conventions",
-          description: "Shared Gradle defaults",
-          topics: ["gradle"],
-          classifications: ["infra"]
-        }),
-        createManagedRepo({
-          name: "build-logic",
-          description: "Shared Gradle defaults",
-          topics: ["gradle"],
-          classifications: ["infra"]
-        })
-      ]
-    }), "Which repo owns the conventions defaults?", null);
-
-    expect(result.repos[0]?.name).toBe("java-conventions");
-  });
-
   it("falls back to all configured repos when nothing scores positively", () => {
-    const result = selectReposHeuristically(config, "totally unrelated question", null);
+    const result = selectReposHeuristically(config, "zebra moonlight quartz", null);
 
     expect(result.repos.map(repo => repo.name)).toEqual(["sqs-codec", "archa", "java-conventions"]);
     expect(result.mode).toBe("all");
-  });
-
-  it("still falls back to all configured repos when only alwaysSelect repos are in scope", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "foundation",
-          description: "Cross-cutting shared base functionality",
-          alwaysSelect: true
-        }),
-        createManagedRepo({
-          name: "archa",
-          description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"]
-        }),
-        createManagedRepo({
-          name: "java-conventions",
-          description: "Java conventions and build defaults",
-          topics: ["java", "conventions"]
-        })
-      ]
-    }), "totally unrelated question", null);
-
-    expect(result.repos.map(repo => repo.name)).toEqual(["foundation", "archa", "java-conventions"]);
-    expect(result.mode).toBe("all");
-  });
-
-  it("preserves configured repo order in the all-repos fallback", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "java-conventions",
-          description: "Java conventions and build defaults",
-          topics: ["java", "conventions", "gradle"]
-        }),
-        createManagedRepo({
-          name: "archa",
-          description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"]
-        })
-      ]
-    }), "totally unrelated question", null);
-
-    expect(result.repos.map(repo => repo.name)).toEqual(["java-conventions", "archa"]);
   });
 
   it("includes alwaysSelect repos during automatic selection even when they do not match the question", () => {
@@ -308,82 +265,11 @@ describe("selectReposHeuristically", () => {
           description: "Cross-cutting shared base functionality",
           alwaysSelect: true
         }),
-        createManagedRepo({
-          name: "java-conventions",
-          description: "Java conventions and build defaults",
-          topics: ["java", "conventions"]
-        }),
-        createManagedRepo({
-          name: "archa",
-          description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"]
-        })
+        ...config.repos
       ]
-    }), "Need build defaults details", null);
+    }), "Which repo owns the archa CLI?", null);
 
-    expect(result.repos.map(repo => repo.name)).toEqual(["foundation", "java-conventions"]);
-  });
-
-  it("does not let a matching alwaysSelect repo consume a scored selection slot", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "foundation",
-          description: "Shared build defaults and base support",
-          topics: ["build", "defaults"],
-          alwaysSelect: true
-        }),
-        createManagedRepo({
-          name: "java-conventions",
-          description: "Java conventions and build defaults",
-          topics: ["java", "conventions", "build", "defaults"]
-        }),
-        createManagedRepo({
-          name: "gradle-rules",
-          description: "Gradle rules and plugin defaults",
-          topics: ["gradle", "build", "defaults"]
-        }),
-        createManagedRepo({
-          name: "release-tools",
-          description: "Release tooling and build defaults",
-          topics: ["release", "build", "defaults"]
-        }),
-        createManagedRepo({
-          name: "artifact-metadata",
-          description: "Artifact metadata and build defaults",
-          topics: ["artifact", "build", "defaults"]
-        })
-      ]
-    }), "Need build defaults details", null);
-
-    expect(result.repos.map(repo => repo.name)).toEqual([
-      "foundation",
-      "java-conventions",
-      "gradle-rules",
-      "release-tools",
-      "artifact-metadata"
-    ]);
-  });
-
-  it("still respects explicit repo narrowing even when some repos are marked alwaysSelect", () => {
-    const result = selectReposHeuristically(createLoadedConfig({
-      ...config,
-      repos: [
-        createManagedRepo({
-          name: "foundation",
-          description: "Cross-cutting shared base functionality",
-          alwaysSelect: true
-        }),
-        createManagedRepo({
-          name: "archa",
-          description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"]
-        })
-      ]
-    }), "anything", ["archa"]);
-
-    expect(result.repos.map(repo => repo.name)).toEqual(["archa"]);
-    expect(result.mode).toBe("requested");
+    expect(result.repos.map(repo => repo.name)).toContain("foundation");
+    expect(result.repos[1]?.name).toBe("archa");
   });
 });

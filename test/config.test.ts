@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { appendReposToConfig, applyGithubDiscoveryToConfig, initializeConfig, loadConfig } from "../src/core/config/config.js";
 import { getConfigPath, getDefaultManagedReposRoot } from "../src/core/config/config-paths.js";
+import { createEmptyRepoRouting } from "../src/core/repos/repo-routing.js";
 
 describe("config", () => {
   let tempRoot: string;
@@ -85,8 +86,7 @@ describe("config", () => {
         url: "https://github.com/leanish/sqs-codec.git",
         defaultBranch: "main",
         description: "SQS execution interceptor with compression and checksum metadata",
-        topics: ["aws", "sqs"],
-        classifications: [],
+        routing: createEmptyRepoRouting(),
         aliases: ["codec"],
         alwaysSelect: false,
         directory: "/workspace/managed-repos/leanish/sqs-codec"
@@ -115,8 +115,7 @@ describe("config", () => {
         url: "https://github.com/leanish/nullability.git",
         defaultBranch: "main",
         description: "",
-        topics: [],
-        classifications: [],
+        routing: createEmptyRepoRouting(),
         aliases: [],
         alwaysSelect: false,
         directory: path.join(tempRoot, "data", "archa", "repos", "leanish", "nullability")
@@ -145,8 +144,7 @@ describe("config", () => {
         url: "https://github.com/OtherCo/dtv.git",
         defaultBranch: "main",
         description: "",
-        topics: [],
-        classifications: [],
+        routing: createEmptyRepoRouting(),
         aliases: [],
         alwaysSelect: false,
         directory: path.join(tempRoot, "data", "archa", "repos", "OtherCo", "dtv")
@@ -273,8 +271,7 @@ describe("config", () => {
           url: "https://github.com/leanish/sqs-codec.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: [],
+          routing: createEmptyRepoRouting(),
           aliases: [],
           alwaysSelect: false,
           directory: path.join(tempRoot, "data", "archa", "repos", "leanish", "sqs-codec")
@@ -345,7 +342,7 @@ describe("config", () => {
     await expect(loadConfig(env)).rejects.toThrow(/non-string or empty aliases/);
   });
 
-  it("rejects classifications that are not arrays of non-empty strings", async () => {
+  it("rejects routing values that are not objects", async () => {
     const configPath = getConfigPath(env);
     await fs.mkdir(path.dirname(configPath), { recursive: true });
     await fs.writeFile(configPath, JSON.stringify({
@@ -353,15 +350,15 @@ describe("config", () => {
         {
           name: "foundation",
           url: "https://github.com/leanish/foundation.git",
-          classifications: ["infra", 7]
+          routing: ["infra"]
         }
       ]
     }));
 
-    await expect(loadConfig(env)).rejects.toThrow(/non-string or empty classifications/);
+    await expect(loadConfig(env)).rejects.toThrow(/non-object "routing"/);
   });
 
-  it("rejects unsupported classification values", async () => {
+  it("rejects routing arrays with non-string entries", async () => {
     const configPath = getConfigPath(env);
     await fs.mkdir(path.dirname(configPath), { recursive: true });
     await fs.writeFile(configPath, JSON.stringify({
@@ -369,12 +366,14 @@ describe("config", () => {
         {
           name: "foundation",
           url: "https://github.com/leanish/foundation.git",
-          classifications: ["banana"]
+          routing: {
+            owns: ["platform", 7]
+          }
         }
       ]
     }));
 
-    await expect(loadConfig(env)).rejects.toThrow(/unsupported classification "banana"/);
+    await expect(loadConfig(env)).rejects.toThrow(/non-string or empty owns/);
   });
 
   it("rejects duplicate repo names case-insensitively", async () => {
@@ -456,8 +455,12 @@ describe("config", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"],
-          classifications: ["cli"]
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "developer-cli",
+            owns: ["repo selection", "question answering"],
+            exposes: ["archa CLI", "archa-server"]
+          }
         }
       ]
     });
@@ -475,8 +478,11 @@ describe("config", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"],
-          classifications: ["cli"]
+          routing: expect.objectContaining({
+            role: "developer-cli",
+            owns: ["repo selection", "question answering"],
+            exposes: ["archa CLI", "archa-server"]
+          })
         }
       ]
     });
@@ -504,8 +510,12 @@ describe("config", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"],
-          classifications: ["cli"]
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "developer-cli",
+            owns: ["repo selection", "question answering"],
+            exposes: ["archa CLI", "archa-server"]
+          }
         }
       ]
     });
@@ -518,8 +528,7 @@ describe("config", () => {
           url: "https://github.com/leanish/legacy-repo.git",
           defaultBranch: "master",
           description: "",
-          topics: [],
-          classifications: [],
+          routing: createEmptyRepoRouting(),
           aliases: [],
           alwaysSelect: false
         },
@@ -528,8 +537,12 @@ describe("config", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"],
-          classifications: ["cli"],
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "developer-cli",
+            owns: ["repo selection", "question answering"],
+            exposes: ["archa CLI", "archa-server"]
+          },
           aliases: [],
           alwaysSelect: false
         }
@@ -551,8 +564,10 @@ describe("config", () => {
           url: "https://github.com/leanish/foundation.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: ["infra"],
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "infra-stack"
+          },
           aliases: ["shared"],
           alwaysSelect: true
         }
@@ -567,8 +582,12 @@ describe("config", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"],
-          classifications: ["cli"]
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "developer-cli",
+            owns: ["repo selection", "question answering"],
+            exposes: ["archa CLI", "archa-server"]
+          }
         }
       ],
       reposToOverride: [
@@ -577,8 +596,12 @@ describe("config", () => {
           url: "https://github.com/leanish/foundation-updated.git",
           defaultBranch: "trunk",
           description: "Shared base functionality",
-          topics: ["java", "gradle"],
-          classifications: ["infra", "library"]
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "infra-stack",
+            owns: ["shared platform base"],
+            consumes: ["Gradle"]
+          }
         }
       ]
     });
@@ -596,8 +619,11 @@ describe("config", () => {
           url: "https://github.com/leanish/foundation-updated.git",
           defaultBranch: "trunk",
           description: "Shared base functionality",
-          topics: ["java", "gradle"],
-          classifications: ["infra", "library"],
+          routing: expect.objectContaining({
+            role: "infra-stack",
+            owns: ["shared platform base"],
+            consumes: ["Gradle"]
+          }),
           aliases: ["shared"],
           alwaysSelect: true
         },
@@ -606,8 +632,9 @@ describe("config", () => {
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"],
-          classifications: ["cli"]
+          routing: expect.objectContaining({
+            role: "developer-cli"
+          })
         }
       ]
     });
@@ -643,8 +670,11 @@ describe("config", () => {
           url: "https://github.com/leanish/foundation-updated.git",
           defaultBranch: "trunk",
           description: "Shared base functionality",
-          topics: ["java", "gradle"],
-          classifications: ["infra"]
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "infra-stack",
+            owns: ["shared platform base"]
+          }
         }
       ]
     });
@@ -657,8 +687,7 @@ describe("config", () => {
           url: "https://github.com/leanish/legacy-repo.git",
           defaultBranch: "master",
           description: "",
-          topics: [],
-          classifications: [],
+          routing: createEmptyRepoRouting(),
           aliases: ["legacy"],
           alwaysSelect: false
         },
@@ -667,8 +696,11 @@ describe("config", () => {
           url: "https://github.com/leanish/foundation-updated.git",
           defaultBranch: "trunk",
           description: "Shared base functionality",
-          topics: ["java", "gradle"],
-          classifications: ["infra"],
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "infra-stack",
+            owns: ["shared platform base"]
+          },
           aliases: [],
           alwaysSelect: true
         }

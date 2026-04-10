@@ -1,24 +1,41 @@
 import path from "node:path";
 
 import { runCodexPrompt } from "../codex/codex-runner.js";
-import type { LoadedConfig, ManagedRepo, RepoClassification, RepoSelectionResult } from "../types.js";
+import { DEFAULT_CODEX_MODEL } from "../codex/codex-defaults.js";
+import type {
+  LoadedConfig,
+  ManagedRepo,
+  RepoSelectionCodexEffort,
+  RepoSelectionResult,
+  RepoSelectionStrategy,
+  RepoSelectionSummary
+} from "../types.js";
 
 const MAX_AUTOMATIC_REPOS = 4;
 const DEFAULT_REPO_SELECTION_CODEX_TIMEOUT_MS = 60_000;
-const REPO_SELECTION_CODEX_REASONING_EFFORT = "none";
-const CLASSIFICATION_ALIASES = new Map<RepoClassification, string[]>([
-  ["infra", ["infra", "infrastructure", "ops", "devops"]],
-  ["library", ["library", "lib", "sdk", "module", "package"]],
-  ["internal", ["internal", "private", "proprietary"]],
-  ["microservice", ["microservice", "worker", "daemon"]],
-  ["external", ["external", "customer-facing", "user-facing", "merchant-facing", "partner-facing", "checkout", "storefront", "onboarding", "pricing", "public"]],
-  ["frontend", ["frontend", "ui", "browser", "web"]],
-  ["backend", ["backend", "server", "api", "graphql", "rest"]],
-  ["cli", ["cli", "terminal", "command"]]
-]);
+const REPO_SELECTION_CODEX_MODEL = DEFAULT_CODEX_MODEL;
+const REPO_SELECTION_SINGLE_EFFORT: RepoSelectionCodexEffort = "none";
+const REPO_SELECTION_CASCADE_EFFORTS: RepoSelectionCodexEffort[] = ["none", "minimal", "low", "medium", "high"];
+const REPO_SELECTION_SHADOW_COMPARE_EFFORTS: RepoSelectionCodexEffort[] = ["none", "low", "high"];
+const REPO_SELECTION_CONFIDENCE_THRESHOLDS: Record<RepoSelectionCodexEffort, number> = {
+  none: 0.78,
+  minimal: 0.74,
+  low: 0.68,
+  medium: 0.58,
+  high: 0
+};
 
 type RepoSelectionDependencies = {
   runCodexPromptFn?: typeof runCodexPrompt;
+  nowFn?: () => number;
+};
+
+type RepoSelectionRunResult = {
+  effort: RepoSelectionCodexEffort;
+  repoNames: string[];
+  repos: ManagedRepo[] | null;
+  confidence: number | null;
+  latencyMs: number;
 };
 
 export async function selectRepos(
@@ -26,35 +43,61 @@ export async function selectRepos(
   question: string,
   requestedRepoNames: string[] | null,
   {
-    runCodexPromptFn = runCodexPrompt
+    selectionMode = null,
+    selectionShadowCompare = false
+  }: {
+    selectionMode: RepoSelectionStrategy | null;
+    selectionShadowCompare: boolean;
+  } = {
+    selectionMode: null,
+    selectionShadowCompare: false
+  },
+  {
+    runCodexPromptFn = runCodexPrompt,
+    nowFn = Date.now
   }: RepoSelectionDependencies = {}
 ): Promise<RepoSelectionResult> {
+  const resolvedSelectionMode = selectionMode || "single";
+
   if (requestedRepoNames && requestedRepoNames.length > 0) {
-    return {
-      repos: selectRequestedRepos(config, requestedRepoNames),
-      mode: "requested"
-    };
-  }
-
-  const codexSelectedRepos = await selectReposWithCodex(config, question, {
-    runCodexPromptFn
-  }).catch(() => null);
-  if (codexSelectedRepos) {
-    const repos = mergeRepos(
-      config.repos.filter(repo => repo.alwaysSelect),
-      codexSelectedRepos
-    );
-    if (repos.length === 0) {
-      return selectReposHeuristically(config, question, requestedRepoNames);
-    }
-
+    const repos = selectRequestedRepos(config, requestedRepoNames);
     return {
       repos,
-      mode: repos.length === config.repos.length ? "all" : "resolved"
+      mode: "requested",
+      selection: {
+        mode: resolvedSelectionMode,
+        shadowCompare: selectionShadowCompare,
+        source: "requested",
+        finalEffort: null,
+        finalRepoNames: repos.map(repo => repo.name),
+        runs: []
+      }
     };
   }
 
-  return selectReposHeuristically(config, question, requestedRepoNames);
+  const automaticSelection = await selectAutomaticRepos(config, question, {
+    selectionMode: resolvedSelectionMode,
+    selectionShadowCompare,
+    runCodexPromptFn,
+    nowFn
+  });
+
+  if (automaticSelection) {
+    return automaticSelection;
+  }
+
+  const heuristicSelection = selectReposHeuristically(config, question, requestedRepoNames);
+  return {
+    ...heuristicSelection,
+    selection: {
+      mode: resolvedSelectionMode,
+      shadowCompare: selectionShadowCompare,
+      source: "heuristic",
+      finalEffort: null,
+      finalRepoNames: heuristicSelection.repos.map(repo => repo.name),
+      runs: []
+    }
+  };
 }
 
 export function selectReposHeuristically(
@@ -63,9 +106,11 @@ export function selectReposHeuristically(
   requestedRepoNames: string[] | null
 ): RepoSelectionResult {
   if (requestedRepoNames && requestedRepoNames.length > 0) {
+    const repos = selectRequestedRepos(config, requestedRepoNames);
     return {
-      repos: selectRequestedRepos(config, requestedRepoNames),
-      mode: "requested"
+      repos,
+      mode: "requested",
+      selection: null
     };
   }
 
@@ -85,40 +130,122 @@ export function selectReposHeuristically(
   if (scoredRepos.length === 0) {
     return {
       repos: [...config.repos],
-      mode: "all"
+      mode: "all",
+      selection: null
     };
   }
 
   const repos = mergeRepos(alwaysSelectedRepos, scoredRepos);
   return {
     repos,
-    mode: repos.length === config.repos.length ? "all" : "resolved"
+    mode: repos.length === config.repos.length ? "all" : "resolved",
+    selection: null
   };
 }
 
-async function selectReposWithCodex(
+async function selectAutomaticRepos(
   config: LoadedConfig,
   question: string,
   {
-    runCodexPromptFn
-  }: Required<RepoSelectionDependencies>
-): Promise<ManagedRepo[] | null> {
-  const result = await runCodexPromptFn({
-    prompt: buildRepoSelectionPrompt(config, question),
-    workingDirectory: path.dirname(config.configPath),
-    reasoningEffort: REPO_SELECTION_CODEX_REASONING_EFFORT,
-    timeoutMs: DEFAULT_REPO_SELECTION_CODEX_TIMEOUT_MS
-  });
+    selectionMode,
+    selectionShadowCompare,
+    runCodexPromptFn,
+    nowFn
+  }: {
+    selectionMode: RepoSelectionStrategy;
+    selectionShadowCompare: boolean;
+    runCodexPromptFn: typeof runCodexPrompt;
+    nowFn: () => number;
+  }
+): Promise<RepoSelectionResult | null> {
+  const alwaysSelectedRepos = config.repos.filter(repo => repo.alwaysSelect);
+  const runPromises = new Map<RepoSelectionCodexEffort, Promise<RepoSelectionRunResult>>();
+  const getRun = (effort: RepoSelectionCodexEffort): Promise<RepoSelectionRunResult> => {
+    const existingRun = runPromises.get(effort);
+    if (existingRun) {
+      return existingRun;
+    }
 
-  return parseRepoSelectionResult(result.text, config);
+    const startedAt = nowFn();
+    const runPromise = runCodexPromptFn({
+      prompt: buildRepoSelectionPrompt(config, question),
+      model: REPO_SELECTION_CODEX_MODEL,
+      reasoningEffort: effort,
+      workingDirectory: path.dirname(config.configPath),
+      timeoutMs: DEFAULT_REPO_SELECTION_CODEX_TIMEOUT_MS
+    }).then(result => parseRepoSelectionRunResult(result.text, config, effort, nowFn() - startedAt))
+      .catch(() => ({
+        effort,
+        repoNames: [],
+        repos: null,
+        confidence: null,
+        latencyMs: nowFn() - startedAt
+      }));
+
+    runPromises.set(effort, runPromise);
+    return runPromise;
+  };
+
+  if (selectionShadowCompare) {
+    for (const effort of REPO_SELECTION_SHADOW_COMPARE_EFFORTS) {
+      void getRun(effort);
+    }
+  }
+
+  let selectedRun: RepoSelectionRunResult | null = null;
+  if (selectionMode === "single") {
+    const singleRun = await getRun(REPO_SELECTION_SINGLE_EFFORT);
+    if (isUsableCodexRun(singleRun, alwaysSelectedRepos.length, REPO_SELECTION_SINGLE_EFFORT)) {
+      selectedRun = singleRun;
+    }
+  } else {
+    for (const effort of REPO_SELECTION_CASCADE_EFFORTS) {
+      const run = await getRun(effort);
+      if (isUsableCodexRun(run, alwaysSelectedRepos.length, effort)) {
+        selectedRun = run;
+        break;
+      }
+    }
+  }
+
+  if (!selectedRun) {
+    return null;
+  }
+
+  const repos = mergeRepos(alwaysSelectedRepos, selectedRun.repos || []);
+  if (repos.length === 0) {
+    return null;
+  }
+
+  const baseSelection = {
+    mode: selectionMode,
+    shadowCompare: selectionShadowCompare,
+    source: "codex" as const,
+    finalEffort: selectedRun.effort,
+    finalRepoNames: repos.map(repo => repo.name)
+  };
+  const completedRuns = await collectCompletedRuns(runPromises, selectedRun.effort);
+  const immediateSelection = {
+    ...baseSelection,
+    runs: buildSelectionRuns(completedRuns, selectedRun.effort)
+  };
+
+  return {
+    repos,
+    mode: repos.length === config.repos.length ? "all" : "resolved",
+    selection: immediateSelection,
+    selectionPromise: collectAllRuns(runPromises).then(allRuns => ({
+      ...baseSelection,
+      runs: buildSelectionRuns(allRuns, selectedRun?.effort ?? null)
+    }))
+  };
 }
 
 function buildRepoSelectionPrompt(config: LoadedConfig, question: string): string {
   const repoSummaries = config.repos.map(repo => ({
     name: repo.name,
     description: repo.description,
-    topics: repo.topics,
-    classifications: repo.classifications,
+    routing: repo.routing,
     aliases: repo.aliases,
     alwaysSelect: repo.alwaysSelect
   }));
@@ -128,10 +255,14 @@ function buildRepoSelectionPrompt(config: LoadedConfig, question: string): strin
 
   return [
     "Select the configured repositories that should be searched to answer the user question.",
+    "Select repos by ownership and exposed surfaces, not by generic keyword overlap.",
+    "Strong evidence: description, routing.role, routing.reach, routing.responsibilities, routing.owns, routing.exposes, routing.workflows, routing.selectWhen, and aliases.",
+    "Weaker evidence: routing.consumes and generic ecosystem overlap.",
+    "Negative evidence: routing.boundaries and routing.selectWithOtherReposWhen when the question does not cross repo boundaries.",
     "Prefer precision over recall. Only choose repos that are likely to contain the answer.",
-    "Do not select repos because of generic words such as api, backend, internal, service, data, or platform alone.",
-    "Use repo names, descriptions, topics, classifications, and aliases as the evidence.",
-    "Return JSON only with exactly this shape: {\"selectedRepoNames\":[\"repo-a\",\"repo-b\"]}.",
+    "Return at most 4 configured repos.",
+    "Return JSON only with exactly this shape: {\"selectedRepoNames\":[\"repo-a\",\"repo-b\"],\"confidence\":0.0}.",
+    "Confidence must be a number from 0.0 to 1.0 for how confident you are that the selected set is sufficient.",
     "Use configured repo names exactly as provided.",
     "Return an empty array when no extra repos are clearly relevant.",
     alwaysSelectedRepoNames.length > 0
@@ -148,56 +279,153 @@ function buildRepoSelectionPrompt(config: LoadedConfig, question: string): strin
   ].join("\n");
 }
 
-function parseRepoSelectionResult(text: string, config: LoadedConfig): ManagedRepo[] | null {
+function parseRepoSelectionRunResult(
+  text: string,
+  config: LoadedConfig,
+  effort: RepoSelectionCodexEffort,
+  latencyMs: number
+): RepoSelectionRunResult {
   if (typeof text !== "string" || text.trim() === "") {
-    return null;
+    return {
+      effort,
+      repoNames: [],
+      repos: null,
+      confidence: null,
+      latencyMs
+    };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return null;
+    return {
+      effort,
+      repoNames: [],
+      repos: null,
+      confidence: null,
+      latencyMs
+    };
   }
 
-  const selectedRepoNames = extractSelectedRepoNames(parsed);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {
+      effort,
+      repoNames: [],
+      repos: null,
+      confidence: null,
+      latencyMs
+    };
+  }
+
+  const parsedObject = parsed as Record<string, unknown>;
+  const selectedRepoNames = extractSelectedRepoNames(parsedObject.selectedRepoNames);
   if (!selectedRepoNames) {
-    return null;
+    return {
+      effort,
+      repoNames: [],
+      repos: null,
+      confidence: null,
+      latencyMs
+    };
   }
 
-  if (selectedRepoNames.length === 0) {
-    return [];
+  if (selectedRepoNames.length > MAX_AUTOMATIC_REPOS) {
+    return {
+      effort,
+      repoNames: selectedRepoNames,
+      repos: null,
+      confidence: normalizeConfidence(parsedObject.confidence),
+      latencyMs
+    };
   }
 
   const requestedNames = new Set(selectedRepoNames.map(name => name.toLowerCase()));
   const selectedRepos = config.repos.filter(repo => repoMatchesAnyName(repo, requestedNames));
 
-  return selectedRepos.length > 0 ? selectedRepos : null;
+  return {
+    effort,
+    repoNames: selectedRepoNames,
+    repos: selectedRepoNames.length === 0 || selectedRepos.length > 0 ? selectedRepos : null,
+    confidence: normalizeConfidence(parsedObject.confidence),
+    latencyMs
+  };
 }
 
 function extractSelectedRepoNames(value: unknown): string[] | null {
-  if (Array.isArray(value)) {
-    return normalizeSelectedRepoNames(value);
-  }
-
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!Array.isArray(value)) {
     return null;
   }
 
-  const selectedRepoNames = (value as { selectedRepoNames?: unknown }).selectedRepoNames;
-  if (!Array.isArray(selectedRepoNames)) {
-    return null;
-  }
-
-  return normalizeSelectedRepoNames(selectedRepoNames);
-}
-
-function normalizeSelectedRepoNames(value: unknown[]): string[] | null {
   if (!value.every(item => typeof item === "string" && item.trim() !== "")) {
     return null;
   }
 
   return Array.from(new Set((value as string[]).map(item => item.trim())));
+}
+
+function normalizeConfidence(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  if (value < 0 || value > 1) {
+    return null;
+  }
+
+  return value;
+}
+
+function isUsableCodexRun(
+  run: RepoSelectionRunResult,
+  alwaysSelectedRepoCount: number,
+  effort: RepoSelectionCodexEffort
+): boolean {
+  if (!run.repos) {
+    return false;
+  }
+
+  if (run.repos.length === 0 && alwaysSelectedRepoCount === 0) {
+    return false;
+  }
+
+  const confidence = run.confidence;
+  if (confidence == null) {
+    return effort === "high";
+  }
+
+  return confidence >= REPO_SELECTION_CONFIDENCE_THRESHOLDS[effort];
+}
+
+async function collectCompletedRuns(
+  runPromises: Map<RepoSelectionCodexEffort, Promise<RepoSelectionRunResult>>,
+  finalEffort: RepoSelectionCodexEffort
+): Promise<RepoSelectionRunResult[]> {
+  const efforts = Array.from(runPromises.keys());
+  const finalIndex = efforts.indexOf(finalEffort);
+  const completedEfforts = finalIndex >= 0 ? efforts.slice(0, finalIndex + 1) : efforts;
+
+  return Promise.all(completedEfforts.map(effort => runPromises.get(effort) as Promise<RepoSelectionRunResult>));
+}
+
+async function collectAllRuns(
+  runPromises: Map<RepoSelectionCodexEffort, Promise<RepoSelectionRunResult>>
+): Promise<RepoSelectionRunResult[]> {
+  const orderedEfforts = Array.from(runPromises.keys());
+  return Promise.all(orderedEfforts.map(effort => runPromises.get(effort) as Promise<RepoSelectionRunResult>));
+}
+
+function buildSelectionRuns(
+  runs: RepoSelectionRunResult[],
+  finalEffort: RepoSelectionCodexEffort | null
+): RepoSelectionSummary["runs"] {
+  return runs.map(run => ({
+    effort: run.effort,
+    repoNames: run.repoNames,
+    latencyMs: run.latencyMs,
+    confidence: run.confidence,
+    usedForFinal: finalEffort === run.effort
+  }));
 }
 
 function selectRequestedRepos(config: LoadedConfig, requestedRepoNames: string[]): ManagedRepo[] {
@@ -210,6 +438,33 @@ function selectRequestedRepos(config: LoadedConfig, requestedRepoNames: string[]
   }
 
   return selectedRepos;
+}
+
+function scoreRepo(repo: ManagedRepo, questionTokens: string[]): number {
+  const weights = [
+    { values: tokenizeRepoName(repo.name), weight: 7 },
+    { values: repo.aliases.flatMap(alias => tokenize(alias)), weight: 6 },
+    { values: tokenize(repo.description), weight: 4 },
+    { values: tokenize(repo.routing.role), weight: 5 },
+    { values: repo.routing.reach.flatMap(value => tokenize(value)), weight: 5 },
+    { values: repo.routing.responsibilities.flatMap(value => tokenize(value)), weight: 5 },
+    { values: repo.routing.owns.flatMap(value => tokenize(value)), weight: 6 },
+    { values: repo.routing.exposes.flatMap(value => tokenize(value)), weight: 6 },
+    { values: repo.routing.workflows.flatMap(value => tokenize(value)), weight: 4 },
+    { values: repo.routing.consumes.flatMap(value => tokenize(value)), weight: 2 }
+  ];
+
+  let score = 0;
+  for (const { values, weight } of weights) {
+    const evidence = new Set(values);
+    for (const token of questionTokens) {
+      if (evidence.has(token)) {
+        score += weight;
+      }
+    }
+  }
+
+  return score;
 }
 
 function tokenize(text: string): string[] {
@@ -239,53 +494,19 @@ function repoMatchesAnyName(
   return (repo.aliases ?? []).some(alias => requestedNames.has(alias.toLowerCase()));
 }
 
-function scoreRepo(
-  repo: Pick<ManagedRepo, "name" | "description"> & {
-    topics?: string[];
-    classifications?: RepoClassification[];
-  },
-  questionTokens: string[]
-): number {
-  const repoNameTokens = new Set(tokenizeRepoName(repo.name));
-  const metadataTokens = new Set(tokenize([
-    repo.description,
-    ...(repo.topics ?? [])
-  ].join(" ")));
-  const classificationTokens = new Set(
-    (repo.classifications ?? []).flatMap(classification => CLASSIFICATION_ALIASES.get(classification) || [classification])
-  );
+function mergeRepos(primaryRepos: ManagedRepo[], secondaryRepos: ManagedRepo[]): ManagedRepo[] {
+  const repos: ManagedRepo[] = [];
+  const seenRepoNames = new Set<string>();
 
-  let score = 0;
-  for (const token of questionTokens) {
-    if (repoNameTokens.has(token)) {
-      score += 5;
-    }
-    if (metadataTokens.has(token)) {
-      score += 3;
-    }
-    if (classificationTokens.has(token)) {
-      score += 6;
-    }
-    if (repo.name.toLowerCase().includes(token)) {
-      score += 4;
-    }
-  }
-
-  return score;
-}
-
-function mergeRepos(preferredRepos: ManagedRepo[], fallbackRepos: ManagedRepo[]): ManagedRepo[] {
-  const seenNames = new Set<string>();
-  const mergedRepos: ManagedRepo[] = [];
-
-  for (const repo of [...preferredRepos, ...fallbackRepos]) {
-    if (seenNames.has(repo.name)) {
+  for (const repo of [...primaryRepos, ...secondaryRepos]) {
+    const repoName = repo.name.toLowerCase();
+    if (seenRepoNames.has(repoName)) {
       continue;
     }
 
-    seenNames.add(repo.name);
-    mergedRepos.push(repo);
+    seenRepoNames.add(repoName);
+    repos.push(repo);
   }
 
-  return mergedRepos;
+  return repos;
 }

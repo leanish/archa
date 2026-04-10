@@ -326,6 +326,18 @@ button[type="submit"]:disabled {
             <option value="xhigh">xhigh</option>
           </select>
         </div>
+        <div class="field">
+          <label for="selection-mode">Repo selection</label>
+          <select id="selection-mode" name="selectionMode">
+            <option value="single" selected>single</option>
+            <option value="cascade">cascade</option>
+          </select>
+          <div class="field-hint">Single uses one mini selector pass. Cascade escalates from none through higher efforts when confidence is weak.</div>
+        </div>
+        <label class="checkbox-field">
+          <input type="checkbox" id="selection-shadow-compare" name="selectionShadowCompare">
+          Compare none, low, and high repo selection in the background
+        </label>
         <label class="checkbox-field">
           <input type="checkbox" id="no-sync" name="noSync"> Skip repo sync
         </label>
@@ -507,9 +519,13 @@ button[type="submit"]:disabled {
       const audience = document.getElementById("audience").value.trim() || null;
       const model = document.getElementById("model").value.trim() || null;
       const reasoningEffort = document.getElementById("reasoning-effort").value.trim() || null;
+      const selectionMode = document.getElementById("selection-mode").value.trim() || null;
+      const selectionShadowCompare = document.getElementById("selection-shadow-compare").checked;
       if (audience) payload.audience = audience;
       if (model) payload.model = model;
       if (reasoningEffort) payload.reasoningEffort = reasoningEffort;
+      if (selectionMode) payload.selectionMode = selectionMode;
+      if (selectionShadowCompare) payload.selectionShadowCompare = true;
       if (noSync) payload.noSync = true;
     }
     return payload;
