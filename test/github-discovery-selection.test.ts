@@ -178,21 +178,26 @@ describe("github-discovery-selection", () => {
     expect(outputWrites.join("")).toContain("Name conflicts (1): shared -> leanish/foundation");
   });
 
-  it("cancels repo selection when escape is submitted through readline", async () => {
+  it("cancels repo selection immediately on Esc when raw keypress input is available", async () => {
     const input = createRawKeypressInput();
-    const readline = createReadline(["\u001b"]);
+    const readlineFactory = createPendingReadlineFactory();
 
-    const result = await promptGithubDiscoverySelection(plan, {
+    const resultPromise = promptGithubDiscoverySelection(plan, {
       input,
       output: { isTTY: true },
-      createInterfaceFn: () => readline
+      createInterfaceFn: readlineFactory.createInterfaceFn
     });
 
-    expect(result).toEqual({
+    await new Promise(resolve => setTimeout(resolve, 0));
+    input.emit("keypress", "\u001b", {
+      name: "escape"
+    });
+
+    await expect(resultPromise).resolves.toEqual({
       reposToAdd: [],
       reposToOverride: []
     });
-    expect(readline.question).toHaveBeenCalledWith(
+    expect(readlineFactory.instances[0]!.readline.question).toHaveBeenCalledWith(
       'Select repos to add or override (comma-separated, "*" for all)\n'
         + "Press Enter to add all new repos, press Esc to cancel, or type repo names to customize.\n"
         + "New (2): archa, java-conventions\n"
@@ -200,10 +205,12 @@ describe("github-discovery-selection", () => {
         + "Name conflicts (1): shared -> leanish/foundation\n"
         + "> "
     );
-    expect(input.setRawMode).not.toHaveBeenCalled();
+    expect(readlineFactory.instances[0]!.readline.close).toHaveBeenCalled();
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
   });
 
-  it("does not switch editable repo selection prompts into raw mode", async () => {
+  it("keeps editable repo selection prompts responsive while waiting for raw-mode escape handling", async () => {
     const input = createRawKeypressInput();
     const output = {
       isTTY: true,
@@ -228,14 +235,15 @@ describe("github-discovery-selection", () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(settled).toBe(false);
-    expect(input.setRawMode).not.toHaveBeenCalled();
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
 
-    readlineFactory.instances[0]!.resolveQuestion?.("\u001b");
+    readlineFactory.instances[0]!.resolveQuestion?.("archa");
 
     await expect(resultPromise).resolves.toEqual({
-      reposToAdd: [],
+      reposToAdd: [plan.entries[0]!.repo],
       reposToOverride: []
     });
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
   });
 
   it("defaults Enter to all new repos after confirmation", async () => {
@@ -272,7 +280,7 @@ describe("github-discovery-selection", () => {
     ]);
   });
 
-  it("cancels add-all confirmation when escape is submitted through readline", async () => {
+  it("cancels add-all confirmation immediately on Esc when raw keypress input is available", async () => {
     const input = createRawKeypressInput();
     const readlineFactory = createPendingReadlineFactory();
 
@@ -286,7 +294,9 @@ describe("github-discovery-selection", () => {
     readlineFactory.instances[0]!.resolveQuestion?.("");
 
     await new Promise(resolve => setTimeout(resolve, 0));
-    readlineFactory.instances[1]!.resolveQuestion?.("\u001b");
+    input.emit("keypress", "\u001b", {
+      name: "escape"
+    });
 
     const result = await resultPromise;
 
@@ -306,9 +316,13 @@ describe("github-discovery-selection", () => {
     expect(readlineFactory.instances[1]!.readline.question).toHaveBeenCalledWith(
       "Add all 2 new repo(s)? Press Enter to confirm, or type repo names to customize.\n> "
     );
-    expect(input.setRawMode).not.toHaveBeenCalled();
-    expect(input.resume).not.toHaveBeenCalled();
-    expect(input.pause).not.toHaveBeenCalled();
+    expect(readlineFactory.instances[1]!.readline.close).toHaveBeenCalled();
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(3, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(4, false);
+    expect(input.resume).toHaveBeenCalledTimes(2);
+    expect(input.pause).toHaveBeenCalledTimes(2);
   });
 
   it("shows owner-qualified configured and new entries for colliding repo names", async () => {

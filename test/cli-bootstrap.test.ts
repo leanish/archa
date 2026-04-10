@@ -173,23 +173,30 @@ describe("cli-bootstrap", () => {
     );
   });
 
-  it("keeps readline editing enabled for the GitHub owner prompt even with raw-capable input", async () => {
+  it("cancels the GitHub owner prompt immediately on Esc when raw keypress input is available", async () => {
     const input = createRawKeypressInput();
-    const readline = createReadline(["\u001b"]);
+    const readlineFactory = createPendingReadlineFactory();
 
-    const result = await promptForGithubOwner({
+    const resultPromise = promptForGithubOwner({
       input,
       output: { isTTY: true },
-      createInterfaceFn: () => readline
+      createInterfaceFn: readlineFactory.createInterfaceFn
     });
 
-    expect(result).toBeNull();
-    expect(readline.question).toHaveBeenCalledWith(
+    await new Promise(resolve => setTimeout(resolve, 0));
+    input.emit("keypress", "\u001b", {
+      name: "escape"
+    });
+
+    await expect(resultPromise).resolves.toBeNull();
+    expect(readlineFactory.instances[0]!.readline.question).toHaveBeenCalledWith(
       "GitHub owner to discover from (user or org).\nPress Enter to use all accessible repos from your authenticated GitHub access.\n> "
     );
-    expect(input.setRawMode).not.toHaveBeenCalled();
-    expect(input.resume).not.toHaveBeenCalled();
-    expect(input.pause).not.toHaveBeenCalled();
+    expect(readlineFactory.instances[0]!.readline.close).toHaveBeenCalled();
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
+    expect(input.resume).toHaveBeenCalledTimes(1);
+    expect(input.pause).toHaveBeenCalledTimes(1);
   });
 
   it("keeps explicit GitHub owners when provided", async () => {
@@ -299,6 +306,29 @@ function createReadline(answers: string[]): ReadlineLike {
     question: vi.fn(async () => queue.shift() ?? ""),
     write: vi.fn(),
     close: vi.fn()
+  };
+}
+
+function createPendingReadlineFactory() {
+  const instances: PendingReadlineInstance[] = [];
+
+  return {
+    instances,
+    createInterfaceFn: (() => {
+      const instance: PendingReadlineInstance = {
+        resolveQuestion: null,
+        readline: {
+          question: vi.fn((_: string) => new Promise<string>(resolve => {
+            instance.resolveQuestion = resolve;
+          })),
+          write: vi.fn(),
+          close: vi.fn()
+        }
+      };
+
+      instances.push(instance);
+      return instance.readline;
+    }) satisfies CreateInterfaceFn
   };
 }
 

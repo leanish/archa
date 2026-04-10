@@ -1,4 +1,4 @@
-import { emitKeypressEvents, type Key } from "node:readline";
+import { emitKeypressEvents, type Interface as KeypressReadlineInterface, type Key } from "node:readline";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline/promises";
 import process from "node:process";
 
@@ -121,6 +121,15 @@ export async function promptLineOrCancel({
   });
 
   try {
+    if (supportsImmediateEscape(input)) {
+      return await promptLineOrCancelWithEscape({
+        input,
+        output,
+        readline,
+        prompt
+      });
+    }
+
     return await promptLineOrCancelWithReadline(readline, prompt);
   } finally {
     readline.close();
@@ -139,6 +148,85 @@ async function promptLineOrCancelWithReadline(readline: ReadlineLike, prompt: st
   }
 
   return answer;
+}
+
+async function promptLineOrCancelWithEscape({
+  input,
+  output,
+  readline,
+  prompt
+}: {
+  input: RawKeypressPromptInput;
+  output: PromptOutput;
+  readline: ReadlineLike;
+  prompt: string;
+}): Promise<string | null> {
+  emitKeypressEvents(
+    input as NodeJS.ReadStream,
+    readline as unknown as KeypressReadlineInterface
+  );
+  const previousRawMode = input.isRaw === true;
+  input.setRawMode(true);
+  input.resume();
+  let handleKeypress: ((input: string, key: Key) => void) | null = null;
+  let cleanedUp = false;
+  let settled = false;
+
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    if (handleKeypress) {
+      input.off("keypress", handleKeypress);
+      handleKeypress = null;
+    }
+    input.setRawMode(previousRawMode);
+    input.pause();
+  };
+
+  return await new Promise<string | null>((resolve, reject) => {
+    const settleWithValue = (value: string | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const settleWithError = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    handleKeypress = (_: string, key: Key) => {
+      if (key?.name === "c" && key?.ctrl) {
+        readline.close();
+        output.write?.("\n");
+        settleWithValue(null);
+        return;
+      }
+
+      if (key?.name === "escape") {
+        readline.close();
+        output.write?.("\n");
+        settleWithValue(null);
+      }
+    };
+
+    input.on("keypress", handleKeypress);
+    void promptLineOrCancelWithReadline(readline, prompt)
+      .then(answer => {
+        settleWithValue(answer);
+      })
+      .catch(error => {
+        settleWithError(error);
+      });
+  });
 }
 
 function supportsImmediateEscape(input: PromptInput | undefined): input is RawKeypressPromptInput {
