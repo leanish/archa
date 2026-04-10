@@ -336,8 +336,9 @@ button[type="submit"]:disabled {
         </div>
         <label class="checkbox-field">
           <input type="checkbox" id="selection-shadow-compare" name="selectionShadowCompare">
-          Compare none, low, and high repo selection in the background
+          Benchmark none, low, and high repo selection in the background
         </label>
+        <div class="field-hint">Diagnostic only. This runs 3 parallel selector calls and can add local model contention.</div>
         <label class="checkbox-field">
           <input type="checkbox" id="no-sync" name="noSync"> Skip repo sync
         </label>

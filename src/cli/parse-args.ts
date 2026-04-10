@@ -324,7 +324,7 @@ function helpText(): string {
     "  --model <name>                Codex model for synthesis",
     "  --reasoning-effort <level>    Codex reasoning effort",
     "  --selection-mode <mode>       Repo selection mode (single|cascade)",
-    "  --selection-shadow-compare    Compare none/low/high repo selection in the background",
+    "  --selection-shadow-compare    Benchmark none/low/high repo selection in the background (3 parallel selector calls)",
     "  --no-sync                     Skip clone/pull before asking",
     "  --no-synthesis                Show selected repos and sync results only",
     "  --                            Stop parsing options for the question text",

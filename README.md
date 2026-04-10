@@ -220,7 +220,7 @@ Example using a few public `leanish` repos:
 }
 ```
 
-Repos may also set `"alwaysSelect": true` to stay in scope during automatic repo selection. This is useful for foundational repos that should always be available when Archa narrows to likely matches. Automatic selection now routes on ownership-oriented metadata such as `routing.role`, `routing.owns`, `routing.exposes`, `routing.workflows`, and explicit boundaries instead of relying on flat topic bags. By default, Archa uses `--selection-mode single`, which runs one `reasoningEffort: "none"` selector pass, merges any `alwaysSelect` repos into that result, and falls back to local heuristic scoring when the selector call fails or returns unusable output. `--selection-mode cascade` escalates through `none`, `minimal`, `low`, `medium`, and `high` until the selector returns a confident usable result. When `--selection-shadow-compare` is enabled, Archa also runs `none`, `low`, and `high` selection passes in the background and records the finished comparison in the result diagnostics.
+Repos may also set `"alwaysSelect": true` to stay in scope during automatic repo selection. This is useful for foundational repos that should always be available when Archa narrows to likely matches. Automatic selection now routes on ownership-oriented metadata such as `routing.role`, `routing.owns`, `routing.exposes`, `routing.workflows`, and explicit boundaries instead of relying on flat topic bags. By default, Archa uses `--selection-mode single`, which runs one `reasoningEffort: "none"` selector pass, merges any `alwaysSelect` repos into that result, and falls back to local heuristic scoring when the selector call fails or returns unusable output. `--selection-mode cascade` escalates through `none`, `minimal`, `low`, `medium`, and `high` until the selector returns a confident usable result. When `--selection-shadow-compare` is enabled, Archa also runs `none`, `low`, and `high` selection passes in the background and records the finished comparison in the result diagnostics. Treat shadow compare as a diagnostic benchmark rather than a default setting, because it starts 3 parallel selector calls.
 
 Bootstrap an empty config:
 
@@ -309,7 +309,7 @@ Ask a question. By default `archa` will:
 2. sync them to the latest tracked trunk tip
 3. run `codex exec` with `gpt-5.4-mini` and `low` reasoning effort
 
-Use `--selection-mode cascade` when you want repo selection itself to escalate from `none` through higher reasoning efforts before falling back, and `--selection-shadow-compare` when you want Archa to keep running `none`, `low`, and `high` repo selection in the background for comparison diagnostics.
+Use `--selection-mode cascade` when you want repo selection itself to escalate from `none` through higher reasoning efforts before falling back, and `--selection-shadow-compare` when you want Archa to benchmark `none`, `low`, and `high` repo selection in the background for comparison diagnostics. Keep shadow comparison off for normal use on resource-constrained local models.
 
 By default, answers target non-engineering readers who need the system behavior explained clearly. When the reader can inspect the repositories directly, use `--audience codebase` to get a more implementation-oriented answer.
 
