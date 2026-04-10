@@ -105,6 +105,7 @@ The config file contains:
 
 Repo names and aliases must be unique case-insensitively. Aliases must be non-empty strings.
 GitHub repos are always stored under an owner-scoped path inside `managedReposRoot`, such as `.../repos/leanish/nullability` or `.../repos/OtherCo/dtv`, using the owner casing from GitHub.
+If an older config still has repo-level `topics` and `classifications` but no `routing`, Archa drafts a fallback routing card from those legacy fields while loading the config. Re-running GitHub discovery is still the preferred way to replace those drafts with curated routing metadata.
 
 Example using a few public `leanish` repos:
 

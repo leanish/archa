@@ -2,15 +2,18 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { getConfigPath, getDefaultManagedReposRoot } from "./config-paths.js";
+import { buildRepoRoutingDraft } from "../discovery/repo-routing-draft.js";
 import { getManagedRepoDirectory } from "../repos/repo-paths.js";
-import { normalizeRepoRouting } from "../repos/repo-routing.js";
+import { createEmptyRepoRouting, normalizeRepoRouting } from "../repos/repo-routing.js";
+import { REPO_CLASSIFICATIONS } from "../types.js";
 import type {
   ConfigMutationResult,
   Environment,
   InitializeConfigResult,
   LoadedConfig,
   ManagedRepo,
-  ManagedRepoDefinition
+  ManagedRepoDefinition,
+  RepoClassification
 } from "../types.js";
 
 type RawConfig = {
@@ -19,6 +22,7 @@ type RawConfig = {
 };
 
 type RawRepo = Record<string, unknown>;
+const LEGACY_REPO_CLASSIFICATIONS = new Set<string>(REPO_CLASSIFICATIONS);
 
 export async function loadConfig(env: Environment = process.env): Promise<LoadedConfig> {
   const configPath = getConfigPath(env);
@@ -220,6 +224,8 @@ function normalizeRepoDefinition(repo: unknown, index: number, sourcePath: strin
     throw new Error(`Invalid Archa config at ${sourcePath}: repo "${rawRepo.name}" has non-boolean "alwaysSelect".`);
   }
 
+  const description = typeof rawRepo.description === "string" ? rawRepo.description : "";
+
   return {
     name: rawRepo.name,
     url: rawRepo.url,
@@ -228,14 +234,101 @@ function normalizeRepoDefinition(repo: unknown, index: number, sourcePath: strin
       : typeof rawRepo.branch === "string"
         ? rawRepo.branch
         : "main",
-    description: typeof rawRepo.description === "string" ? rawRepo.description : "",
-    routing: normalizeRepoRouting(rawRepo.routing, {
+    description,
+    routing: normalizeRepoRoutingWithLegacyFallback(rawRepo, {
       repoName: rawRepo.name,
+      description,
       sourcePath
     }),
     aliases: normalizeAliases(rawRepo.aliases, rawRepo.name, sourcePath),
     alwaysSelect: rawRepo.alwaysSelect === true
   };
+}
+
+function normalizeRepoRoutingWithLegacyFallback(
+  rawRepo: RawRepo,
+  {
+    repoName,
+    description,
+    sourcePath
+  }: {
+    repoName: string;
+    description: string;
+    sourcePath: string;
+  }
+) {
+  if (rawRepo.routing != null) {
+    return normalizeRepoRouting(rawRepo.routing, {
+      repoName,
+      sourcePath
+    });
+  }
+
+  const legacyTopics = normalizeLegacyTopics(rawRepo.topics);
+  const legacyClassifications = normalizeLegacyClassifications(rawRepo.classifications);
+  if (legacyTopics.length === 0 && legacyClassifications.length === 0) {
+    return createEmptyRepoRouting();
+  }
+
+  return buildRepoRoutingDraft({
+    repoName,
+    description,
+    topics: legacyTopics,
+    classifications: legacyClassifications
+  });
+}
+
+function normalizeLegacyTopics(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    const trimmed = item.trim();
+    if (trimmed === "") {
+      continue;
+    }
+
+    const normalizedKey = trimmed.toLowerCase();
+    if (seen.has(normalizedKey)) {
+      continue;
+    }
+
+    seen.add(normalizedKey);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
+function normalizeLegacyClassifications(value: unknown): RepoClassification[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized: RepoClassification[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    const trimmed = item.trim().toLowerCase();
+    if (!LEGACY_REPO_CLASSIFICATIONS.has(trimmed) || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed as RepoClassification);
+  }
+
+  return normalized;
 }
 
 function normalizeRepoDefinitions(repos: unknown[], sourcePath: string): ManagedRepoDefinition[] {

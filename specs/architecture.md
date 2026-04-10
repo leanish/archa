@@ -88,7 +88,7 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/core/config/config-paths.ts`
   Resolves the active config path and default managed repos root.
 - `src/core/config/config.ts`
-  Loads and validates config, bootstraps a config file from scratch or from an imported catalog, and applies selected GitHub discovery additions or overrides into the active config.
+  Loads and validates config, bootstraps a config file from scratch or from an imported catalog, applies selected GitHub discovery additions or overrides into the active config, and drafts fallback routing cards from legacy repo `topics` / `classifications` when `routing` is still missing.
   Derives each GitHub managed checkout directory from the repo's GitHub identity, so checkouts live under owner-scoped paths like `leanish/nullability` or `OtherCo/dtv` even when the configured repo name stays plain.
 - `src/core/discovery/github-catalog.ts`
   Discovers repos from a GitHub user or org, or from the special `@accessible` scope that spans the authenticated user's personal and organization-visible repos.

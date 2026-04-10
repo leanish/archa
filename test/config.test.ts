@@ -81,17 +81,50 @@ describe("config", () => {
 
     expect(loaded.managedReposRoot).toBe("/workspace/managed-repos");
     expect(loaded.repos).toEqual([
-      {
+      expect.objectContaining({
         name: "sqs-codec",
         url: "https://github.com/leanish/sqs-codec.git",
         defaultBranch: "main",
         description: "SQS execution interceptor with compression and checksum metadata",
-        routing: createEmptyRepoRouting(),
+        routing: expect.objectContaining({
+          owns: ["aws", "sqs"]
+        }),
         aliases: ["codec"],
         alwaysSelect: false,
         directory: "/workspace/managed-repos/leanish/sqs-codec"
-      }
+      })
     ]);
+  });
+
+  it("migrates legacy topics and classifications into a draft routing card when routing is missing", async () => {
+    const configPath = getConfigPath(env);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify({
+      repos: [
+        {
+          name: "java-conventions",
+          url: "https://github.com/leanish/java-conventions.git",
+          defaultBranch: "main",
+          description: "Shared Gradle conventions for Java builds",
+          topics: ["gradle", "java"],
+          classifications: ["library", "internal"]
+        }
+      ]
+    }, null, 2));
+
+    await expect(loadConfig(env)).resolves.toMatchObject({
+      repos: [
+        {
+          name: "java-conventions",
+          routing: {
+            role: "shared-library",
+            reach: ["shared-library", "internal-surface"],
+            owns: ["gradle", "java"],
+            boundaries: ["Do not select only because another repo depends on this library."]
+          }
+        }
+      ]
+    });
   });
 
   it("maps owner-qualified repo names to owner-scoped checkout directories", async () => {
