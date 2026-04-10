@@ -121,13 +121,7 @@ export async function promptLineOrCancel({
   });
 
   try {
-    return supportsImmediateEscape(input)
-      ? await promptLineOrCancelWithEscape(readline, {
-          input,
-          output,
-          prompt
-        })
-      : await promptLineOrCancelWithReadline(readline, prompt);
+    return await promptLineOrCancelWithReadline(readline, prompt);
   } finally {
     readline.close();
   }
@@ -211,86 +205,6 @@ async function promptEnterOrCancelWithEscape({
       };
 
       input.on("keypress", handleKeypress);
-    });
-  } catch (error) {
-    cleanup();
-    throw error;
-  }
-}
-
-async function promptLineOrCancelWithEscape(readline: ReadlineLike, {
-  input,
-  output,
-  prompt
-}: {
-  input: RawKeypressPromptInput;
-  output: PromptOutput;
-  prompt: string;
-}): Promise<string | null> {
-  emitKeypressEvents(input as NodeJS.ReadStream);
-  const previousRawMode = input.isRaw === true;
-  input.setRawMode?.(true);
-  input.resume?.();
-  let handleKeypress: ((input: string, key: Key) => void) | null = null;
-  let cleanedUp = false;
-  let settled = false;
-
-  const cleanup = () => {
-    if (cleanedUp) {
-      return;
-    }
-    cleanedUp = true;
-    if (handleKeypress) {
-      input.off("keypress", handleKeypress);
-      handleKeypress = null;
-    }
-    input.setRawMode(previousRawMode);
-    input.pause();
-  };
-
-  try {
-    return await new Promise<string | null>((resolve, reject) => {
-      handleKeypress = (_: string, key: Key) => {
-        if (key?.name === "c" && key?.ctrl) {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          cleanup();
-          output.write?.("\n");
-          resolve(null);
-          return;
-        }
-
-        if (key?.name === "escape") {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          cleanup();
-          output.write?.("\n");
-          resolve(null);
-        }
-      };
-
-      input.on("keypress", handleKeypress);
-      readline.question(prompt)
-        .then((answer: string) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          cleanup();
-          resolve(answer);
-        })
-        .catch((error: unknown) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          cleanup();
-          reject(error);
-        });
     });
   } catch (error) {
     cleanup();
