@@ -175,14 +175,11 @@ describe("cli-bootstrap", () => {
 
   it("cancels the GitHub owner prompt immediately on Esc when raw keypress input is available", async () => {
     const input = createRawKeypressInput();
-    const output = {
-      isTTY: true,
-      write: vi.fn()
-    };
     const readlineFactory = createPendingReadlineFactory();
+
     const resultPromise = promptForGithubOwner({
       input,
-      output,
+      output: { isTTY: true },
       createInterfaceFn: readlineFactory.createInterfaceFn
     });
 
@@ -191,15 +188,11 @@ describe("cli-bootstrap", () => {
       name: "escape"
     });
 
-    const result = await resultPromise;
-
-    expect(result).toBeNull();
-    expect(readlineFactory.instances).toHaveLength(1);
+    await expect(resultPromise).resolves.toBeNull();
     expect(readlineFactory.instances[0]!.readline.question).toHaveBeenCalledWith(
       "GitHub owner to discover from (user or org).\nPress Enter to use all accessible repos from your authenticated GitHub access.\n> "
     );
-    expect(output.write).toHaveBeenCalledTimes(1);
-    expect(output.write).toHaveBeenCalledWith("\n");
+    expect(readlineFactory.instances[0]!.readline.close).toHaveBeenCalled();
     expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
     expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
     expect(input.resume).toHaveBeenCalledTimes(1);
@@ -316,6 +309,29 @@ function createReadline(answers: string[]): ReadlineLike {
   };
 }
 
+function createPendingReadlineFactory() {
+  const instances: PendingReadlineInstance[] = [];
+
+  return {
+    instances,
+    createInterfaceFn: (() => {
+      const instance: PendingReadlineInstance = {
+        resolveQuestion: null,
+        readline: {
+          question: vi.fn((_: string) => new Promise<string>(resolve => {
+            instance.resolveQuestion = resolve;
+          })),
+          write: vi.fn(),
+          close: vi.fn()
+        }
+      };
+
+      instances.push(instance);
+      return instance.readline;
+    }) satisfies CreateInterfaceFn
+  };
+}
+
 function createRawKeypressInput({
   paused = true
 }: {
@@ -338,27 +354,4 @@ function createRawKeypressInput({
   });
 
   return input;
-}
-
-function createPendingReadlineFactory() {
-  const instances: PendingReadlineInstance[] = [];
-
-  return {
-    instances,
-    createInterfaceFn: (() => {
-      const instance: PendingReadlineInstance = {
-        resolveQuestion: null,
-        readline: {
-          question: vi.fn(() => new Promise<string>(resolve => {
-            instance.resolveQuestion = resolve;
-          })),
-          write: vi.fn(),
-          close: vi.fn()
-        }
-      };
-
-      instances.push(instance);
-      return instance.readline;
-    }) as CreateInterfaceFn
-  };
 }

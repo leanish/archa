@@ -5,6 +5,7 @@ import {
   planGithubRepoDiscovery,
   refineDiscoveredGithubRepos
 } from "../src/core/discovery/github-catalog.js";
+import { createEmptyRepoRouting } from "../src/core/repos/repo-routing.js";
 import { createLoadedConfig } from "./test-helpers.js";
 
 // Keep auth state explicit in this file so IDE and CLI test runs exercise the same code paths.
@@ -49,6 +50,13 @@ async function refineDiscoveredGithubReposWithToken(
       GH_TOKEN: token
     },
     ...options
+  });
+}
+
+function expectRepoRouting(partial: Record<string, unknown>, routing: unknown) {
+  return expect.objectContaining({
+    ...partial,
+    routing: expect.objectContaining((routing ?? {}) as Record<string, unknown>)
   });
 }
 
@@ -123,22 +131,24 @@ describe("github-catalog", () => {
       owner: "leanish",
       ownerType: "User",
       repos: [
-        {
+        expectRepoRouting({
           name: "archa",
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
-          description: "Repo-aware CLI for engineering Q&A with local Codex",
-          topics: ["cli", "codex", "qa"],
-          classifications: ["cli"]
-        },
-        {
+          description: "Repo-aware CLI for engineering Q&A with local Codex"
+        }, {
+          role: "developer-cli",
+          owns: ["cli", "codex", "qa"]
+        }),
+        expectRepoRouting({
           name: "forked-repo",
           url: "https://github.com/leanish/forked-repo.git",
           defaultBranch: "main",
-          description: "",
-          topics: ["fork", "customized"],
-          classifications: []
-        }
+          description: ""
+        }, {
+          role: "",
+          owns: ["fork", "customized"]
+        })
       ],
       skippedForks: 0,
       skippedArchived: 1
@@ -205,14 +215,12 @@ describe("github-catalog", () => {
       owner: "leanish",
       ownerType: "User",
       repos: [
-        {
+        expectRepoRouting({
           name: "active-repo",
           url: "https://github.com/leanish/active-repo.git",
           defaultBranch: "main",
-          description: "",
-          topics: [],
-          classifications: []
-        }
+          description: ""
+        }, createEmptyRepoRouting())
       ],
       skippedForks: 0,
       skippedArchived: 0,
@@ -274,9 +282,12 @@ describe("github-catalog", () => {
     });
 
     expect(refined.repos).toHaveLength(1);
-    expect(refined.repos[0]).toEqual(expect.objectContaining({
+    expect(refined.repos[0]).toEqual(expectRepoRouting({
       name: "archa",
-      topics: ["cli"]
+      description: "Repo-aware CLI"
+    }, {
+      role: "developer-cli",
+      owns: ["cli"]
     }));
   });
 
@@ -475,26 +486,22 @@ describe("github-catalog", () => {
       ownerDisplay: "leanish + orgs",
       ownerType: "Accessible",
       repos: [
-        {
+        expectRepoRouting({
           name: "archa",
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI",
-          topics: ["cli"],
-          classifications: [],
           sourceOwner: "leanish",
           sourceFullName: "leanish/archa"
-        },
-        {
+        }, createEmptyRepoRouting()),
+        expectRepoRouting({
           name: "dtv",
           url: "https://github.com/OtherCo/dtv.git",
           defaultBranch: "master",
           description: "Storefront backend",
-          topics: ["play"],
-          classifications: [],
           sourceOwner: "OtherCo",
           sourceFullName: "OtherCo/dtv"
-        }
+        }, createEmptyRepoRouting())
       ],
       skippedForks: 0,
       skippedArchived: 0
@@ -819,14 +826,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "java-conventions",
         url: "https://github.com/leanish/java-conventions.git",
         defaultBranch: "main",
-        description: "Shared Gradle conventions for JDK-based projects",
-        topics: ["gradle", "jdk"],
-        classifications: []
-      }
+        description: "Shared Gradle conventions for JDK-based projects"
+      }, {
+        role: "",
+        owns: ["gradle", "jdk"]
+      })
     ]);
     expect(inspectRepoFn).not.toHaveBeenCalled();
   });
@@ -871,14 +879,12 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "java-conventions",
         url: "https://github.com/leanish/java-conventions.git",
         defaultBranch: "main",
-        description: "Shared Gradle conventions for JDK-based projects",
-        topics: [],
-        classifications: []
-      }
+        description: "Shared Gradle conventions for JDK-based projects"
+      }, createEmptyRepoRouting())
     ]);
     expect(inspectRepoFn).not.toHaveBeenCalled();
     expect(fetchFn).toHaveBeenCalledTimes(2);
@@ -942,14 +948,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "terminator",
         url: "https://github.com/leanish/terminator.git",
         defaultBranch: "main",
-        description: "Small Java library for orderly shutdown coordination.",
-        topics: ["java", "shutdown"],
-        classifications: ["library"]
-      }
+        description: "Small Java library for orderly shutdown coordination."
+      }, {
+        role: "shared-library",
+        reach: ["shared-library"]
+      })
     ]);
     expect(inspectRepoFn).toHaveBeenCalledTimes(1);
     expect(inspectRepoFn).toHaveBeenCalledWith(expect.objectContaining({
@@ -1027,14 +1034,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "terminator",
         url: "https://github.com/leanish/terminator.git",
         defaultBranch: "main",
-        description: "Small Java library for orderly shutdown coordination.",
-        topics: ["java", "shutdown"],
-        classifications: ["library"]
-      }
+        description: "Small Java library for orderly shutdown coordination."
+      }, {
+        role: "shared-library",
+        reach: ["shared-library"]
+      })
     ]);
     expect(fetchFn).toHaveBeenCalledTimes(1);
     expect(fetchFn).toHaveBeenCalledWith(
@@ -1102,9 +1110,10 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      expect.objectContaining({
-        name: "nullability",
-        topics: ["null-safety"]
+      expectRepoRouting({
+        name: "nullability"
+      }, {
+        owns: ["null-safety"]
       })
     ]);
     expect(fetchFn).toHaveBeenCalledTimes(1);
@@ -1149,14 +1158,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "archa",
         url: "https://github.com/leanish/archa.git",
         defaultBranch: "main",
-        description: "Repo-aware CLI for engineering Q&A with local Codex",
-        topics: ["cli", "codex", "qa"],
-        classifications: ["cli"]
-      }
+        description: "Repo-aware CLI for engineering Q&A with local Codex"
+      }, {
+        role: "developer-cli",
+        owns: ["cli", "codex", "qa"]
+      })
     ]);
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
@@ -1202,14 +1212,14 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "java-conventions",
         url: "https://github.com/leanish/java-conventions.git",
         defaultBranch: "main",
-        description: "Shared Gradle conventions for JDK-based projects",
-        topics: ["gradle", "jdk"],
-        classifications: []
-      }
+        description: "Shared Gradle conventions for JDK-based projects"
+      }, {
+        owns: ["gradle", "jdk"]
+      })
     ]);
   });
 
@@ -1255,7 +1265,10 @@ describe("github-catalog", () => {
       curateWithCodex: false
     });
 
-    expect(result.repos[0]!.topics).toEqual([
+    const firstRepo = result.repos[0];
+    expect(firstRepo).toBeDefined();
+    expect(firstRepo?.routing).toBeDefined();
+    expect(firstRepo?.routing?.owns).toEqual([
       "checkout",
       "storefront",
       "onboarding",
@@ -1263,11 +1276,7 @@ describe("github-catalog", () => {
       "personalization",
       "recommendations",
       "search",
-      "analytics",
-      "sessions",
-      "campaigns",
-      "catalogs",
-      "products"
+      "analytics"
     ]);
   });
 
@@ -1316,14 +1325,14 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "java-conventions",
         url: "https://github.com/leanish/java-conventions.git",
         defaultBranch: "main",
-        description: "Shared Gradle conventions for JDK-based projects",
-        topics: ["gradle", "jdk"],
-        classifications: ["library"]
-      }
+        description: "Shared Gradle conventions for JDK-based projects"
+      }, {
+        owns: ["gradle", "jdk"]
+      })
     ]);
   });
 
@@ -1368,14 +1377,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "tiny-cli",
         url: "https://github.com/leanish/tiny-cli.git",
         defaultBranch: "main",
-        description: "Tiny command line helper for demos",
-        topics: ["command", "line", "helper"],
-        classifications: ["cli"]
-      }
+        description: "Tiny command line helper for demos"
+      }, {
+        role: "developer-cli",
+        owns: ["command", "line", "helper"]
+      })
     ]);
   });
 
@@ -1414,14 +1424,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "shop-app",
         url: "https://github.com/leanish/shop-app.git",
         defaultBranch: "main",
-        description: "Storefront frontend",
-        topics: ["commerce", "storefront", "frontend"],
-        classifications: ["frontend", "external"]
-      }
+        description: "Storefront frontend"
+      }, {
+        role: "frontend-application",
+        owns: ["commerce", "storefront", "frontend"]
+      })
     ]);
     expect(inspectRepoFn).toHaveBeenCalledWith(expect.objectContaining({
       repo: expect.objectContaining({
@@ -1475,14 +1486,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "terminator",
         url: "https://github.com/leanish/terminator.git",
         defaultBranch: "main",
-        description: "Terminator is a small Java library that coordinates the orderly shutdown of heterogeneous services.",
-        topics: ["java", "shutdown", "blocking"],
-        classifications: ["library"]
-      }
+        description: "Terminator is a small Java library that coordinates the orderly shutdown of heterogeneous services."
+      }, {
+        role: "shared-library",
+        reach: ["shared-library"]
+      })
     ]);
   });
 
@@ -1521,14 +1533,15 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "billing-service",
         url: "https://github.com/leanish/billing-service.git",
         defaultBranch: "main",
-        description: "Billing microservice GraphQL API",
-        topics: ["payments", "microservice", "graphql", "api"],
-        classifications: ["microservice", "backend"]
-      }
+        description: "Billing microservice GraphQL API"
+      }, {
+        role: "microservice",
+        owns: ["payments", "microservice", "graphql", "api"]
+      })
     ]);
   });
 
@@ -1573,14 +1586,16 @@ describe("github-catalog", () => {
     });
 
     expect(result.repos).toEqual([
-      {
+      expectRepoRouting({
         name: "billing-platform",
         url: "https://github.com/leanish/billing-platform.git",
         defaultBranch: "main",
-        description: "Billing GraphQL API",
-        topics: ["graphql", "api"],
-        classifications: ["backend", "internal"]
-      }
+        description: "Billing GraphQL API"
+      }, {
+        role: "service-application",
+        owns: ["graphql", "api"],
+        reach: ["service-api", "internal-surface"]
+      })
     ]);
   });
 
@@ -1646,8 +1661,7 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/foundation.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: [],
+          routing: createEmptyRepoRouting(),
           aliases: ["shared"],
           alwaysSelect: false,
           directory: "/repos/foundation"
@@ -1664,24 +1678,29 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/foundation.git",
           defaultBranch: "main",
           description: "Shared base functionality",
-          topics: ["java", "gradle"],
-          classifications: ["infra"]
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "infra-stack",
+            owns: ["java", "gradle"]
+          }
         },
         {
           name: "shared",
           url: "https://github.com/leanish/shared.git",
           defaultBranch: "main",
           description: "Shared utilities",
-          topics: [],
-          classifications: []
+          routing: createEmptyRepoRouting()
         },
         {
           name: "archa",
           url: "https://github.com/leanish/archa.git",
           defaultBranch: "main",
           description: "Repo-aware CLI",
-          topics: ["cli"],
-          classifications: ["cli"]
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "developer-cli",
+            owns: ["cli"]
+          }
         }
       ]
     });
@@ -1706,8 +1725,7 @@ describe("github-catalog", () => {
       },
       suggestions: [
         "add description from GitHub",
-        "consider topics: java, gradle",
-        "consider classifications: infra"
+        "review routing"
       ]
     });
     expect(plan.entries.find(entry => entry.repo.name === "shared")).toMatchObject({
@@ -1720,14 +1738,15 @@ describe("github-catalog", () => {
       }
     });
     expect(plan.reposToAdd).toEqual([
-      {
+      expectRepoRouting({
         name: "archa",
         url: "https://github.com/leanish/archa.git",
         defaultBranch: "main",
-        description: "Repo-aware CLI",
-        topics: ["cli"],
-        classifications: ["cli"]
-      }
+        description: "Repo-aware CLI"
+      }, {
+        role: "developer-cli",
+        owns: ["cli"]
+      })
     ]);
   });
 
@@ -1739,8 +1758,7 @@ describe("github-catalog", () => {
           url: "git@github.com:leanish/foundation.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: [],
+          routing: createEmptyRepoRouting(),
           aliases: [],
           alwaysSelect: false,
           directory: "/repos/foundation"
@@ -1757,8 +1775,7 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/foundation.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: []
+          routing: createEmptyRepoRouting()
         }
       ]
     });
@@ -1770,7 +1787,7 @@ describe("github-catalog", () => {
     );
   });
 
-  it("compares suggested topics case-insensitively against configured repos", () => {
+  it("does not suggest routing review when configured and discovered routing match", () => {
     const plan = planGithubRepoDiscovery(createLoadedConfig({
       repos: [
         {
@@ -1778,8 +1795,11 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/foundation.git",
           defaultBranch: "main",
           description: "",
-          topics: ["React"],
-          classifications: [],
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "frontend-application",
+            owns: ["React"]
+          },
           aliases: [],
           alwaysSelect: false,
           directory: "/repos/foundation"
@@ -1796,15 +1816,75 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/foundation.git",
           defaultBranch: "main",
           description: "",
-          topics: ["react"],
-          classifications: []
+          routing: {
+            ...createEmptyRepoRouting(),
+            role: "frontend-application",
+            owns: ["React"]
+          }
         }
       ]
     });
 
     expect(plan.entries).toHaveLength(1);
     expect(plan.entries[0]!.status).toBe("configured");
-    expect(plan.entries[0]!.suggestions).not.toContain("consider topics: react");
+    expect(plan.entries[0]!.suggestions).not.toContain("review routing");
+  });
+
+  it("does not suggest routing review when routing field order differs", () => {
+    const plan = planGithubRepoDiscovery(createLoadedConfig({
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          defaultBranch: "main",
+          description: "",
+          routing: {
+            role: "frontend-application",
+            reach: [],
+            responsibilities: [],
+            owns: ["React"],
+            exposes: [],
+            consumes: [],
+            workflows: [],
+            boundaries: [],
+            selectWhen: [],
+            selectWithOtherReposWhen: []
+          },
+          aliases: [],
+          alwaysSelect: false,
+          directory: "/repos/foundation"
+        }
+      ]
+    }), {
+      owner: "leanish",
+      ownerType: "User",
+      skippedForks: 0,
+      skippedArchived: 0,
+      repos: [
+        {
+          name: "foundation",
+          url: "https://github.com/leanish/foundation.git",
+          defaultBranch: "main",
+          description: "",
+          routing: {
+            owns: ["React"],
+            role: "frontend-application",
+            selectWhen: [],
+            boundaries: [],
+            exposes: [],
+            consumes: [],
+            workflows: [],
+            responsibilities: [],
+            reach: [],
+            selectWithOtherReposWhen: []
+          }
+        }
+      ]
+    });
+
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0]!.status).toBe("configured");
+    expect(plan.entries[0]!.suggestions).not.toContain("review routing");
   });
 
   it("qualifies owner-colliding repo names so they can coexist", () => {
@@ -1815,8 +1895,7 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/nullability.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: [],
+          routing: createEmptyRepoRouting(),
           aliases: [],
           alwaysSelect: false,
           directory: "/repos/nullability"
@@ -1836,8 +1915,7 @@ describe("github-catalog", () => {
           url: "https://github.com/leanish/nullability.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: []
+          routing: createEmptyRepoRouting()
         },
         {
           name: "nullability",
@@ -1846,8 +1924,7 @@ describe("github-catalog", () => {
           url: "https://github.com/OtherCo/nullability.git",
           defaultBranch: "main",
           description: "",
-          topics: [],
-          classifications: []
+          routing: createEmptyRepoRouting()
         }
       ]
     });

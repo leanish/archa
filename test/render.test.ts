@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createEmptyRepoRouting } from "../src/core/repos/repo-routing.js";
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn()
@@ -125,8 +126,10 @@ describe("render", () => {
           repo: createRepoRecord({
             name: "archa",
             description: "Repo-aware CLI",
-            topics: ["cli"],
-            classifications: ["cli"]
+            routing: {
+              ...createEmptyRepoRouting(),
+              role: "developer-cli"
+            }
           }),
           suggestions: []
         })
@@ -180,8 +183,10 @@ describe("render", () => {
             sourceOwner: "leanish",
             sourceFullName: "leanish/archa",
             description: "Repo-aware CLI",
-            topics: ["cli"],
-            classifications: ["cli"]
+            routing: {
+              ...createEmptyRepoRouting(),
+              role: "developer-cli"
+            }
           }),
           suggestions: []
         }),
@@ -192,8 +197,10 @@ describe("render", () => {
             sourceOwner: "OtherCo",
             sourceFullName: "OtherCo/dtv",
             description: "Storefront backend",
-            topics: ["play"],
-            classifications: ["backend", "external"]
+            routing: {
+              ...createEmptyRepoRouting(),
+              role: "service-application"
+            }
           }),
           suggestions: []
         })
@@ -223,8 +230,7 @@ describe("render", () => {
             sourceOwner: "leanish",
             sourceFullName: "leanish/shared",
             description: "",
-            topics: [],
-            classifications: []
+            routing: createEmptyRepoRouting()
           }),
           suggestions: []
         }),
@@ -235,8 +241,7 @@ describe("render", () => {
             sourceOwner: "OtherCo",
             sourceFullName: "OtherCo/shared",
             description: "",
-            topics: [],
-            classifications: []
+            routing: createEmptyRepoRouting()
           }),
           suggestions: []
         })
@@ -263,8 +268,7 @@ describe("render", () => {
             name: "nullability",
             url: "https://github.com/leanish/nullability.git",
             description: "",
-            topics: [],
-            classifications: []
+            routing: createEmptyRepoRouting()
           }),
           suggestions: []
         }),
@@ -276,8 +280,7 @@ describe("render", () => {
             sourceFullName: "OtherCo/nullability",
             url: "https://github.com/OtherCo/nullability.git",
             description: "",
-            topics: [],
-            classifications: []
+            routing: createEmptyRepoRouting()
           }),
           suggestions: []
         })

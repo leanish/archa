@@ -1,3 +1,4 @@
+import { createEmptyRepoRouting } from "../src/core/repos/repo-routing.js";
 import type { SpawnSyncReturns } from "node:child_process";
 
 import type {
@@ -20,8 +21,7 @@ export function createManagedRepo(overrides: Partial<ManagedRepo> = {}): Managed
     url: overrides.url ?? `https://github.com/example/${name}.git`,
     defaultBranch: overrides.defaultBranch ?? "main",
     description: overrides.description ?? "",
-    topics: overrides.topics ?? [],
-    classifications: overrides.classifications ?? [],
+    routing: overrides.routing ?? createEmptyRepoRouting(),
     aliases: overrides.aliases ?? [],
     alwaysSelect: overrides.alwaysSelect ?? false,
     directory: overrides.directory ?? `/workspace/repos/${name}`,
@@ -39,8 +39,7 @@ export function createRepoRecord(overrides: Partial<RepoRecord> = {}): RepoRecor
     url: overrides.url ?? `https://github.com/example/${name}.git`,
     defaultBranch: overrides.defaultBranch ?? "main",
     description: overrides.description ?? "",
-    topics: overrides.topics ?? [],
-    classifications: overrides.classifications ?? [],
+    routing: overrides.routing ?? createEmptyRepoRouting(),
     aliases: overrides.aliases ?? [],
     alwaysSelect: overrides.alwaysSelect ?? false,
     ...(overrides.branch ? { branch: overrides.branch } : {}),
@@ -85,6 +84,7 @@ export function createAnswerResult(overrides: Partial<AnswerResult> = {}): Answe
     mode: "answer",
     question: overrides.question ?? "question",
     selectedRepos: overrides.selectedRepos ?? [],
+    selection: overrides.selection ?? null,
     syncReport: overrides.syncReport ?? [],
     synthesis: overrides.synthesis ?? { text: "answer" }
   };
@@ -95,6 +95,7 @@ export function createRetrievalOnlyResult(overrides: Partial<RetrievalOnlyResult
     mode: "retrieval-only",
     question: overrides.question ?? "question",
     selectedRepos: overrides.selectedRepos ?? [],
+    selection: overrides.selection ?? null,
     syncReport: overrides.syncReport ?? []
   };
 }

@@ -5,12 +5,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { inspectRepoClassifications, inspectRepoMetadata } from "../src/core/discovery/repo-classification-inspector.js";
-import type { RepoClassification } from "../src/core/types.js";
+import { createEmptyRepoRouting } from "../src/core/repos/repo-routing.js";
 
 type CuratedMetadata = {
   description: string;
-  topics: string[];
-  classifications: RepoClassification[];
+  routing: ReturnType<typeof createEmptyRepoRouting>;
 };
 
 describe("repo-classification-inspector", () => {
@@ -30,9 +29,9 @@ describe("repo-classification-inspector", () => {
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
 
-  it("detects external repos from local frontend signals", async () => {
+  it("detects external frontend repos from local source signals", async () => {
     const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "shop-app");
-    await fs.mkdir(path.join(repoDirectory, "app"), { recursive: true });
+    await fs.mkdir(path.join(repoDirectory, "src", "pages"), { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "package.json"), JSON.stringify({
       dependencies: {
         react: "^19.0.0",
@@ -48,9 +47,6 @@ describe("repo-classification-inspector", () => {
         defaultBranch: "main",
         description: "Storefront web app",
         topics: []
-      },
-      sourceRepo: {
-        private: false
       },
       env,
       curateMetadataFn
@@ -72,7 +68,6 @@ describe("repo-classification-inspector", () => {
         description: "Platform infra",
         topics: []
       },
-      sourceRepo: {},
       env,
       curateMetadataFn
     });
@@ -80,85 +75,7 @@ describe("repo-classification-inspector", () => {
     expect(classifications).toEqual(["infra", "internal"]);
   });
 
-  it("allows infra and library classifications to coexist when both have evidence", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "module-pack");
-    await fs.mkdir(path.join(repoDirectory, "terraform"), { recursive: true });
-    await fs.writeFile(path.join(repoDirectory, "README.md"), "Reusable Terraform module package for shared platform infrastructure.");
-    await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java-library' }\n");
-
-    const classifications = await inspectRepoClassifications({
-      repo: {
-        name: "module-pack",
-        url: "https://github.com/leanish/module-pack.git",
-        defaultBranch: "main",
-        description: "Shared infrastructure modules",
-        topics: []
-      },
-      sourceRepo: {},
-      env,
-      curateMetadataFn
-    });
-
-    expect(classifications).toEqual(["infra", "library"]);
-  });
-
-  it("does not infer microservice from generic service wording in conventions docs", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "java-conventions");
-    await fs.mkdir(repoDirectory, { recursive: true });
-    await fs.writeFile(path.join(repoDirectory, "README.md"), [
-      "# java-conventions",
-      "",
-      "Shared Gradle conventions for JDK-based projects.",
-      "",
-      "The plugin applies shared defaults for service and library builds."
-    ].join("\n"));
-    await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java-library' }\n");
-
-    const classifications = await inspectRepoClassifications({
-      repo: {
-        name: "java-conventions",
-        url: "https://github.com/leanish/java-conventions.git",
-        defaultBranch: "main",
-        description: "Shared Gradle conventions for JDK-based projects",
-        topics: []
-      },
-      sourceRepo: {},
-      env,
-      curateMetadataFn
-    });
-
-    expect(classifications).toEqual(["library"]);
-  });
-
-  it("does not infer external from api integration wording in shared libraries", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "sqs-codec");
-    await fs.mkdir(repoDirectory, { recursive: true });
-    await fs.writeFile(path.join(repoDirectory, "README.md"), [
-      "# sqs-codec",
-      "",
-      "Shared Java library for SQS message encoding.",
-      "",
-      "It is used by GraphQL and REST services to encode compression and checksum metadata."
-    ].join("\n"));
-    await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java-library' }\n");
-
-    const classifications = await inspectRepoClassifications({
-      repo: {
-        name: "sqs-codec",
-        url: "https://github.com/leanish/sqs-codec.git",
-        defaultBranch: "main",
-        description: "SQS execution interceptor with compression and checksum metadata",
-        topics: []
-      },
-      sourceRepo: {},
-      env,
-      curateMetadataFn
-    });
-
-    expect(classifications).toEqual(["library"]);
-  });
-
-  it("infers description and topics from the repo readme when metadata is missing", async () => {
+  it("infers routing metadata from the repo readme and build files", async () => {
     const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "terminator");
     await fs.mkdir(repoDirectory, { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "README.md"), [
@@ -185,22 +102,28 @@ describe("repo-classification-inspector", () => {
       curateMetadataFn
     });
 
-    expect(metadata).toEqual({
-      description: "Terminator is a small Java library that coordinates the orderly shutdown of heterogeneous services.",
-      topics: ["java", "shutdown"],
-      classifications: ["library"]
-    });
+    expect(metadata.description).toBe(
+      "Terminator is a small Java library that coordinates the orderly shutdown of heterogeneous services."
+    );
+    expect(metadata.routing.role).toBe("shared-library");
+    expect(metadata.routing.reach).toEqual(["shared-library"]);
+    expect(metadata.routing.owns).toContain("java");
+    expect(metadata.routing.owns).toContain("shutdown");
+    expect(metadata.routing.boundaries).toContain("Do not select only because another repo depends on this library.");
   });
 
-  it("lets Codex curation refine the inferred metadata", async () => {
+  it("feeds inferred routing into the Codex curation step", async () => {
     const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "java-conventions");
     await fs.mkdir(repoDirectory, { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "README.md"), "Shared Gradle conventions for JDK-based projects.");
     await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java-library' }\n");
     curateMetadataFn.mockImplementation(async ({ inferredMetadata }) => ({
       ...inferredMetadata,
-      topics: ["gradle-plugin", "conventions", "java"],
-      classifications: ["library"]
+      routing: {
+        ...inferredMetadata.routing,
+        owns: ["Gradle conventions", "build defaults"],
+        exposes: ["Gradle plugin"]
+      }
     }));
 
     const metadata = await inspectRepoMetadata({
@@ -221,60 +144,31 @@ describe("repo-classification-inspector", () => {
     expect(curateMetadataFn).toHaveBeenCalledWith(expect.objectContaining({
       directory: repoDirectory,
       inferredMetadata: expect.objectContaining({
-        classifications: ["library"]
+        routing: expect.objectContaining({
+          role: "shared-library"
+        })
       })
     }));
-    expect(metadata).toEqual({
-      description: "Shared Gradle conventions for JDK-based projects.",
-      topics: ["gradle-plugin", "conventions", "java"],
-      classifications: ["library"]
-    });
+    expect(metadata.routing.owns).toEqual(["Gradle conventions", "build defaults"]);
+    expect(metadata.routing.exposes).toEqual(["Gradle plugin"]);
   });
 
-  it("classifies a Play-style application as backend and external without frontend or infra false positives", async () => {
+  it("extracts route endpoints and consumed technologies into the routing draft", async () => {
     const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "OtherCo", "dtv");
     await fs.mkdir(path.join(repoDirectory, "app", "controllers"), { recursive: true });
     await fs.mkdir(path.join(repoDirectory, "conf"), { recursive: true });
-    await fs.mkdir(path.join(repoDirectory, "public"), { recursive: true });
-    await fs.writeFile(path.join(repoDirectory, "conf", "routes"), "GET /api/ping controllers.HealthController.ping()");
-    await fs.writeFile(path.join(repoDirectory, "build.gradle"), "plugins { id 'java' }\n");
+    await fs.writeFile(path.join(repoDirectory, "conf", "routes"), [
+      "GET /api/ping controllers.HealthController.ping()",
+      "POST /order/track controllers.OrderController.track()",
+      "GET /admin/overview controllers.AdminController.index()"
+    ].join("\n"));
+    await fs.writeFile(path.join(repoDirectory, "build.gradle"), "implementation 'org.mongodb:mongodb-driver-sync:4.0.0'\n");
     await fs.writeFile(path.join(repoDirectory, "README.md"), [
       "# Dtv",
       "",
       "This is the main web application project for merchant backend, merchant frontend, and api services.",
       "",
-      "It powers checkout, storefront, onboarding, pricing, personalization, recommendations, search, analytics, sessions, catalogs, campaigns, and products.",
-      "",
-      "You can run https setup docs locally."
-    ].join("\n"));
-
-    const classifications = await inspectRepoClassifications({
-      repo: {
-        name: "dtv",
-        url: "https://github.com/OtherCo/dtv.git",
-        defaultBranch: "master",
-        description: "Play framework based commerce service",
-        topics: []
-      },
-      sourceRepo: {
-        size: 150_000
-      },
-      env,
-      curateMetadataFn
-    });
-
-    expect(classifications).toEqual(["backend", "external"]);
-  });
-
-  it("uses a larger topic budget for massive repos and filters weak filler tokens", async () => {
-    const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "OtherCo", "dtv");
-    await fs.mkdir(path.join(repoDirectory, "app", "controllers"), { recursive: true });
-    await fs.mkdir(path.join(repoDirectory, "conf"), { recursive: true });
-    await fs.writeFile(path.join(repoDirectory, "conf", "routes"), "GET /api/ping controllers.HealthController.ping()");
-    await fs.writeFile(path.join(repoDirectory, "README.md"), [
-      "# Dtv",
-      "",
-      "Dtv powers merchant backend, merchant frontend, api services, checkout, storefront, onboarding, pricing, personalization, recommendations, search, analytics, sessions, catalogs, campaigns, products, integrations, merchandising, segmentation, and reporting for commerce experiences. Dtv can provide https setup guidance for local development."
+      "It powers checkout, storefront, onboarding, pricing, personalization, and recommendations on connect.example.com."
     ].join("\n"));
 
     const metadata = await inspectRepoMetadata({
@@ -292,16 +186,16 @@ describe("repo-classification-inspector", () => {
       curateMetadataFn
     });
 
-    expect(metadata.topics.length).toBeGreaterThan(8);
-    expect(metadata.topics).toContain("merchant");
-    expect(metadata.topics).toContain("checkout");
-    expect(metadata.topics).toContain("storefront");
-    expect(metadata.topics).not.toContain("can");
-    expect(metadata.topics).not.toContain("https");
-    expect(metadata.topics).not.toContain("setup");
+    expect(metadata.routing.role).toBe("service-application");
+    expect(metadata.routing.exposes).toContain("GET /api/ping");
+    expect(metadata.routing.exposes).toContain("POST /order/track");
+    expect(metadata.routing.exposes).toContain("GET /admin/overview");
+    expect(metadata.routing.consumes).toContain("MongoDB");
+    expect(metadata.routing.consumes).not.toContain("GraphQL");
+    expect(metadata.routing.consumes).not.toContain("Play");
   });
 
-  it("falls back to heuristic metadata when Codex curation fails", async () => {
+  it("falls back to heuristic routing when Codex curation fails", async () => {
     const repoDirectory = path.join(tempRoot, "data", "archa", "repos", "leanish", "terminator");
     await fs.mkdir(repoDirectory, { recursive: true });
     await fs.writeFile(path.join(repoDirectory, "README.md"), "Terminator is a small Java library.");
@@ -320,7 +214,7 @@ describe("repo-classification-inspector", () => {
       curateMetadataFn
     });
 
-    expect(metadata.classifications).toEqual(["library"]);
     expect(metadata.description).toBe("Terminator is a small Java library.");
+    expect(metadata.routing.role).toBe("shared-library");
   });
 });

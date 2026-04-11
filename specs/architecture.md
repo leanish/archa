@@ -38,7 +38,7 @@ flowchart LR
 3. Discovery commands check that GitHub access is available via `GH_TOKEN` / `GITHUB_TOKEN` or, if those env vars are unset, via a usable `gh` login before continuing.
 4. Commands that require Codex check that the local `codex` CLI is installed and `codex login status` reports a logged-in session before continuing.
 5. Config is loaded from the user config path.
-6. Repo selection chooses explicit repos or heuristic candidates, keeps any pinned repos in scope, and falls back to all configured repos when nothing scores positively.
+6. Repo selection honors explicit repo names when provided; otherwise it asks Codex to choose from the configured repo metadata with minimal reasoning, keeps any pinned repos in scope, falls back to heuristic scoring if that selector pass fails or returns unusable output, and finally falls back to all configured repos when nothing scores positively.
 7. Repo sync clones missing selected repos, unshallows any shallow managed checkout, and then fast-forwards it to the configured tracked branch tip.
 8. Codex runs against either the single selected repo or the managed repos root.
 9. The adapter renders the result:
@@ -88,7 +88,7 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/core/config/config-paths.ts`
   Resolves the active config path and default managed repos root.
 - `src/core/config/config.ts`
-  Loads and validates config, bootstraps a config file from scratch or from an imported catalog, and applies selected GitHub discovery additions or overrides into the active config.
+  Loads and validates config, bootstraps a config file from scratch or from an imported catalog, applies selected GitHub discovery additions or overrides into the active config, and drafts fallback routing cards from legacy repo `topics` / `classifications` when `routing` is still missing.
   Derives each GitHub managed checkout directory from the repo's GitHub identity, so checkouts live under owner-scoped paths like `leanish/nullability` or `OtherCo/dtv` even when the configured repo name stays plain.
 - `src/core/discovery/github-catalog.ts`
   Discovers repos from a GitHub user or org, or from the special `@accessible` scope that spans the authenticated user's personal and organization-visible repos.
@@ -105,13 +105,13 @@ Within one `archa-server` process, concurrent jobs share repo sync work by repo 
 - `src/cli/setup/discovery-selection.ts`
   Resolves explicit or interactive discovery selections so GitHub imports can add only chosen repos and override only chosen configured repos, using a combined interactive list of new and already configured repos with an Enter-to-add-all-new confirmation path and owner-grouped multi-owner displays that only fall back to owner-qualified repo labels when names collide, while still accepting owner-qualified identifiers case-insensitively for explicit selections.
 - `src/core/discovery/repo-classification-inspector.ts`
-  Reuses an existing managed checkout when available, otherwise shallow-clones a selected repo temporarily, then inspects repo structure, manifests, dependencies, and README cues to infer fallback descriptions, fallback topics, and high-signal classifications such as `external`, `internal`, `infra`, `frontend`, `backend`, and `cli`, keeping `external` limited to clearly outward-facing surfaces rather than generic API mentions.
+  Reuses an existing managed checkout when available, otherwise shallow-clones a selected repo temporarily, then inspects repo structure, manifests, dependencies, routes, and README cues to infer fallback descriptions plus a draft routing card describing owned behavior, exposed surfaces, consumed technologies, workflows, and selection boundaries.
 - `src/core/discovery/repo-metadata-codex-curator.ts`
-  Runs a Codex cleanup pass in the inspected repo checkout to refine the heuristic discovery draft into the final description, topics, and classifications written during selected-repo discovery apply flows.
+  Runs a Codex cleanup pass in the inspected repo checkout to refine the heuristic discovery draft into the final description and routing card written during selected-repo discovery apply flows.
 - `src/core/answer/question-answering.ts`
   Implements the transport-agnostic ask flow and accepts injectable adapters such as status reporters and sync functions.
 - `src/core/repos/repo-selection.ts`
-  Resolves explicit repo names and aliases, or scores likely repos from repo-name tokens, descriptions, topics, and separately weighted classifications while keeping repos marked `alwaysSelect` in scope and falling back to all configured repos when nothing scores positively.
+  Resolves explicit repo names and aliases, or asks Codex to choose from configured repo metadata with a routing-aware heuristic fallback that scores likely repos from repo-name tokens, descriptions, and routing evidence while keeping repos marked `alwaysSelect` in scope, optionally cascading selector reasoning effort, and falling back to all configured repos when nothing scores positively.
 - `src/core/repos/repo-sync.ts`
   Clones missing repos and fast-forwards existing repos to the latest remote configured tracked branch tip, first unshallowing any shallow managed checkout.
 - `src/core/git/git-installation.ts`
@@ -146,9 +146,8 @@ Repo definitions include:
 - `url`
 - `defaultBranch`
 - `description`
-- `topics`
-- `classifications`
-  Additive high-signal roles such as `library`, `infra`, `internal`, or `external`; multiple values may coexist when supported by the metadata and inspected repo structure.
+- `routing`
+  A structured routing card with `role`, `reach`, `responsibilities`, `owns`, `exposes`, `consumes`, `workflows`, `boundaries`, `selectWhen`, and `selectWithOtherReposWhen`.
 - optional `aliases`
 - optional `alwaysSelect`
 

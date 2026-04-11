@@ -7,6 +7,7 @@ import {
   getPrimarySourceOwner,
   groupDiscoveryItemsByOwner
 } from "../core/discovery/repo-display-utils.js";
+import { summarizeRepoRouting } from "../core/repos/repo-routing.js";
 import type {
   AnswerResult,
   GithubDiscoveryPlanEntry,
@@ -154,13 +155,11 @@ function formatDiscoveryEntry(entry: GithubDiscoveryPlanEntry, {
   useSourceLabels: boolean;
 }): string {
   const status = formatDiscoveryStatus(entry);
-  const classifications = (entry.repo.classifications?.length ?? 0) > 0
-    ? ` classifications=${entry.repo.classifications?.join(",")}`
-    : "";
-  const topics = (entry.repo.topics?.length ?? 0) > 0 ? ` topics=${entry.repo.topics?.join(",")}` : "";
+  const routing = entry.repo.routing ? summarizeRepoRouting(entry.repo.routing) : "";
+  const routingText = routing ? ` ${routing}` : "";
   const description = entry.repo.description ? ` ${entry.repo.description}` : "";
   const suggestions = entry.suggestions?.length > 0 ? ` review=${entry.suggestions.join("; ")}` : "";
-  return `- ${formatDiscoveryRepoLabel(entry.repo, useSourceLabels)} [${status}]${classifications}${topics}${suggestions}${description}`;
+  return `- ${formatDiscoveryRepoLabel(entry.repo, useSourceLabels)} [${status}]${routingText}${suggestions}${description}`;
 }
 
 function isAmbiguousDiscoveryName(repo: GithubDiscoveryPlanEntry["repo"], entries: GithubDiscoveryPlanEntry[]): boolean {

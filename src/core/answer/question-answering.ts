@@ -5,16 +5,21 @@ import { loadConfig } from "../config/config.js";
 import { getCodexTimeoutMs, runCodexQuestion } from "../codex/codex-runner.js";
 import { selectRepos } from "../repos/repo-selection.js";
 import { syncRepos } from "../repos/repo-sync.js";
+import { formatDuration } from "../time/duration-format.js";
 import type {
   AnswerQuestionFn,
   AskRequest,
   Environment,
   ManagedRepo,
+  RepoSelectionSummary,
   QuestionExecutionOptions,
   QuestionExecutionOverrides,
+  RepoSelectionMode,
   StatusReporter,
   SyncReportItem
 } from "../types.js";
+
+const REPO_SELECTION_COMPARISON_TIMEOUT_MS = 30_000;
 
 export const answerQuestion: AnswerQuestionFn = async (
   options: AskRequest,
@@ -23,14 +28,26 @@ export const answerQuestion: AnswerQuestionFn = async (
 ) => {
   const execution = normalizeExecutionOptions(envOrExecution, legacyStatusReporter);
   const config = await execution.loadConfigFn(execution.env);
-  const selectedRepos = execution.selectReposFn(config, options.question, options.repoNames);
   const audience = resolveAnswerAudience(options.audience);
+  execution.statusReporter?.info("Selecting repos...");
+
+  const selectionStartedAt = execution.nowFn();
+  const selection = await execution.selectReposFn(config, options.question, options.repoNames, {
+    selectionMode: options.selectionMode ?? null,
+    selectionShadowCompare: Boolean(options.selectionShadowCompare)
+  });
+  const selectionElapsedMs = execution.nowFn() - selectionStartedAt;
+  const selectedRepos = selection.repos;
 
   if (selectedRepos.length === 0) {
     throw new Error("No managed repositories matched the question. Use --repo <name> or update the Archa config.");
   }
 
-  execution.statusReporter?.info(`Selected repos: ${selectedRepos.map(repo => repo.name).join(", ")}`);
+  execution.statusReporter?.info(
+    formatRepoSelectionStatus(selection.mode, selectedRepos, selectionElapsedMs)
+  );
+  execution.statusReporter?.info(formatRepoSyncModeStatus(options.noSync));
+  const finalizedSelectionPromise = finalizeRepoSelection(selection, execution.statusReporter);
 
   const syncReport: SyncReportItem[] = options.noSync
     ? selectedRepos.map(repo => ({
@@ -54,10 +71,12 @@ export const answerQuestion: AnswerQuestionFn = async (
       });
 
   if (options.noSynthesis) {
+    const finalizedSelection = await finalizedSelectionPromise;
     return {
       mode: "retrieval-only",
       question: options.question,
       selectedRepos,
+      selection: finalizedSelection,
       syncReport
     };
   }
@@ -86,11 +105,13 @@ export const answerQuestion: AnswerQuestionFn = async (
       execution.statusReporter?.info(message);
     }
   });
+  const finalizedSelection = await finalizedSelectionPromise;
 
   return {
     mode: "answer",
     question: options.question,
     selectedRepos,
+    selection: finalizedSelection,
     syncReport,
     synthesis
   };
@@ -100,6 +121,91 @@ function formatSyncFailures(failedSyncs: SyncReportItem[]): string {
   return failedSyncs
     .map(item => item.detail ? `${item.name} (${item.detail})` : item.name)
     .join(", ");
+}
+
+function formatRepoSelectionStatus(
+  selectionMode: RepoSelectionMode,
+  selectedRepos: ManagedRepo[],
+  elapsedMs: number
+): string {
+  const repoNames = selectedRepos.map(repo => repo.name).join(", ");
+  const label = selectionMode === "requested"
+    ? "Requested repos"
+    : selectionMode === "all"
+      ? "All repos"
+      : "Resolved repos";
+
+  return `${label} in ${formatDuration(elapsedMs)}: ${repoNames}`;
+}
+
+function formatRepoSyncModeStatus(noSync: boolean): string {
+  return `Skip repo sync: ${noSync ? "yes" : "no"}`;
+}
+
+async function finalizeRepoSelection(
+  selection: Awaited<ReturnType<QuestionExecutionOptions["selectReposFn"]>>,
+  statusReporter: StatusReporter | null
+): Promise<RepoSelectionSummary | null> {
+  if (!selection.selectionPromise) {
+    return selection.selection;
+  }
+
+  const finalizedSelection = await waitForRepoSelectionComparison(
+    selection.selectionPromise,
+    selection.selection,
+    statusReporter
+  );
+  if (finalizedSelection && shouldReportSelectionComparison(finalizedSelection)) {
+    statusReporter?.info(formatSelectionComparisonStatus(finalizedSelection));
+  }
+
+  return finalizedSelection;
+}
+
+async function waitForRepoSelectionComparison(
+  selectionPromise: Promise<RepoSelectionSummary | null>,
+  fallbackSelection: RepoSelectionSummary | null,
+  statusReporter: StatusReporter | null
+): Promise<RepoSelectionSummary | null> {
+  const timeoutResult = Symbol("repo-selection-comparison-timeout");
+  let timeoutHandle: NodeJS.Timeout | null = null;
+
+  try {
+    const result = await Promise.race<RepoSelectionSummary | null | typeof timeoutResult>([
+      selectionPromise,
+      new Promise<typeof timeoutResult>(resolve => {
+        timeoutHandle = setTimeout(() => resolve(timeoutResult), REPO_SELECTION_COMPARISON_TIMEOUT_MS);
+      })
+    ]);
+
+    if (result === timeoutResult) {
+      statusReporter?.info("Repo selection comparison timed out; returning initial selection diagnostics.");
+      return fallbackSelection;
+    }
+
+    return result;
+  } catch {
+    return fallbackSelection;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+function shouldReportSelectionComparison(selection: RepoSelectionSummary): boolean {
+  return selection.runs.length >= 2;
+}
+
+function formatSelectionComparisonStatus(selection: RepoSelectionSummary): string {
+  const parts = selection.runs.map(run => {
+    const confidence = run.confidence == null ? "?" : run.confidence.toFixed(2);
+    const repoNames = run.repoNames.length > 0 ? run.repoNames.join(", ") : "(none)";
+    const suffix = run.usedForFinal ? " final" : "";
+    return `${run.effort}=${repoNames} confidence=${confidence}${suffix}`;
+  });
+
+  return `Repo selection comparison: ${parts.join(" | ")}`;
 }
 
 function normalizeExecutionOptions(
@@ -114,7 +220,8 @@ function normalizeExecutionOptions(
     syncReposFn: syncRepos,
     existsSyncFn: fs.existsSync,
     getCodexTimeoutMsFn: getCodexTimeoutMs,
-    runCodexQuestionFn: runCodexQuestion
+    runCodexQuestionFn: runCodexQuestion,
+    nowFn: Date.now
   };
   const hasExecutionOverrides = looksLikeExecutionOptions(envOrExecution);
 
@@ -154,6 +261,7 @@ function looksLikeExecutionOptions(value: unknown): value is QuestionExecutionOv
     "syncReposFn",
     "existsSyncFn",
     "getCodexTimeoutMsFn",
-    "runCodexQuestionFn"
+    "runCodexQuestionFn",
+    "nowFn"
   ].some(key => key in value);
 }

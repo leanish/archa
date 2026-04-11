@@ -51,12 +51,17 @@ describe("answerQuestion", () => {
       directory: "/workspace/repos/sqs-codec"
     }
   ];
+  const resolvedSelection = {
+    repos: selectedRepos,
+    mode: "resolved",
+    selection: null
+  } as const;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.loadConfig.mockResolvedValue(config);
     mocks.getCodexTimeoutMs.mockReturnValue(300_000);
-    mocks.selectRepos.mockReturnValue(selectedRepos);
+    mocks.selectRepos.mockResolvedValue(resolvedSelection);
     mocks.syncRepos.mockResolvedValue([
       {
         name: "sqs-codec",
@@ -133,6 +138,7 @@ describe("answerQuestion", () => {
       mode: "retrieval-only",
       question: "How does x-codec-meta work?",
       selectedRepos,
+      selection: null,
       syncReport: [
         {
           name: "sqs-codec",
@@ -167,6 +173,7 @@ describe("answerQuestion", () => {
       mode: "retrieval-only",
       question: "How does x-codec-meta work?",
       selectedRepos,
+      selection: null,
       syncReport: [
         {
           name: "sqs-codec",
@@ -180,7 +187,11 @@ describe("answerQuestion", () => {
   });
 
   it("fails when no managed repositories are selected", async () => {
-    mocks.selectRepos.mockReturnValue([]);
+    mocks.selectRepos.mockResolvedValue({
+      repos: [],
+      mode: "resolved",
+      selection: null
+    });
 
     await expect(answerQuestion({
       question: "How does x-codec-meta work?",
@@ -224,7 +235,10 @@ describe("answerQuestion", () => {
         }
       ]
     });
-    const selectReposFn = vi.fn().mockReturnValue(selectedRepos);
+    const selectReposFn = vi.fn().mockResolvedValue({
+      repos: selectedRepos,
+      mode: "resolved"
+    });
     const syncReposFn = vi.fn(async (repos, callbacks) => {
       callbacks?.onRepoStart?.(repos[0], "update", "main");
       callbacks?.onRepoWait?.(repos[0], "main");
@@ -249,6 +263,9 @@ describe("answerQuestion", () => {
         text: "Injected answer"
       };
     });
+    const nowFn = vi.fn()
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(6_000);
 
     const result = await answerQuestion({
       question: "How does x-codec-meta work?",
@@ -265,7 +282,8 @@ describe("answerQuestion", () => {
       syncReposFn,
       existsSyncFn: vi.fn(() => true),
       getCodexTimeoutMsFn: vi.fn(() => 12_345),
-      runCodexQuestionFn
+      runCodexQuestionFn,
+      nowFn
     });
 
     expect(result).toMatchObject({
@@ -282,7 +300,9 @@ describe("answerQuestion", () => {
       timeoutMs: 12_345
     }));
     expect(statusReporter.info.mock.calls.map(([message]) => message)).toEqual(expect.arrayContaining([
-      "Selected repos: sqs-codec",
+      "Selecting repos...",
+      "Resolved repos in 5s: sqs-codec",
+      "Skip repo sync: no",
       "Updating sqs-codec (main)...",
       "Waiting for sqs-codec (main) sync already in progress...",
       "sqs-codec: updated (main)",
@@ -290,10 +310,69 @@ describe("answerQuestion", () => {
     ]));
   });
 
-  it("preserves the legacy three-argument call shape when a status reporter is provided", async () => {
-    const statusReporter = {
-      info: vi.fn()
+  it("reports explicitly requested repos through the status reporter", async () => {
+    const statusReporter = { info: vi.fn() };
+    const nowFn = vi.fn()
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0);
+
+    mocks.selectRepos.mockResolvedValue({
+      repos: selectedRepos,
+      mode: "requested",
+      selection: null
+    });
+
+    await answerQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      noSync: true,
+      noSynthesis: true,
+      repoNames: ["sqs-codec"]
+    }, {
+      env: process.env,
+      statusReporter,
+      loadConfigFn: mocks.loadConfig,
+      selectReposFn: mocks.selectRepos,
+      syncReposFn: mocks.syncRepos,
+      existsSyncFn: mocks.existsSync,
+      getCodexTimeoutMsFn: mocks.getCodexTimeoutMs,
+      runCodexQuestionFn: mocks.runCodexQuestion,
+      nowFn
+    });
+
+    expect(statusReporter.info.mock.calls.map(([message]) => message)).toEqual([
+      "Selecting repos...",
+      "Requested repos in 0s: sqs-codec",
+      "Skip repo sync: yes"
+    ]);
+  });
+
+  it("reports all repos when the final selection covers the whole config", async () => {
+    const allReposConfig = {
+      managedReposRoot: "/workspace/repos",
+      repos: [
+        {
+          name: "sqs-codec",
+          directory: "/workspace/repos/sqs-codec"
+        },
+        {
+          name: "archa",
+          directory: "/workspace/repos/archa"
+        }
+      ]
     };
+    const statusReporter = { info: vi.fn() };
+    const nowFn = vi.fn()
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(2_500);
+
+    mocks.loadConfig.mockResolvedValue(allReposConfig);
+    mocks.selectRepos.mockResolvedValue({
+      repos: allReposConfig.repos,
+      mode: "all",
+      selection: null
+    });
 
     await answerQuestion({
       question: "How does x-codec-meta work?",
@@ -303,12 +382,176 @@ describe("answerQuestion", () => {
       noSynthesis: true,
       repoNames: null
     }, {
-      env: { ARCHA_CODEX_TIMEOUT_MS: "12345" },
+      env: process.env,
+      statusReporter,
       loadConfigFn: mocks.loadConfig,
-      selectReposFn: mocks.selectRepos
-    }, statusReporter);
+      selectReposFn: mocks.selectRepos,
+      syncReposFn: mocks.syncRepos,
+      existsSyncFn: mocks.existsSync,
+      getCodexTimeoutMsFn: mocks.getCodexTimeoutMs,
+      runCodexQuestionFn: mocks.runCodexQuestion,
+      nowFn
+    });
+
+    expect(statusReporter.info).toHaveBeenCalledWith("All repos in 2s: sqs-codec, archa");
+    expect(statusReporter.info).toHaveBeenCalledWith("Skip repo sync: yes");
+  });
+
+  it("reports selection comparisons when background selector runs complete", async () => {
+    const statusReporter = { info: vi.fn() };
+
+    mocks.selectRepos.mockResolvedValue({
+      repos: selectedRepos,
+      mode: "resolved",
+      selection: {
+        mode: "single",
+        shadowCompare: true,
+        source: "codex",
+        finalEffort: "none",
+        finalRepoNames: ["sqs-codec"],
+        runs: [
+          {
+            effort: "none",
+            repoNames: ["sqs-codec"],
+            latencyMs: 5,
+            confidence: 0.91,
+            usedForFinal: true
+          }
+        ]
+      },
+      selectionPromise: Promise.resolve({
+        mode: "single",
+        shadowCompare: true,
+        source: "codex",
+        finalEffort: "none",
+        finalRepoNames: ["sqs-codec"],
+        runs: [
+          {
+            effort: "none",
+            repoNames: ["sqs-codec"],
+            latencyMs: 5,
+            confidence: 0.91,
+            usedForFinal: true
+          },
+          {
+            effort: "low",
+            repoNames: [],
+            latencyMs: 9,
+            confidence: null,
+            usedForFinal: false
+          }
+        ]
+      })
+    });
+
+    await answerQuestion({
+      question: "How does x-codec-meta work?",
+      model: "gpt-5.4",
+      reasoningEffort: "low",
+      noSync: true,
+      noSynthesis: true,
+      repoNames: null
+    }, {
+      env: process.env,
+      statusReporter,
+      loadConfigFn: mocks.loadConfig,
+      selectReposFn: mocks.selectRepos,
+      syncReposFn: mocks.syncRepos,
+      existsSyncFn: mocks.existsSync,
+      getCodexTimeoutMsFn: mocks.getCodexTimeoutMs,
+      runCodexQuestionFn: mocks.runCodexQuestion,
+      nowFn: () => 0
+    });
+
+    expect(statusReporter.info).toHaveBeenCalledWith(
+      "Repo selection comparison: none=sqs-codec confidence=0.91 final | low=(none) confidence=?"
+    );
+  });
+
+  it("falls back to the immediate selection summary when background comparison does not finish in time", async () => {
+    vi.useFakeTimers();
+    const statusReporter = { info: vi.fn() };
+    const immediateSelection = {
+      mode: "single" as const,
+      shadowCompare: true,
+      source: "codex" as const,
+      finalEffort: "none" as const,
+      finalRepoNames: ["sqs-codec"],
+      runs: [
+        {
+          effort: "none" as const,
+          repoNames: ["sqs-codec"],
+          latencyMs: 5,
+          confidence: 0.91,
+          usedForFinal: true
+        }
+      ]
+    };
+
+    mocks.selectRepos.mockResolvedValue({
+      repos: selectedRepos,
+      mode: "resolved",
+      selection: immediateSelection,
+      selectionPromise: new Promise(() => {})
+    });
+
+    try {
+      const resultPromise = answerQuestion({
+        question: "How does x-codec-meta work?",
+        model: "gpt-5.4",
+        reasoningEffort: "low",
+        noSync: true,
+        noSynthesis: true,
+        repoNames: null
+      }, {
+        env: process.env,
+        statusReporter,
+        loadConfigFn: mocks.loadConfig,
+        selectReposFn: mocks.selectRepos,
+        syncReposFn: mocks.syncRepos,
+        existsSyncFn: mocks.existsSync,
+        getCodexTimeoutMsFn: mocks.getCodexTimeoutMs,
+        runCodexQuestionFn: mocks.runCodexQuestion,
+        nowFn: () => 0
+      });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      await expect(resultPromise).resolves.toMatchObject({
+        selection: immediateSelection
+      });
+      expect(statusReporter.info).toHaveBeenCalledWith(
+        "Repo selection comparison timed out; returning initial selection diagnostics."
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves the legacy three-argument call shape when a status reporter is provided", async () => {
+    const statusReporter = {
+      info: vi.fn()
+    };
+    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+
+    try {
+      await answerQuestion({
+        question: "How does x-codec-meta work?",
+        model: "gpt-5.4",
+        reasoningEffort: "low",
+        noSync: true,
+        noSynthesis: true,
+        repoNames: null
+      }, {
+        env: { ARCHA_CODEX_TIMEOUT_MS: "12345" },
+        loadConfigFn: mocks.loadConfig,
+        selectReposFn: mocks.selectRepos
+      }, statusReporter);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
 
     expect(mocks.loadConfig).toHaveBeenCalledWith(process.env);
-    expect(statusReporter.info).toHaveBeenCalledWith("Selected repos: sqs-codec");
+    expect(statusReporter.info).toHaveBeenCalledWith("Resolved repos in 0s: sqs-codec");
   });
 });

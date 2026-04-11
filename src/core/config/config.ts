@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { getConfigPath, getDefaultManagedReposRoot } from "./config-paths.js";
+import { buildRepoRoutingDraft } from "../discovery/repo-routing-draft.js";
 import { getManagedRepoDirectory } from "../repos/repo-paths.js";
+import { createEmptyRepoRouting, normalizeRepoRouting } from "../repos/repo-routing.js";
+import { REPO_CLASSIFICATIONS } from "../types.js";
 import type {
   ConfigMutationResult,
   Environment,
@@ -12,7 +15,6 @@ import type {
   ManagedRepoDefinition,
   RepoClassification
 } from "../types.js";
-import { REPO_CLASSIFICATIONS } from "../types.js";
 
 type RawConfig = {
   managedReposRoot?: unknown;
@@ -20,12 +22,7 @@ type RawConfig = {
 };
 
 type RawRepo = Record<string, unknown>;
-
-const VALID_REPO_CLASSIFICATIONS = new Set<string>(REPO_CLASSIFICATIONS);
-
-function isRepoClassification(value: string): value is RepoClassification {
-  return VALID_REPO_CLASSIFICATIONS.has(value);
-}
+const LEGACY_REPO_CLASSIFICATIONS = new Set<string>(REPO_CLASSIFICATIONS);
 
 export async function loadConfig(env: Environment = process.env): Promise<LoadedConfig> {
   const configPath = getConfigPath(env);
@@ -227,6 +224,8 @@ function normalizeRepoDefinition(repo: unknown, index: number, sourcePath: strin
     throw new Error(`Invalid Archa config at ${sourcePath}: repo "${rawRepo.name}" has non-boolean "alwaysSelect".`);
   }
 
+  const description = typeof rawRepo.description === "string" ? rawRepo.description : "";
+
   return {
     name: rawRepo.name,
     url: rawRepo.url,
@@ -235,14 +234,101 @@ function normalizeRepoDefinition(repo: unknown, index: number, sourcePath: strin
       : typeof rawRepo.branch === "string"
         ? rawRepo.branch
         : "main",
-    description: typeof rawRepo.description === "string" ? rawRepo.description : "",
-    topics: Array.isArray(rawRepo.topics)
-      ? rawRepo.topics.filter((topic): topic is string => typeof topic === "string")
-      : [],
-    classifications: normalizeClassifications(rawRepo.classifications, rawRepo.name, sourcePath),
+    description,
+    routing: normalizeRepoRoutingWithLegacyFallback(rawRepo, {
+      repoName: rawRepo.name,
+      description,
+      sourcePath
+    }),
     aliases: normalizeAliases(rawRepo.aliases, rawRepo.name, sourcePath),
     alwaysSelect: rawRepo.alwaysSelect === true
   };
+}
+
+function normalizeRepoRoutingWithLegacyFallback(
+  rawRepo: RawRepo,
+  {
+    repoName,
+    description,
+    sourcePath
+  }: {
+    repoName: string;
+    description: string;
+    sourcePath: string;
+  }
+) {
+  if (rawRepo.routing != null) {
+    return normalizeRepoRouting(rawRepo.routing, {
+      repoName,
+      sourcePath
+    });
+  }
+
+  const legacyTopics = normalizeLegacyTopics(rawRepo.topics);
+  const legacyClassifications = normalizeLegacyClassifications(rawRepo.classifications);
+  if (legacyTopics.length === 0 && legacyClassifications.length === 0) {
+    return createEmptyRepoRouting();
+  }
+
+  return buildRepoRoutingDraft({
+    repoName,
+    description,
+    topics: legacyTopics,
+    classifications: legacyClassifications
+  });
+}
+
+function normalizeLegacyTopics(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    const trimmed = item.trim();
+    if (trimmed === "") {
+      continue;
+    }
+
+    const normalizedKey = trimmed.toLowerCase();
+    if (seen.has(normalizedKey)) {
+      continue;
+    }
+
+    seen.add(normalizedKey);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
+function normalizeLegacyClassifications(value: unknown): RepoClassification[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized: RepoClassification[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    const trimmed = item.trim().toLowerCase();
+    if (!LEGACY_REPO_CLASSIFICATIONS.has(trimmed) || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed as RepoClassification);
+  }
+
+  return normalized;
 }
 
 function normalizeRepoDefinitions(repos: unknown[], sourcePath: string): ManagedRepoDefinition[] {
@@ -258,8 +344,7 @@ function mergeDiscoveredRepo(
     url: discoveredRepo.url,
     defaultBranch: discoveredRepo.defaultBranch,
     description: discoveredRepo.description,
-    topics: discoveredRepo.topics,
-    classifications: discoveredRepo.classifications
+    routing: discoveredRepo.routing
   };
 }
 
@@ -279,8 +364,7 @@ async function importCatalog(catalogPath: string): Promise<ManagedRepoDefinition
       url: normalizedRepo.url,
       defaultBranch: normalizedRepo.defaultBranch,
       description: normalizedRepo.description,
-      topics: normalizedRepo.topics,
-      classifications: normalizedRepo.classifications,
+      routing: normalizedRepo.routing,
       aliases: normalizedRepo.aliases,
       alwaysSelect: normalizedRepo.alwaysSelect
     };
@@ -305,30 +389,6 @@ function normalizeAliases(value: unknown, repoName: string, sourcePath: string):
   }
 
   return value.map(alias => alias.trim());
-}
-
-function normalizeClassifications(value: unknown, repoName: string, sourcePath: string): RepoClassification[] {
-  if (value == null) {
-    return [];
-  }
-
-  if (!Array.isArray(value)) {
-    throw new Error(`Invalid Archa config at ${sourcePath}: repo "${repoName}" has non-array "classifications".`);
-  }
-
-  if (!value.every(item => typeof item === "string" && item.trim() !== "")) {
-    throw new Error(`Invalid Archa config at ${sourcePath}: repo "${repoName}" has non-string or empty classifications.`);
-  }
-
-  const normalizedClassifications = value.map(item => item.trim().toLowerCase());
-  const invalidClassification = normalizedClassifications.find(classification => !isRepoClassification(classification));
-  if (invalidClassification) {
-    throw new Error(
-      `Invalid Archa config at ${sourcePath}: repo "${repoName}" has unsupported classification "${invalidClassification}".`
-    );
-  }
-
-  return normalizedClassifications.filter(isRepoClassification);
 }
 
 function validateUniqueRepoIdentifiers(repos: Array<Pick<ManagedRepoDefinition, "name" | "aliases">>, sourcePath: string): void {

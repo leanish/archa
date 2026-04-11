@@ -178,17 +178,13 @@ describe("github-discovery-selection", () => {
     expect(outputWrites.join("")).toContain("Name conflicts (1): shared -> leanish/foundation");
   });
 
-  it("cancels repo selection immediately on Esc", async () => {
+  it("cancels repo selection immediately on Esc when raw keypress input is available", async () => {
     const input = createRawKeypressInput();
-    const output = {
-      isTTY: true,
-      write: vi.fn()
-    };
     const readlineFactory = createPendingReadlineFactory();
 
     const resultPromise = promptGithubDiscoverySelection(plan, {
       input,
-      output,
+      output: { isTTY: true },
       createInterfaceFn: readlineFactory.createInterfaceFn
     });
 
@@ -197,13 +193,10 @@ describe("github-discovery-selection", () => {
       name: "escape"
     });
 
-    const result = await resultPromise;
-
-    expect(result).toEqual({
+    await expect(resultPromise).resolves.toEqual({
       reposToAdd: [],
       reposToOverride: []
     });
-    expect(readlineFactory.instances).toHaveLength(1);
     expect(readlineFactory.instances[0]!.readline.question).toHaveBeenCalledWith(
       'Select repos to add or override (comma-separated, "*" for all)\n'
         + "Press Enter to add all new repos, press Esc to cancel, or type repo names to customize.\n"
@@ -212,15 +205,12 @@ describe("github-discovery-selection", () => {
         + "Name conflicts (1): shared -> leanish/foundation\n"
         + "> "
     );
-    expect(output.write).toHaveBeenCalledTimes(1);
-    expect(output.write).toHaveBeenCalledWith("\n");
+    expect(readlineFactory.instances[0]!.readline.close).toHaveBeenCalled();
     expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
     expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
-    expect(input.resume).toHaveBeenCalledTimes(1);
-    expect(input.pause).toHaveBeenCalledTimes(1);
   });
 
-  it("does not cancel repo selection on arrow-left keypresses", async () => {
+  it("keeps editable repo selection prompts responsive while waiting for raw-mode escape handling", async () => {
     const input = createRawKeypressInput();
     const output = {
       isTTY: true,
@@ -245,15 +235,15 @@ describe("github-discovery-selection", () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(settled).toBe(false);
+    expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
 
-    input.emit("keypress", "\u001b", {
-      name: "escape"
-    });
+    readlineFactory.instances[0]!.resolveQuestion?.("archa");
 
     await expect(resultPromise).resolves.toEqual({
-      reposToAdd: [],
+      reposToAdd: [plan.entries[0]!.repo],
       reposToOverride: []
     });
+    expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
   });
 
   it("defaults Enter to all new repos after confirmation", async () => {
@@ -290,17 +280,13 @@ describe("github-discovery-selection", () => {
     ]);
   });
 
-  it("cancels add-all confirmation immediately on Esc", async () => {
+  it("cancels add-all confirmation immediately on Esc when raw keypress input is available", async () => {
     const input = createRawKeypressInput();
-    const output = {
-      isTTY: true,
-      write: vi.fn()
-    };
     const readlineFactory = createPendingReadlineFactory();
 
     const resultPromise = promptGithubDiscoverySelection(plan, {
       input,
-      output,
+      output: { isTTY: true },
       createInterfaceFn: readlineFactory.createInterfaceFn
     });
 
@@ -330,8 +316,7 @@ describe("github-discovery-selection", () => {
     expect(readlineFactory.instances[1]!.readline.question).toHaveBeenCalledWith(
       "Add all 2 new repo(s)? Press Enter to confirm, or type repo names to customize.\n> "
     );
-    expect(output.write).toHaveBeenCalledTimes(1);
-    expect(output.write).toHaveBeenCalledWith("\n");
+    expect(readlineFactory.instances[1]!.readline.close).toHaveBeenCalled();
     expect(input.setRawMode).toHaveBeenNthCalledWith(1, true);
     expect(input.setRawMode).toHaveBeenNthCalledWith(2, false);
     expect(input.setRawMode).toHaveBeenNthCalledWith(3, true);
@@ -588,6 +573,16 @@ function createRawKeypressInput(): RawKeypressInput {
   input.pause = vi.fn();
 
   return input;
+}
+
+function createReadline(answers: string[]): ReadlineLike {
+  const queue = [...answers];
+
+  return {
+    question: vi.fn(async () => queue.shift() ?? ""),
+    write() {},
+    close: vi.fn()
+  };
 }
 
 function createPendingReadlineFactory() {
