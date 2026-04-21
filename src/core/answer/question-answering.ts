@@ -11,6 +11,9 @@ import type {
   AskRequest,
   Environment,
   ManagedRepo,
+  RepoSyncCallbacks,
+  RepoSyncStartAction,
+  RepoSyncTarget,
   RepoSelectionSummary,
   QuestionExecutionOptions,
   QuestionExecutionOverrides,
@@ -50,25 +53,8 @@ export const answerQuestion: AnswerQuestionFn = async (
   const finalizedSelectionPromise = finalizeRepoSelection(selection, execution.statusReporter);
 
   const syncReport: SyncReportItem[] = options.noSync
-    ? selectedRepos.map(repo => ({
-        name: repo.name,
-        directory: repo.directory,
-        action: "skipped"
-      }))
-    : await execution.syncReposFn(selectedRepos, {
-        onRepoStart(repo, action, trunkBranch) {
-          execution.statusReporter?.info(
-            `${action === "clone" ? "Cloning" : "Updating"} ${repo.name} (${trunkBranch})...`
-          );
-        },
-        onRepoWait(repo, trunkBranch) {
-          execution.statusReporter?.info(`Waiting for ${repo.name} (${trunkBranch}) sync already in progress...`);
-        },
-        onRepoResult(item) {
-          const detail = item.detail ? ` (${item.detail})` : "";
-          execution.statusReporter?.info(`${item.name}: ${item.action}${detail}`);
-        }
-      });
+    ? createSkippedSyncReport(selectedRepos)
+    : await execution.syncReposFn(selectedRepos, createSyncCallbacks(execution.statusReporter));
 
   if (options.noSynthesis) {
     const finalizedSelection = await finalizedSelectionPromise;
@@ -129,17 +115,47 @@ function formatRepoSelectionStatus(
   elapsedMs: number
 ): string {
   const repoNames = selectedRepos.map(repo => repo.name).join(", ");
-  const label = selectionMode === "requested"
-    ? "Requested repos"
-    : selectionMode === "all"
-      ? "All repos"
-      : "Resolved repos";
+  const label = getRepoSelectionStatusLabel(selectionMode);
 
   return `${label} in ${formatDuration(elapsedMs)}: ${repoNames}`;
 }
 
 function formatRepoSyncModeStatus(noSync: boolean): string {
   return `Skip repo sync: ${noSync ? "yes" : "no"}`;
+}
+
+function createSkippedSyncReport(selectedRepos: ManagedRepo[]): SyncReportItem[] {
+  return selectedRepos.map(repo => ({
+    name: repo.name,
+    directory: repo.directory,
+    action: "skipped"
+  }));
+}
+
+function createSyncCallbacks(statusReporter: StatusReporter | null): RepoSyncCallbacks {
+  return {
+    onRepoStart(repo: RepoSyncTarget, action: RepoSyncStartAction, trunkBranch: string) {
+      statusReporter?.info(`${action === "clone" ? "Cloning" : "Updating"} ${repo.name} (${trunkBranch})...`);
+    },
+    onRepoWait(repo: RepoSyncTarget, trunkBranch: string) {
+      statusReporter?.info(`Waiting for ${repo.name} (${trunkBranch}) sync already in progress...`);
+    },
+    onRepoResult(item: SyncReportItem) {
+      const detail = item.detail ? ` (${item.detail})` : "";
+      statusReporter?.info(`${item.name}: ${item.action}${detail}`);
+    }
+  };
+}
+
+function getRepoSelectionStatusLabel(selectionMode: RepoSelectionMode): string {
+  switch (selectionMode) {
+    case "requested":
+      return "Requested repos";
+    case "all":
+      return "All repos";
+    default:
+      return "Resolved repos";
+  }
 }
 
 async function finalizeRepoSelection(
