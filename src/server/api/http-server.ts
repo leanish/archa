@@ -11,6 +11,13 @@ import { parseEnvPort, parseEnvPositiveInteger } from "../../core/env/parse-env.
 import { createAskJobManager } from "../../core/jobs/ask-job-manager.ts";
 import { SUPPORTED_SELECTION_STRATEGIES, isSelectionStrategy } from "../../core/repos/selection-strategies.ts";
 import { HTML_UI } from "../ui/html.ts";
+import {
+  createWebUploadStore,
+  DEFAULT_WEB_UPLOAD_LIMIT_BYTES,
+  shouldInlineUploadText,
+  type WebUploadRecord,
+  type WebUploadStore
+} from "./web-upload-store.ts";
 import type {
   AskJobManager,
   AskJobSnapshot,
@@ -56,6 +63,7 @@ type StartHttpServerOptions = {
   host?: string | null;
   port?: number | null;
   bodyLimitBytes?: number | null;
+  uploadLimitBytes?: number | null;
   jobManager?: AskJobManager | null;
   answerQuestionFn?: AnswerQuestionFn | null;
   loadConfigFn?: LoadServerConfigFn;
@@ -65,16 +73,20 @@ type StartHttpServerOptions = {
 type CreateHttpHandlerOptions = {
   jobManager: HttpJobManager;
   bodyLimitBytes?: number;
+  uploadLimitBytes?: number;
   env?: Environment;
   loadConfigFn?: LoadRepoListFn;
+  uploadStore?: WebUploadStore;
 };
 type HandleRequestOptions = {
   request: HttpRequestLike;
   response: HttpResponseLike;
   jobManager: HttpJobManager;
   bodyLimitBytes: number;
+  uploadLimitBytes: number;
   env: Environment;
   loadConfigFn: LoadRepoListFn;
+  uploadStore: WebUploadStore;
 };
 
 export interface HttpServerHandle {
@@ -91,6 +103,7 @@ export async function startHttpServer({
   host = null,
   port = null,
   bodyLimitBytes = null,
+  uploadLimitBytes = null,
   jobManager = null,
   answerQuestionFn = null,
   loadConfigFn = loadConfig,
@@ -104,6 +117,9 @@ export async function startHttpServer({
   const resolvedBodyLimitBytes = bodyLimitBytes
     ?? getOptionalPositiveInteger(env.ATC_SERVER_BODY_LIMIT_BYTES, "ATC_SERVER_BODY_LIMIT_BYTES")
     ?? DEFAULT_BODY_LIMIT_BYTES;
+  const resolvedUploadLimitBytes = uploadLimitBytes
+    ?? getOptionalPositiveInteger(env.ATC_SERVER_UPLOAD_LIMIT_BYTES, "ATC_SERVER_UPLOAD_LIMIT_BYTES")
+    ?? DEFAULT_WEB_UPLOAD_LIMIT_BYTES;
   const resolvedMaxConcurrentJobs = maxConcurrentJobs
     ?? getOptionalPositiveInteger(env.ATC_SERVER_MAX_CONCURRENT_JOBS, "ATC_SERVER_MAX_CONCURRENT_JOBS")
     ?? undefined;
@@ -111,6 +127,7 @@ export async function startHttpServer({
     ?? getOptionalPositiveInteger(env.ATC_SERVER_JOB_RETENTION_MS, "ATC_SERVER_JOB_RETENTION_MS")
     ?? undefined;
   const loadedConfig = await loadConfigFn(env);
+  const uploadStore = createWebUploadStore();
   const resolvedJobManager = jobManager ?? createAskJobManager({
     env,
     answerQuestionFn: answerQuestionFn ?? undefined,
@@ -121,7 +138,9 @@ export async function startHttpServer({
     bodyLimitBytes: resolvedBodyLimitBytes,
     env,
     jobManager: resolvedJobManager,
-    loadConfigFn
+    loadConfigFn,
+    uploadLimitBytes: resolvedUploadLimitBytes,
+    uploadStore
   });
   const server = http.createServer((request, response) => {
     void handler(request, response);
@@ -156,6 +175,7 @@ export async function startHttpServer({
         })
       ]);
 
+      uploadStore.close();
       resolvedJobManager.close();
     }
   };
@@ -164,8 +184,10 @@ export async function startHttpServer({
 export function createHttpHandler({
   jobManager,
   bodyLimitBytes = DEFAULT_BODY_LIMIT_BYTES,
+  uploadLimitBytes = DEFAULT_WEB_UPLOAD_LIMIT_BYTES,
   env = process.env,
-  loadConfigFn = loadConfig
+  loadConfigFn = loadConfig,
+  uploadStore = createWebUploadStore()
 }: CreateHttpHandlerOptions): (request: HttpRequestLike, response: HttpResponseLike) => Promise<void> {
   return async function handleHttpRequest(request: HttpRequestLike, response: HttpResponseLike): Promise<void> {
     await handleRequest({
@@ -173,8 +195,10 @@ export function createHttpHandler({
       response,
       jobManager,
       bodyLimitBytes,
+      uploadLimitBytes,
       env,
-      loadConfigFn
+      loadConfigFn,
+      uploadStore
     });
   };
 }
@@ -184,8 +208,10 @@ async function handleRequest({
   response,
   jobManager,
   bodyLimitBytes,
+  uploadLimitBytes,
   env,
-  loadConfigFn
+  loadConfigFn,
+  uploadStore
 }: HandleRequestOptions): Promise<void> {
   setCorsHeaders(response);
 
@@ -214,6 +240,8 @@ async function handleRequest({
           createJob: "POST /ask",
           getJob: "GET /jobs/:id",
           listRepos: "GET /repos",
+          uploadFiles: "POST /uploads",
+          deleteUpload: "DELETE /uploads/:id",
           streamJob: "GET /jobs/:id/events",
           health: "GET /health"
         }
@@ -238,9 +266,30 @@ async function handleRequest({
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/uploads") {
+      const uploads = await readUploadedFiles(request, uploadLimitBytes);
+      writeJson(response, 201, {
+        uploads: await Promise.all(uploads.map(async upload => uploadStore.addUpload(await toWebUploadInput(upload))))
+      });
+      return;
+    }
+
+    const uploadId = matchUploadPath(url.pathname);
+    if (request.method === "DELETE" && uploadId) {
+      uploadStore.deleteUpload(uploadId);
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/ask") {
-      const payload = normalizeAskRequest(await readJsonBody(request, bodyLimitBytes));
-      const job = jobManager.createJob(payload);
+      const body = await readJsonBody(request, bodyLimitBytes);
+      const payload = normalizeAskRequest(body);
+      const uploads = resolveReferencedUploads(body, uploadStore);
+      const job = jobManager.createJob({
+        ...payload,
+        question: uploads.length > 0 ? appendUploadContext(payload.question, uploads) : payload.question
+      });
       writeJson(response, 202, withJobLinks(job));
       return;
     }
@@ -349,10 +398,25 @@ async function streamJobEvents(response: HttpResponseLike, jobManager: HttpJobMa
 }
 
 async function readJsonBody(request: HttpRequestLike, bodyLimitBytes: number): Promise<unknown> {
+  const bodyBuffer = await readBufferedBody(request, bodyLimitBytes, "Request body must be valid JSON.");
+
+  try {
+    return JSON.parse(bodyBuffer.toString("utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new HttpError(400, `Request body must be valid JSON: ${message}`);
+  }
+}
+
+async function readBufferedBody(
+  request: HttpRequestLike,
+  bodyLimitBytes: number,
+  emptyBodyMessage: string
+): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
 
-  return new Promise<unknown>((resolve, reject) => {
+  return new Promise<Buffer>((resolve, reject) => {
     let settled = false;
 
     request.on("data", (chunk: Buffer) => {
@@ -376,18 +440,12 @@ async function readJsonBody(request: HttpRequestLike, bodyLimitBytes: number): P
       }
 
       if (chunks.length === 0) {
-        settleReject(new HttpError(400, "Request body must be valid JSON."));
+        settleReject(new HttpError(400, emptyBodyMessage));
         return;
       }
 
-      try {
-        const parsedBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        settled = true;
-        resolve(parsedBody);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        settleReject(new HttpError(400, `Request body must be valid JSON: ${message}`));
-      }
+      settled = true;
+      resolve(Buffer.concat(chunks));
     });
 
     request.on("error", error => {
@@ -403,6 +461,49 @@ async function readJsonBody(request: HttpRequestLike, bodyLimitBytes: number): P
       reject(error);
     }
   });
+}
+
+async function readUploadedFiles(request: HttpRequestLike, uploadLimitBytes: number): Promise<File[]> {
+  const contentType = request.headers["content-type"];
+  const normalizedContentType = Array.isArray(contentType) ? contentType.join(", ") : contentType || "";
+  if (!normalizedContentType.toLowerCase().includes("multipart/form-data")) {
+    throw new HttpError(400, "Upload requests must use multipart/form-data.");
+  }
+
+  const bodyBuffer = await readBufferedBody(request, uploadLimitBytes, "Upload request must include multipart form data.");
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (Array.isArray(value)) {
+      headers.set(name, value.join(", "));
+      continue;
+    }
+
+    if (typeof value === "string") {
+      headers.set(name, value);
+    }
+  }
+
+  try {
+    const parsedRequest = new Request("http://atc.local/uploads", {
+      method: request.method ?? "POST",
+      headers,
+      body: bodyBuffer
+    });
+    const formData = await parsedRequest.formData();
+    const files = Array.from(formData.values()).filter((value): value is File => value instanceof File);
+    if (files.length === 0) {
+      throw new HttpError(400, "Upload request must include at least one file.");
+    }
+
+    return files;
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new HttpError(400, `Upload request must be valid multipart form data: ${message}`);
+  }
 }
 
 function normalizeAskRequest(body: unknown): AskRequest {
@@ -433,6 +534,44 @@ function normalizeAskRequest(body: unknown): AskRequest {
     noSync: normalizeOptionalBoolean(requestBody.noSync, "noSync"),
     noSynthesis: normalizeOptionalBoolean(requestBody.noSynthesis, "noSynthesis")
   };
+}
+
+function resolveReferencedUploads(body: unknown, uploadStore: WebUploadStore): WebUploadRecord[] {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return [];
+  }
+
+  const uploadIds = normalizeAttachmentIds((body as Record<string, unknown>).attachmentIds);
+  if (uploadIds.length === 0) {
+    return [];
+  }
+
+  const uploads = uploadStore.getUploads(uploadIds);
+  if (uploads.length !== uploadIds.length) {
+    throw new HttpError(400, "One or more attachmentIds do not exist or have expired.");
+  }
+
+  return uploads;
+}
+
+function normalizeAttachmentIds(value: unknown): string[] {
+  if (value == null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, '"attachmentIds" must be an array of non-empty strings.');
+  }
+
+  const uploadIds = value.map(uploadId => {
+    if (typeof uploadId !== "string" || uploadId.trim() === "") {
+      throw new HttpError(400, '"attachmentIds" must be an array of non-empty strings.');
+    }
+
+    return uploadId.trim();
+  });
+
+  return Array.from(new Set(uploadIds));
 }
 
 function normalizeRepoNames(value: unknown): string[] | null {
@@ -511,11 +650,21 @@ function normalizeSelectionMode(value: unknown): RepoSelectionStrategy {
 
 const JOB_PATH_PATTERN = /^\/jobs\/([^/]+)$/u;
 const JOB_EVENTS_PATH_PATTERN = /^\/jobs\/([^/]+)\/events$/u;
+const UPLOAD_PATH_PATTERN = /^\/uploads\/([^/]+)$/u;
 
 function matchJobPath(pathname: string, suffix: "" | "/events" = ""): string | null {
   const pattern = suffix === "/events" ? JOB_EVENTS_PATH_PATTERN : JOB_PATH_PATTERN;
   const match = pathname.match(pattern);
 
+  if (!match || !match[1]) {
+    return null;
+  }
+
+  return decodeURIComponent(match[1]);
+}
+
+function matchUploadPath(pathname: string): string | null {
+  const match = pathname.match(UPLOAD_PATH_PATTERN);
   if (!match || !match[1]) {
     return null;
   }
@@ -548,9 +697,71 @@ function getEmptyConfigSetupHint(): string {
   return 'No configured repos available. Try "atc config discover-github" to discover and add repos.';
 }
 
+async function toWebUploadInput(upload: File): Promise<{
+  mediaType: string;
+  name: string;
+  sizeBytes: number;
+  textContent: string | null;
+}> {
+  return {
+    mediaType: upload.type,
+    name: upload.name,
+    sizeBytes: upload.size,
+    textContent: shouldInlineUploadedText(upload) ? await upload.text() : null
+  };
+}
+
+function shouldInlineUploadedText(upload: File): boolean {
+  return upload.size <= DEFAULT_WEB_UPLOAD_LIMIT_BYTES
+    && upload.size <= 512_000
+    && shouldInlineUploadText(upload.name, upload.type);
+}
+
+function appendUploadContext(question: string, uploads: WebUploadRecord[]): string {
+  const attachmentBlocks = uploads.map(upload => {
+    const header = `- ${upload.name} (${upload.mediaType}, ${formatUploadSize(upload.sizeBytes)})`;
+    if (upload.textContent) {
+      return [
+        header,
+        `Attached text content from ${upload.name}:`,
+        '"""',
+        upload.textContent,
+        '"""'
+      ].join("\n");
+    }
+
+    const detail = upload.kind === "image"
+      ? "Image attachment uploaded through the built-in web UI. Only the filename, media type, and size are forwarded to the prompt."
+      : "Binary attachment uploaded through the built-in web UI. Only the filename, media type, and size are forwarded to the prompt.";
+
+    return `${header}\n${detail}`;
+  });
+
+  return [
+    question.trim(),
+    "",
+    "Attached files from the built-in web UI:",
+    "Use these uploads as additional context when answering the question.",
+    "",
+    ...attachmentBlocks
+  ].join("\n");
+}
+
+function formatUploadSize(sizeBytes: number): string {
+  if (sizeBytes < 1_024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1_024 * 1_024) {
+    return `${(sizeBytes / 1_024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1_024 * 1_024)).toFixed(1)} MB`;
+}
+
 function setCorsHeaders(response: HttpResponseLike): void {
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type,Accept");
 }
 

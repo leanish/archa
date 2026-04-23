@@ -13,7 +13,7 @@ type HandlerRequestOptions = {
   path: string;
   headers?: Record<string, string>;
   body?: unknown;
-  rawBody?: string;
+  rawBody?: string | Buffer;
   skipAutoEndWrite?: boolean;
 };
 type MockRequest = PassThrough & {
@@ -154,7 +154,9 @@ describe("http-server", () => {
       service: "atc-server",
       endpoints: {
         createJob: "POST /ask",
-        listRepos: "GET /repos"
+        listRepos: "GET /repos",
+        uploadFiles: "POST /uploads",
+        deleteUpload: "DELETE /uploads/:id"
       }
     });
     expect(healthResponse.statusCode).toBe(200);
@@ -339,6 +341,129 @@ describe("http-server", () => {
     });
   });
 
+  it("uploads files for the web UI and forwards them into ask requests", async () => {
+    let capturedQuestion = "";
+    const manager = createAskJobManager({
+      answerQuestionFn: async ({ question }) => {
+        capturedQuestion = question;
+        return {
+          mode: "answer",
+          question,
+          selectedRepos: [],
+          syncReport: [],
+          synthesis: { text: question }
+        };
+      },
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpHandler({ jobManager: manager });
+    const multipartRequest = await createMultipartRequest([
+      {
+        name: "notes.txt",
+        type: "text/plain",
+        contents: "alpha\\nbeta"
+      },
+      {
+        name: "mockup.png",
+        type: "image/png",
+        contents: Buffer.from([0x89, 0x50, 0x4e, 0x47])
+      }
+    ]);
+
+    const uploadResponse = await performRequest(handler, {
+      method: "POST",
+      path: "/uploads",
+      headers: multipartRequest.headers,
+      rawBody: multipartRequest.body
+    });
+    const uploaded = JSON.parse(uploadResponse.body);
+
+    expect(uploadResponse.statusCode).toBe(201);
+    expect(uploaded.uploads).toHaveLength(2);
+    expect(uploaded.uploads[0]).toMatchObject({
+      kind: "text",
+      mediaType: "text/plain",
+      name: "notes.txt"
+    });
+    expect(uploaded.uploads[1]).toMatchObject({
+      kind: "image",
+      mediaType: "image/png",
+      name: "mockup.png"
+    });
+
+    const askResponse = await performRequest(handler, {
+      method: "POST",
+      path: "/ask",
+      body: {
+        question: "Use the attached context.",
+        attachmentIds: uploaded.uploads.map((upload: { id: string }) => upload.id)
+      }
+    });
+    const createdJob = JSON.parse(askResponse.body);
+
+    expect(askResponse.statusCode).toBe(202);
+
+    await waitFor(async () => {
+      const jobResponse = await performRequest(handler, {
+        method: "GET",
+        path: createdJob.links.self
+      });
+      return JSON.parse(jobResponse.body).status === "completed";
+    });
+
+    expect(capturedQuestion).toContain("Attached files from the built-in web UI:");
+    expect(capturedQuestion).toContain("notes.txt");
+    expect(capturedQuestion).toContain("alpha\\nbeta");
+    expect(capturedQuestion).toContain("mockup.png");
+    expect(capturedQuestion).toContain("Only the filename, media type, and size are forwarded");
+  });
+
+  it("deletes uploaded files and rejects missing attachment ids", async () => {
+    const manager = createAskJobManager({
+      answerQuestionFn: async ({ question }) => ({
+        mode: "answer",
+        question,
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: { text: question }
+      }),
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpHandler({ jobManager: manager });
+    const multipartRequest = await createMultipartRequest([{
+      name: "brief.txt",
+      type: "text/plain",
+      contents: "hello"
+    }]);
+
+    const uploadResponse = await performRequest(handler, {
+      method: "POST",
+      path: "/uploads",
+      headers: multipartRequest.headers,
+      rawBody: multipartRequest.body
+    });
+    const uploadId = JSON.parse(uploadResponse.body).uploads[0].id;
+
+    const deleteResponse = await performRequest(handler, {
+      method: "DELETE",
+      path: "/uploads/" + encodeURIComponent(uploadId)
+    });
+    const askResponse = await performRequest(handler, {
+      method: "POST",
+      path: "/ask",
+      body: {
+        question: "missing upload",
+        attachmentIds: [uploadId]
+      }
+    });
+
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(askResponse.statusCode).toBe(400);
+    expect(JSON.parse(askResponse.body).error).toContain("attachmentIds");
+  });
+
   it("serves the web UI when the client accepts text/html", async () => {
     const manager = createAskJobManager({
       answerQuestionFn: async () => ({
@@ -362,15 +487,15 @@ describe("http-server", () => {
     expect(htmlResponse.statusCode).toBe(200);
     expect(htmlResponse.headers["content-type"]).toContain("text/html");
     expect(htmlResponse.body).toContain("<!DOCTYPE html>");
-    expect(htmlResponse.body).toContain("ask-the-code");
+    expect(htmlResponse.body).toContain("ask-the-code (ATC)");
     expect(htmlResponse.body).toContain("EventSource");
     expect(htmlResponse.body).toContain("/ask");
     expect(htmlResponse.body).toContain("/repos");
+    expect(htmlResponse.body).toContain("/uploads");
     expect(htmlResponse.body).toContain("Search configured repos");
     expect(htmlResponse.body).toContain('id="setup-hint"');
-    expect(htmlResponse.body).toContain('atc config discover-github');
     expect(htmlResponse.body).toContain("automatic");
-    expect(htmlResponse.body).toContain('id="advanced-options" hidden');
+    expect(htmlResponse.body).toContain('id="advanced-options" class="advanced-options" hidden');
     expect(htmlResponse.body).toContain('params.get("admin")');
     expect(htmlResponse.body).toContain("if (!advancedOptions.hidden)");
     expect(htmlResponse.body).toContain('<option value="general" selected>general</option>');
@@ -378,6 +503,8 @@ describe("http-server", () => {
     expect(htmlResponse.body).toContain('<option value="gpt-5.4-mini" selected>gpt-5.4-mini</option>');
     expect(htmlResponse.body).toContain('<option value="gpt-5.4">gpt-5.4</option>');
     expect(htmlResponse.body).toContain('<option value="low" selected>low</option>');
+    expect(htmlResponse.body).toContain("Sign in with Google");
+    expect(htmlResponse.body).toContain("Download Markdown");
     expect(htmlResponse.body).not.toContain("repo-picker-toggle");
     expect(htmlResponse.body).not.toContain('id="no-synthesis"');
   });
@@ -973,6 +1100,32 @@ function parseSseStreamBody(body: string): SseEvent[] {
     .filter(Boolean)
     .map(parseSseEvent)
     .filter((event): event is SseEvent => event !== null);
+}
+
+async function createMultipartRequest(
+  files: Array<{ name: string; type: string; contents: string | Buffer }>
+): Promise<{ body: Buffer; headers: Record<string, string> }> {
+  const formData = new FormData();
+  for (const file of files) {
+    const blobPart = typeof file.contents === "string"
+      ? file.contents
+      : new Uint8Array(file.contents);
+    formData.append("files", new File([blobPart], file.name, {
+      type: file.type
+    }));
+  }
+
+  const request = new Request("http://atc.local/uploads", {
+    method: "POST",
+    body: formData
+  });
+
+  return {
+    body: Buffer.from(await request.arrayBuffer()),
+    headers: {
+      "content-type": request.headers.get("content-type") || ""
+    }
+  };
 }
 
 async function performRequest(handler: HttpHandler, options: HandlerRequestOptions): Promise<MockResponse> {

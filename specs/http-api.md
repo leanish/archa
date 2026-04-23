@@ -1,6 +1,6 @@
 # HTTP API
 
-The optional `atc-server` adapter exposes the repo-aware question-answering flow as async HTTP jobs. New jobs are created with `POST /ask`, then read back through `GET /jobs/:id` and `GET /jobs/:id/events`.
+The optional `atc-server` adapter exposes the repo-aware question-answering flow as async HTTP jobs. New jobs are created with `POST /ask`, then read back through `GET /jobs/:id` and `GET /jobs/:id/events`. The built-in browser UI can also upload temporary reference files through `POST /uploads`.
 
 ## Endpoints
 
@@ -58,6 +58,37 @@ Notes:
 - `setupHint` is `null` during normal operation
 - when the configured repo list is empty, `setupHint` contains a suggested `discover-github` command for bootstrapping config
 
+### `POST /uploads`
+
+Accepts `multipart/form-data` and returns upload ids that the built-in browser UI can reference from `POST /ask`.
+
+Response:
+
+```json
+{
+  "uploads": [
+    {
+      "id": "upload-id",
+      "name": "notes.txt",
+      "mediaType": "text/plain",
+      "sizeBytes": 128,
+      "kind": "text"
+    }
+  ]
+}
+```
+
+Notes:
+
+- every multipart file field is accepted; field names do not matter as long as the body contains files
+- uploads are kept in memory only and expire automatically
+- the upload limit defaults to 15 MiB per request and can be overridden with `ATC_SERVER_UPLOAD_LIMIT_BYTES`
+- text-like uploads are kept as inline prompt context; binary uploads are stored as metadata only
+
+### `DELETE /uploads/:id`
+
+Deletes an uploaded file reference. The endpoint is idempotent and always returns `204 No Content`.
+
 ### `POST /ask`
 
 Creates a new async job.
@@ -77,6 +108,7 @@ Request body:
   "reasoningEffort": "low",
   "selectionMode": "single",
   "selectionShadowCompare": false,
+  "attachmentIds": ["upload-id"],
   "noSync": false,
   "noSynthesis": false
 }
@@ -95,6 +127,8 @@ Rules:
 - `selectionMode` is optional and must be one of `single` or `cascade`
 - omitted `selectionMode` defaults to `single`
 - `selectionShadowCompare` is an optional boolean; when `true`, the server keeps background `none`, `low`, and `high` repo-selector runs for comparison diagnostics while the main ask continues
+- `attachmentIds` is optional and must be an array of upload ids returned by `POST /uploads`
+- when `attachmentIds` is present, the server expands the internal prompt with inline text uploads plus metadata for non-text uploads before it queues the job
 - `noSync` and `noSynthesis` are optional booleans
 
 Response:
@@ -174,6 +208,7 @@ Event types:
 
 - job state is in-memory only
 - completed jobs expire after a retention timeout
+- uploaded browser-side reference files are also in-memory only and expire after a retention timeout
 - job execution concurrency is bounded per process and defaults to 3 concurrent jobs
 - repo sync coordination is per process and deduplicates overlapping syncs for the same repo directory
-- the built-in web UI loads repo choices from `GET /repos`, exposes audience/model/reasoning and repo-selection controls only in admin mode, and falls back to automatic repo selection if the repo catalog is unavailable
+- the built-in web UI loads repo choices from `GET /repos`, uploads browser-selected reference files through `POST /uploads`, exposes audience/model/reasoning and repo-selection controls only in admin mode, and falls back to automatic repo selection if the repo catalog is unavailable

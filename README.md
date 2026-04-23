@@ -381,7 +381,7 @@ ATC_SERVER_HOST=127.0.0.1 ATC_SERVER_PORT=8787 atc-server
 When both are provided, command-line flags override the environment values.
 Server startup validates the active config eagerly and fails before binding the port if `config.json` is invalid. It also checks that the local `codex` CLI is installed before the server starts listening.
 
-The server exposes async jobs over HTTP. Submit a new question with `POST /ask`, then use the returned `/jobs/:id` and `/jobs/:id/events` links to poll or stream progress. Legacy clients using `POST /jobs` must switch to `POST /ask`.
+The server exposes async jobs over HTTP. Submit a new question with `POST /ask`, then use the returned `/jobs/:id` and `/jobs/:id/events` links to poll or stream progress. Legacy clients using `POST /jobs` must switch to `POST /ask`. The built-in browser UI can also stage temporary reference files through `POST /uploads`.
 
 Create a job:
 
@@ -428,6 +428,8 @@ Available endpoints:
 
 - `GET /health`
 - `GET /repos`
+- `POST /uploads`
+- `DELETE /uploads/:id`
 - `POST /ask`
 - `GET /jobs/:id`
 - `GET /jobs/:id/events`
@@ -439,7 +441,9 @@ When the HTTP server shuts down through its returned handle, queued jobs fail fa
 
 ### Web UI
 
-Open `http://127.0.0.1:8787` in a browser to use the built-in web UI. The UI streams job status updates in real time using server-sent events and loads the configured repo catalog so the repo filter can be selected from a searchable multi-select instead of typed manually.
+Open `http://127.0.0.1:8787` in a browser to use the built-in web UI. The UI streams job status updates in real time using server-sent events, loads the configured repo catalog so the repo filter can be selected from a searchable multi-select instead of typed manually, and supports drag-and-drop uploads for temporary reference files.
+
+Text-like uploads are inlined into the queued prompt as extra context. Binary uploads such as images, PDFs, and videos are currently forwarded as filename/media-type metadata rather than raw file contents.
 
 Advanced web UI controls are hidden by default and only shown when the page is opened with `?admin=true`, for example `http://127.0.0.1:8787/?admin=true`. In admin mode, you can choose the answer audience, model, reasoning effort, repo selection mode, and optional background shadow comparison. The default audience is `general`.
 
@@ -454,6 +458,7 @@ Programmatic clients that do not send `Accept: text/html` continue to receive th
 - `ATC_SERVER_HOST`: overrides the HTTP bind host (`127.0.0.1`)
 - `ATC_SERVER_PORT`: overrides the HTTP bind port (`8787`)
 - `ATC_SERVER_BODY_LIMIT_BYTES`: overrides the max HTTP request body size (`65536`)
+- `ATC_SERVER_UPLOAD_LIMIT_BYTES`: overrides the max browser upload request size (`15728640`)
 - `ATC_SERVER_MAX_CONCURRENT_JOBS`: overrides the max concurrent HTTP jobs (`3`)
 - `ATC_SERVER_JOB_RETENTION_MS`: overrides how long completed HTTP jobs stay in memory (`3600000`)
 

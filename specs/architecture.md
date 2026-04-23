@@ -40,10 +40,11 @@ flowchart LR
 5. Config is loaded from the user config path.
 6. Repo selection honors explicit repo names when provided; otherwise it asks Codex to choose from the configured repo metadata with minimal reasoning, keeps any pinned repos in scope, falls back to heuristic scoring if that selector pass fails or returns unusable output, and finally falls back to all configured repos when nothing scores positively.
 7. Repo sync clones missing selected repos, unshallows any shallow managed checkout, and then fast-forwards it to the configured tracked branch tip.
-8. Codex runs against either the single selected repo or the managed repos root.
-9. The adapter renders the result:
+8. For browser requests, any referenced text uploads are expanded into the queued question and binary uploads are summarized as prompt metadata.
+9. Codex runs against either the single selected repo or the managed repos root.
+10. The adapter renders the result:
    - CLI: text to stdout plus status to stderr
-   - HTTP: async job state plus SSE status events, with the web UI optionally loading the configured repo catalog for picker-style selection
+   - HTTP: async job state plus SSE status events, with the web UI optionally loading the configured repo catalog for picker-style selection and using a lightweight in-memory upload store for temporary browser file references
 
 ## HTTP ask flow
 
@@ -125,9 +126,11 @@ Within one `atc-server` process, concurrent jobs share repo sync work by repo di
 - `src/core/jobs/ask-job-manager.ts`
   Maintains in-memory async jobs, per-job event history, and bounded execution concurrency.
 - `src/server/api/http-server.ts`
-  Exposes the HTTP API, request validation, repo catalog responses, polling responses, and SSE streams.
+  Exposes the HTTP API, request validation, upload intake, repo catalog responses, polling responses, and SSE streams.
+- `src/server/api/web-upload-store.ts`
+  Tracks temporary browser-side upload metadata so the built-in UI can attach reference files without introducing durable server storage.
 - `src/server/ui/html.ts`
-  Self-contained HTML, CSS, and JavaScript for the browser-based question UI, including the config-backed repo picker, exported as a string constant.
+  Self-contained HTML, CSS, and JavaScript for the browser-based question UI, including the config-backed repo picker, drag-and-drop uploads, progress dashboard, and answer rendering, exported as a string constant.
 - `src/cli/render.ts`
   Converts results into simple CLI output.
 - `src/core/status/status-reporter.ts`
@@ -157,6 +160,7 @@ Repo names and aliases are validated eagerly and must be unique case-insensitive
 
 - jobs are kept in memory only
 - completed jobs expire after a retention window
+- temporary browser uploads are kept in memory only and expire after the same server lifecycle rules
 - server concurrency is bounded to avoid spawning unbounded Codex processes
 - server shutdown cancels queued jobs, drains running jobs, and clears manager state after the drain completes
 - repo sync coordination is per-process and keyed by repo directory
