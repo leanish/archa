@@ -86,7 +86,7 @@ Within one `atc-server` process, concurrent jobs share repo sync work by repo di
 - `src/cli/setup/bootstrap.ts`
   Hosts the shared interactive CLI prompts and bootstrap flow for missing-config initialization and optional GitHub discovery continuation, including the Enter-to-use-`@accessible` owner shortcut.
 - `src/core/config/config-paths.ts`
-  Resolves the active config path and default managed repos root.
+  Resolves the active config path from `ATC_CONFIG_PATH` or `~/.config/atc/config.json`, plus the default managed repos root under `~/.local/share/atc/repos`.
 - `src/core/config/config.ts`
   Loads and validates config, bootstraps a config file from scratch or from an imported catalog, applies selected GitHub discovery additions or overrides into the active config, and drafts fallback routing cards from legacy repo `topics` / `classifications` when `routing` is still missing.
   Derives each GitHub managed checkout directory from the repo's GitHub identity, so checkouts live under owner-scoped paths like `leanish/nullability` or `OtherCo/dtv` even when the configured repo name stays plain.

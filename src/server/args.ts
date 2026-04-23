@@ -5,8 +5,8 @@ import type { Environment, ServerCommandOptions } from "../core/types.js";
 export { HelpError };
 
 export function parseServerArgs(argv: string[], env: Environment = process.env): ServerCommandOptions {
-  let host = env.ATC_SERVER_HOST || env.ARCHA_SERVER_HOST || "127.0.0.1";
-  let port = parsePort(env.ATC_SERVER_PORT || env.ARCHA_SERVER_PORT || "8787", "ATC_SERVER_PORT");
+  let host = env.ATC_SERVER_HOST || "127.0.0.1";
+  let port = parsePort(env.ATC_SERVER_PORT || "8787", "ATC_SERVER_PORT");
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];

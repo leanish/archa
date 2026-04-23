@@ -117,7 +117,7 @@ function createCodexOutputFilePath(): string {
 }
 
 export function getCodexTimeoutMs(env: Environment = process.env): number {
-  const timeoutMs = parseEnvPositiveInteger((env.ATC_CODEX_TIMEOUT_MS ?? env.ARCHA_CODEX_TIMEOUT_MS)?.trim(), {
+  const timeoutMs = parseEnvPositiveInteger(env.ATC_CODEX_TIMEOUT_MS?.trim(), {
     label: "ATC_CODEX_TIMEOUT_MS"
   });
   return timeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS;

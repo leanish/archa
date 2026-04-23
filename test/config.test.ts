@@ -8,9 +8,6 @@ import { appendReposToConfig, applyGithubDiscoveryToConfig, initializeConfig, lo
 import { getConfigPath, getDefaultManagedReposRoot } from "../src/core/config/config-paths.js";
 import { createEmptyRepoRouting } from "../src/core/repos/repo-routing.js";
 
-const LEGACY_CONFIG_PATH_ENV = ["ARCHA", "CONFIG", "PATH"].join("_");
-const LEGACY_NAMESPACE = ["arc", "ha"].join("");
-
 describe("config", () => {
   let tempRoot: string;
   let env: NodeJS.ProcessEnv;
@@ -39,13 +36,6 @@ describe("config", () => {
     })).toBe("/tmp/custom-atc-config.json");
   });
 
-  it("keeps supporting the pre-rebrand config-path env var", () => {
-    expect(getConfigPath({
-      ...env,
-      [LEGACY_CONFIG_PATH_ENV]: "/tmp/legacy-atc-config.json"
-    })).toBe("/tmp/legacy-atc-config.json");
-  });
-
   it("falls back to home-based paths when xdg env vars are absent", () => {
     const homedirSpy = vi.spyOn(os, "homedir").mockReturnValue("/tmp/home");
 
@@ -53,14 +43,6 @@ describe("config", () => {
     expect(getDefaultManagedReposRoot({})).toBe("/tmp/home/.local/share/atc/repos");
 
     homedirSpy.mockRestore();
-  });
-
-  it("falls back to the previous default config location when the new one is missing", async () => {
-    const legacyConfigPath = path.join(tempRoot, "config", LEGACY_NAMESPACE, "config.json");
-    await fs.mkdir(path.dirname(legacyConfigPath), { recursive: true });
-    await fs.writeFile(legacyConfigPath, JSON.stringify({ repos: [] }));
-
-    expect(getConfigPath(env)).toBe(legacyConfigPath);
   });
 
   it("initializes an empty config with the default managed repos root", async () => {

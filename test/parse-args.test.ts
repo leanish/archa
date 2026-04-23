@@ -3,11 +3,6 @@ import { describe, expect, it } from "vitest";
 import { HelpError, parseArgs } from "../src/cli/parse-args.js";
 import type { AskCommandOptions, ReposSyncCommandOptions } from "../src/core/types.js";
 
-const LEGACY_MODEL_ENV = ["ARCHA", "MODEL"].join("_");
-const LEGACY_REASONING_EFFORT_ENV = ["ARCHA", "REASONING", "EFFORT"].join("_");
-const LEGACY_DEFAULT_MODEL_ENV = ["ARCHA", "DEFAULT", "MODEL"].join("_");
-const LEGACY_DEFAULT_REASONING_EFFORT_ENV = ["ARCHA", "DEFAULT", "REASONING", "EFFORT"].join("_");
-
 function parseAskArgs(argv: string[], env: NodeJS.ProcessEnv): AskCommandOptions {
   const parsed = parseArgs(argv, env);
   expect(parsed.command).toBe("ask");
@@ -121,38 +116,6 @@ describe("parseArgs", () => {
 
     expect(parsed.model).toBe("gpt-5.4-mini");
     expect(parsed.reasoningEffort).toBe("medium");
-  });
-
-  it("keeps supporting the shorter ATC_* aliases for compatibility", () => {
-    const parsed = parseAskArgs(["How", "does", "it", "work?"], {
-      ATC_MODEL: "gpt-5.4-mini",
-      ATC_REASONING_EFFORT: "medium"
-    });
-
-    expect(parsed.model).toBe("gpt-5.4-mini");
-    expect(parsed.reasoningEffort).toBe("medium");
-  });
-
-  it("keeps supporting pre-rebrand env var names for compatibility", () => {
-    const parsed = parseAskArgs(["How", "does", "it", "work?"], {
-      [LEGACY_MODEL_ENV]: "gpt-5.4-mini",
-      [LEGACY_REASONING_EFFORT_ENV]: "medium"
-    });
-
-    expect(parsed.model).toBe("gpt-5.4-mini");
-    expect(parsed.reasoningEffort).toBe("medium");
-  });
-
-  it("prefers the new env var names over compatibility aliases when both are set", () => {
-    const parsed = parseAskArgs(["How", "does", "it", "work?"], {
-      ATC_DEFAULT_MODEL: "gpt-5.4",
-      [LEGACY_DEFAULT_MODEL_ENV]: "gpt-5.4-mini",
-      ATC_DEFAULT_REASONING_EFFORT: "low",
-      [LEGACY_DEFAULT_REASONING_EFFORT_ENV]: "high"
-    });
-
-    expect(parsed.model).toBe("gpt-5.4");
-    expect(parsed.reasoningEffort).toBe("low");
   });
 
   it("supports reading the question from a file", () => {

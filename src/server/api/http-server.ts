@@ -97,18 +97,18 @@ export async function startHttpServer({
   maxConcurrentJobs = null,
   jobRetentionMs = null
 }: StartHttpServerOptions = {}): Promise<HttpServerHandle> {
-  const resolvedHost = host || env.ATC_SERVER_HOST || env.ARCHA_SERVER_HOST || DEFAULT_HOST;
+  const resolvedHost = host || env.ATC_SERVER_HOST || DEFAULT_HOST;
   const resolvedPort = port
-    ?? getOptionalPort(env.ATC_SERVER_PORT ?? env.ARCHA_SERVER_PORT, "ATC_SERVER_PORT")
+    ?? getOptionalPort(env.ATC_SERVER_PORT, "ATC_SERVER_PORT")
     ?? DEFAULT_PORT;
   const resolvedBodyLimitBytes = bodyLimitBytes
-    ?? getOptionalPositiveInteger(env.ATC_SERVER_BODY_LIMIT_BYTES ?? env.ARCHA_SERVER_BODY_LIMIT_BYTES, "ATC_SERVER_BODY_LIMIT_BYTES")
+    ?? getOptionalPositiveInteger(env.ATC_SERVER_BODY_LIMIT_BYTES, "ATC_SERVER_BODY_LIMIT_BYTES")
     ?? DEFAULT_BODY_LIMIT_BYTES;
   const resolvedMaxConcurrentJobs = maxConcurrentJobs
-    ?? getOptionalPositiveInteger(env.ATC_SERVER_MAX_CONCURRENT_JOBS ?? env.ARCHA_SERVER_MAX_CONCURRENT_JOBS, "ATC_SERVER_MAX_CONCURRENT_JOBS")
+    ?? getOptionalPositiveInteger(env.ATC_SERVER_MAX_CONCURRENT_JOBS, "ATC_SERVER_MAX_CONCURRENT_JOBS")
     ?? undefined;
   const resolvedJobRetentionMs = jobRetentionMs
-    ?? getOptionalPositiveInteger(env.ATC_SERVER_JOB_RETENTION_MS ?? env.ARCHA_SERVER_JOB_RETENTION_MS, "ATC_SERVER_JOB_RETENTION_MS")
+    ?? getOptionalPositiveInteger(env.ATC_SERVER_JOB_RETENTION_MS, "ATC_SERVER_JOB_RETENTION_MS")
     ?? undefined;
   const loadedConfig = await loadConfigFn(env);
   const resolvedJobManager = jobManager ?? createAskJobManager({

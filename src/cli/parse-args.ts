@@ -39,16 +39,8 @@ function parseAskCommand(argv: string[], env: Environment): AskCommandOptions {
   const questionParts: string[] = [];
   let questionFile: string | null = null;
   let audience: AnswerAudience = DEFAULT_ANSWER_AUDIENCE;
-  let model = env.ATC_DEFAULT_MODEL
-    || env.ARCHA_DEFAULT_MODEL
-    || env.ATC_MODEL
-    || env.ARCHA_MODEL
-    || DEFAULT_CODEX_MODEL;
-  let reasoningEffort = env.ATC_DEFAULT_REASONING_EFFORT
-    || env.ARCHA_DEFAULT_REASONING_EFFORT
-    || env.ATC_REASONING_EFFORT
-    || env.ARCHA_REASONING_EFFORT
-    || DEFAULT_CODEX_REASONING_EFFORT;
+  let model = env.ATC_DEFAULT_MODEL || DEFAULT_CODEX_MODEL;
+  let reasoningEffort = env.ATC_DEFAULT_REASONING_EFFORT || DEFAULT_CODEX_REASONING_EFFORT;
   let selectionMode: RepoSelectionStrategy = "single";
   let selectionShadowCompare = false;
   let noSync = false;

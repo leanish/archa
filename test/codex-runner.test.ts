@@ -58,8 +58,6 @@ import {
   summarizeCodexStderr
 } from "../src/core/codex/codex-runner.js";
 
-const LEGACY_CODEX_TIMEOUT_ENV = ["ARCHA", "CODEX", "TIMEOUT", "MS"].join("_");
-
 describe("codex-runner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -440,12 +438,6 @@ describe("codex-runner", () => {
   it("parses a custom codex timeout from the environment", () => {
     expect(getCodexTimeoutMs({
       ATC_CODEX_TIMEOUT_MS: "45000"
-    })).toBe(45_000);
-  });
-
-  it("keeps supporting the pre-rebrand codex timeout env var", () => {
-    expect(getCodexTimeoutMs({
-      [LEGACY_CODEX_TIMEOUT_ENV]: "45000"
     })).toBe(45_000);
   });
 

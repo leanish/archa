@@ -467,8 +467,6 @@ For the HTTP server, the equivalent command-line overrides are:
 atc-server --host 127.0.0.1 --port 8787
 ```
 
-Legacy aliases `ATC_MODEL` and `ATC_REASONING_EFFORT` are still accepted for compatibility, but the `ATC_DEFAULT_*` names are preferred.
-
 ## Install locally
 
 ```bash

@@ -2,9 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { HelpError, parseServerArgs } from "../src/server/args.js";
 
-const LEGACY_SERVER_HOST_ENV = ["ARCHA", "SERVER", "HOST"].join("_");
-const LEGACY_SERVER_PORT_ENV = ["ARCHA", "SERVER", "PORT"].join("_");
-
 describe("server-args", () => {
   it("parses explicit host and port overrides", () => {
     expect(parseServerArgs(["--host", "0.0.0.0", "--port", "9999"])).toEqual({
@@ -27,16 +24,6 @@ describe("server-args", () => {
     })).toEqual({
       host: "localhost",
       port: 8788
-    });
-  });
-
-  it("keeps supporting pre-rebrand server env vars for compatibility", () => {
-    expect(parseServerArgs([], {
-      [LEGACY_SERVER_HOST_ENV]: "legacyhost",
-      [LEGACY_SERVER_PORT_ENV]: "8789"
-    })).toEqual({
-      host: "legacyhost",
-      port: 8789
     });
   });
 
