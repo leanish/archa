@@ -3,6 +3,11 @@ import { describe, expect, it } from "vitest";
 import { HelpError, parseArgs } from "../src/cli/parse-args.js";
 import type { AskCommandOptions, ReposSyncCommandOptions } from "../src/core/types.js";
 
+const LEGACY_MODEL_ENV = ["ARCHA", "MODEL"].join("_");
+const LEGACY_REASONING_EFFORT_ENV = ["ARCHA", "REASONING", "EFFORT"].join("_");
+const LEGACY_DEFAULT_MODEL_ENV = ["ARCHA", "DEFAULT", "MODEL"].join("_");
+const LEGACY_DEFAULT_REASONING_EFFORT_ENV = ["ARCHA", "DEFAULT", "REASONING", "EFFORT"].join("_");
+
 function parseAskArgs(argv: string[], env: NodeJS.ProcessEnv): AskCommandOptions {
   const parsed = parseArgs(argv, env);
   expect(parsed.command).toBe("ask");
@@ -67,7 +72,7 @@ describe("parseArgs", () => {
       "--owner",
       "leanish",
       "--add",
-      "archa,java-conventions",
+      "ask-the-code,java-conventions",
       "--override",
       "foundation",
       "--exclude-forks",
@@ -77,7 +82,7 @@ describe("parseArgs", () => {
       owner: "leanish",
       includeForks: false,
       includeArchived: true,
-      addRepoNames: ["archa", "java-conventions"],
+      addRepoNames: ["ask-the-code", "java-conventions"],
       overrideRepoNames: ["foundation"]
     });
   });
@@ -94,8 +99,8 @@ describe("parseArgs", () => {
     const parsed = parseAskArgs(
       ["--repo", "sqs-codec,java-conventions", "--audience", "codebase", "--model", "gpt-5.4", "--reasoning-effort", "high", "--no-sync", "--no-synthesis", "How", "does", "it", "work?"],
       {
-        ARCHA_DEFAULT_MODEL: "ignored",
-        ARCHA_DEFAULT_REASONING_EFFORT: "low"
+        ATC_DEFAULT_MODEL: "ignored",
+        ATC_DEFAULT_REASONING_EFFORT: "low"
       }
     );
 
@@ -110,30 +115,40 @@ describe("parseArgs", () => {
 
   it("uses the new default-setting env vars when flags are absent", () => {
     const parsed = parseAskArgs(["How", "does", "it", "work?"], {
-      ARCHA_DEFAULT_MODEL: "gpt-5.4-mini",
-      ARCHA_DEFAULT_REASONING_EFFORT: "medium"
+      ATC_DEFAULT_MODEL: "gpt-5.4-mini",
+      ATC_DEFAULT_REASONING_EFFORT: "medium"
     });
 
     expect(parsed.model).toBe("gpt-5.4-mini");
     expect(parsed.reasoningEffort).toBe("medium");
   });
 
-  it("keeps supporting legacy env var names for compatibility", () => {
+  it("keeps supporting the shorter ATC_* aliases for compatibility", () => {
     const parsed = parseAskArgs(["How", "does", "it", "work?"], {
-      ARCHA_MODEL: "gpt-5.4-mini",
-      ARCHA_REASONING_EFFORT: "medium"
+      ATC_MODEL: "gpt-5.4-mini",
+      ATC_REASONING_EFFORT: "medium"
     });
 
     expect(parsed.model).toBe("gpt-5.4-mini");
     expect(parsed.reasoningEffort).toBe("medium");
   });
 
-  it("prefers the new env var names over legacy aliases when both are set", () => {
+  it("keeps supporting pre-rebrand env var names for compatibility", () => {
     const parsed = parseAskArgs(["How", "does", "it", "work?"], {
-      ARCHA_DEFAULT_MODEL: "gpt-5.4",
-      ARCHA_MODEL: "gpt-5.4-mini",
-      ARCHA_DEFAULT_REASONING_EFFORT: "low",
-      ARCHA_REASONING_EFFORT: "high"
+      [LEGACY_MODEL_ENV]: "gpt-5.4-mini",
+      [LEGACY_REASONING_EFFORT_ENV]: "medium"
+    });
+
+    expect(parsed.model).toBe("gpt-5.4-mini");
+    expect(parsed.reasoningEffort).toBe("medium");
+  });
+
+  it("prefers the new env var names over compatibility aliases when both are set", () => {
+    const parsed = parseAskArgs(["How", "does", "it", "work?"], {
+      ATC_DEFAULT_MODEL: "gpt-5.4",
+      [LEGACY_DEFAULT_MODEL_ENV]: "gpt-5.4-mini",
+      ATC_DEFAULT_REASONING_EFFORT: "low",
+      [LEGACY_DEFAULT_REASONING_EFFORT_ENV]: "high"
     });
 
     expect(parsed.model).toBe("gpt-5.4");
@@ -245,13 +260,13 @@ describe("parseArgs", () => {
       "--owner",
       "leanish",
       "--add",
-      "archa"
+      "ask-the-code"
     ], {})).toEqual({
       command: "config-discover-github",
       owner: "leanish",
       includeForks: true,
       includeArchived: false,
-      addRepoNames: ["archa"],
+      addRepoNames: ["ask-the-code"],
       overrideRepoNames: []
     });
   });
