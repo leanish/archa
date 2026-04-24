@@ -15,25 +15,25 @@ vi.mock("node:fs", () => ({
   }
 }));
 
-vi.mock("../src/core/config/config.js", () => ({
+vi.mock("../src/core/config/config.ts", () => ({
   loadConfig: mocks.loadConfig
 }));
 
-vi.mock("../src/core/codex/codex-runner.js", () => ({
+vi.mock("../src/core/codex/codex-runner.ts", () => ({
   getCodexTimeoutMs: mocks.getCodexTimeoutMs,
   runCodexQuestion: mocks.runCodexQuestion
 }));
 
-vi.mock("../src/core/repos/repo-selection.js", () => ({
+vi.mock("../src/core/repos/repo-selection.ts", () => ({
   selectRepos: mocks.selectRepos
 }));
 
-vi.mock("../src/core/repos/repo-sync.js", () => ({
+vi.mock("../src/core/repos/repo-sync.ts", () => ({
   syncRepos: mocks.syncRepos
 }));
 
-import { answerQuestion } from "../src/core/answer/question-answering.js";
-import { createSyncReportItem } from "./test-helpers.js";
+import { answerQuestion } from "../src/core/answer/question-answering.ts";
+import { createSyncReportItem } from "./test-helpers.ts";
 
 describe("answerQuestion", () => {
   const config = {

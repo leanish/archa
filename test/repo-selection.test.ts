@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   runCodexPrompt: vi.fn()
 }));
 
-vi.mock("../src/core/codex/codex-runner.js", () => ({
+vi.mock("../src/core/codex/codex-runner.ts", () => ({
   runCodexPrompt: mocks.runCodexPrompt
 }));
 
@@ -14,8 +14,8 @@ import {
   parseRepoSelectionRunResult,
   selectRepos,
   selectReposHeuristically
-} from "../src/core/repos/repo-selection.js";
-import { createLoadedConfig, createManagedRepo } from "./test-helpers.js";
+} from "../src/core/repos/repo-selection.ts";
+import { createLoadedConfig, createManagedRepo } from "./test-helpers.ts";
 
 const config = createLoadedConfig({
   configPath: "/workspace/.config/atc/config.json",
