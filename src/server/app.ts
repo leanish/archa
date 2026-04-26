@@ -8,8 +8,11 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 
 import { loadConfig } from "../core/config/config.ts";
+import { createHistoryStore, type HistoryStore } from "./history-store.ts";
 import { registerAskRoutes } from "./routes/ask.ts";
+import { registerAuthRoutes } from "./routes/auth.ts";
 import { registerHealthRoutes } from "./routes/health.ts";
+import { registerHistoryRoutes } from "./routes/history.ts";
 import type { LoadRepoListFn } from "./routes/repos.ts";
 import { registerReposRoutes } from "./routes/repos.ts";
 import { HttpError } from "./routes/api-helpers.ts";
@@ -25,6 +28,7 @@ export interface CreateAppOptions {
   env?: Environment;
   loadConfigFn?: LoadRepoListFn;
   assetRoot?: string;
+  historyStore?: HistoryStore;
 }
 
 export function resolveAssetRoot(): string {
@@ -60,14 +64,19 @@ export function createApp(options: CreateAppOptions): Hono<AppEnv> {
     })
   );
 
+  const historyStore = options.historyStore ?? createHistoryStore();
+
   registerUiRoutes(app);
+  registerAuthRoutes(app, options.env === undefined ? {} : { env: options.env });
   registerHealthRoutes(app, { jobManager: options.jobManager });
+  registerHistoryRoutes(app, { jobManager: options.jobManager, historyStore });
   registerReposRoutes(app, {
     ...(options.env === undefined ? {} : { env: options.env }),
     loadConfigFn: options.loadConfigFn ?? loadConfig
   });
   registerAskRoutes(app, {
     jobManager: options.jobManager,
+    historyStore,
     ...(options.bodyLimitBytes === undefined ? {} : { bodyLimitBytes: options.bodyLimitBytes })
   });
 

@@ -18,7 +18,7 @@ const THEME_STORAGE_KEY = "atc:theme";
 const state = {
   /** @type {"simple" | "expert"} */
   mode: document.body.dataset.mode === "expert" ? "expert" : "simple",
-  attachments: /** @type {Array<{ name: string; type: string; size: number }>} */ ([]),
+  attachments: /** @type {File[]} */ ([]),
   jobId: /** @type {string | null} */ (null),
   jobStartTimestamp: /** @type {number | null} */ (null),
   jobEndTimestamp: /** @type {number | null} */ (null),
@@ -35,12 +35,13 @@ function $(id) {
 function init() {
   initTheme();
   initThemeToggle();
-  initStubs();
   initToggles();
   initDropZone();
   initSubmit();
   initModeSwitch();
   initViewRouter();
+  initAuth();
+  void refreshHistoryBadge();
   renderPipeline();
 }
 
@@ -65,10 +66,60 @@ function initThemeToggle() {
   });
 }
 
-function initStubs() {
-  const google = $("google-signin");
-  if (google) {
-    google.addEventListener("click", () => showToast("Google sign-in isn't wired up yet."));
+async function initAuth() {
+  const signinButton = $("github-signin");
+  const userBox = $("auth-user");
+  const logoutButton = $("auth-logout");
+  const nameEl = $("auth-name");
+  const avatarEl = /** @type {HTMLImageElement | null} */ ($("auth-avatar"));
+  const area = $("auth-area");
+  if (!signinButton || !userBox || !logoutButton || !nameEl || !avatarEl || !area) return;
+
+  signinButton.addEventListener("click", () => {
+    window.location.assign("/auth/github/login");
+  });
+  logoutButton.addEventListener("click", async () => {
+    try {
+      await fetch("/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    window.location.reload();
+  });
+
+  try {
+    const response = await fetch("/auth/me", { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (data.authenticated && data.user) {
+      area.dataset.authState = "signed-in";
+      userBox.hidden = false;
+      signinButton.hidden = true;
+      nameEl.textContent = data.user.name || data.user.login;
+      if (data.user.avatarUrl) {
+        avatarEl.src = data.user.avatarUrl;
+      }
+    } else if (data.configured) {
+      area.dataset.authState = "signed-out";
+      signinButton.hidden = false;
+      userBox.hidden = true;
+    } else {
+      area.dataset.authState = "unconfigured";
+      signinButton.hidden = false;
+      userBox.hidden = true;
+      signinButton.addEventListener(
+        "click",
+        e => {
+          e.preventDefault();
+          showToast("GitHub sign-in not configured. Set ATC_GITHUB_CLIENT_ID, ATC_GITHUB_CLIENT_SECRET, ATC_SESSION_SECRET.");
+        },
+        { capture: true, once: false }
+      );
+    }
+  } catch {
+    area.dataset.authState = "error";
+    signinButton.hidden = false;
+    userBox.hidden = true;
   }
 }
 
@@ -144,7 +195,7 @@ function initDropZone() {
 /** @param {File[]} files */
 function addFiles(files) {
   for (const file of files) {
-    state.attachments.push({ name: file.name, type: file.type, size: file.size });
+    state.attachments.push(file);
   }
   renderFileList();
 }
@@ -207,11 +258,13 @@ async function submitAsk() {
   }
 
   try {
-    const response = await fetch("/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    const response = state.attachments.length > 0
+      ? await fetch("/ask", { method: "POST", body: buildMultipart(payload, state.attachments) })
+      : await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error ?? `HTTP ${response.status}`);
@@ -241,6 +294,19 @@ async function submitAsk() {
 function dispatch(event) {
   state.pipeline = reducePipelineEvent(state.pipeline, event);
   renderPipeline();
+}
+
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {File[]} files
+ */
+function buildMultipart(payload, files) {
+  const form = new FormData();
+  form.append("payload", JSON.stringify(payload));
+  files.forEach((file, index) => {
+    form.append(`file_${index}`, file, file.name);
+  });
+  return form;
 }
 
 /** @param {string} question */
@@ -334,6 +400,7 @@ function completeRun(job) {
     button.disabled = false;
     button.textContent = button.dataset.defaultLabel ?? "Ask";
   }
+  void refreshHistoryBadge();
 }
 
 /** @param {string} message */
@@ -344,6 +411,7 @@ function failRun(message) {
     button.disabled = false;
     button.textContent = button.dataset.defaultLabel ?? "Ask";
   }
+  void refreshHistoryBadge();
 }
 
 function renderPipeline() {
@@ -525,6 +593,72 @@ function activateView(viewId) {
     }
   });
   if (target === "repos") void renderRepoList();
+  if (target === "history") void renderHistoryView();
+}
+
+async function refreshHistoryBadge() {
+  const badge = document.querySelector('[data-badge="history"]');
+  if (!badge) return;
+  try {
+    const response = await fetch("/history", { headers: { Accept: "application/json" } });
+    if (!response.ok) return;
+    const data = await response.json();
+    badge.textContent = String(data.total ?? 0);
+  } catch {
+    /* leave the placeholder */
+  }
+}
+
+async function renderHistoryView() {
+  const target = document.querySelector('[data-view-panel="history"]');
+  if (!target) return;
+  try {
+    const response = await fetch("/history", { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    /** @type {Array<{id:string;question:string;status:string;createdAt:string;finishedAt:string|null;repos:string[]}>} */
+    const items = Array.isArray(data.items) ? data.items : [];
+    target.innerHTML = `<h2>History</h2><div data-history-list></div>`;
+    const list = target.querySelector("[data-history-list]");
+    if (!list) return;
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty-state"><strong>No previous questions yet.</strong><div>Ask something to start a history.</div></div>`;
+      return;
+    }
+    list.innerHTML = "";
+    for (const item of items) {
+      const row = document.createElement("article");
+      row.className = "history-row";
+      const repos = item.repos.length > 0 ? item.repos.join(", ") : "—";
+      row.innerHTML = `
+        <header>
+          <strong></strong>
+          <span class="history-status" data-status=""></span>
+        </header>
+        <p class="history-question"></p>
+        <footer>
+          <span class="history-meta"></span>
+        </footer>`;
+      const titleEl = row.querySelector("strong");
+      const statusEl = row.querySelector(".history-status");
+      const questionEl = row.querySelector(".history-question");
+      const metaEl = row.querySelector(".history-meta");
+      if (titleEl) titleEl.textContent = item.id;
+      if (statusEl) {
+        statusEl.textContent = item.status;
+        if (statusEl instanceof HTMLElement) statusEl.dataset.status = item.status;
+      }
+      if (questionEl) questionEl.textContent = item.question;
+      if (metaEl) {
+        const finished = item.finishedAt ? ` · finished ${item.finishedAt}` : "";
+        metaEl.textContent = `created ${item.createdAt}${finished} · ${repos}`;
+      }
+      list.appendChild(row);
+    }
+    void refreshHistoryBadge();
+  } catch {
+    target.innerHTML = `<h2>History</h2><div class="empty-state"><strong>Could not load history.</strong></div>`;
+  }
 }
 
 async function renderRepoList() {

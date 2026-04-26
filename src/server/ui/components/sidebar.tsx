@@ -14,7 +14,7 @@ const NAV: ReadonlyArray<NavGroup> = [
     section: "Ask",
     items: [
       { id: "new-ask", label: "+ New Ask" },
-      { id: "history", label: "History", badge: "0" }
+      { id: "history", label: "History", badge: "—" }
     ]
   },
   {
@@ -57,7 +57,11 @@ export function Sidebar({ version }: { version: string }) {
           {group.items.map(item => (
             <a class="sidebar-link" href={`#${item.id}`} data-view={item.id}>
               <span>{item.label}</span>
-              {item.badge ? <span class="sidebar-badge">{item.badge}</span> : null}
+              {item.badge ? (
+                <span class="sidebar-badge" data-badge={item.id}>
+                  {item.badge}
+                </span>
+              ) : null}
             </a>
           ))}
         </nav>

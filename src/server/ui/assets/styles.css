@@ -132,6 +132,49 @@ a:hover {
   font-size: 0.95rem;
   margin-bottom: 0.4rem;
 }
+.history-row {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 96%, var(--bg));
+  margin-bottom: 0.5rem;
+}
+.history-row header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.history-row strong {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.history-question {
+  font-size: 0.92rem;
+}
+.history-meta {
+  color: var(--text-subtle);
+  font-size: 0.75rem;
+}
+.history-status {
+  font-size: 0.72rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text-muted);
+}
+.history-status[data-status="completed"] {
+  color: var(--success);
+}
+.history-status[data-status="failed"] {
+  color: var(--error);
+}
+.history-status[data-status="running"] {
+  color: var(--accent);
+}
 .expert-view-panel .empty-state {
   border: 1px dashed var(--panel-border);
   border-radius: var(--radius-sm);
@@ -246,6 +289,35 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+.auth-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.auth-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 0.85rem;
+}
+.auth-user img {
+  border-radius: 50%;
+}
+.auth-logout {
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0 0.2rem;
+}
+.auth-logout:hover {
+  color: var(--text);
 }
 .icon-button,
 .button {
