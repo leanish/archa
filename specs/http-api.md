@@ -99,7 +99,7 @@ Completes the GitHub OAuth flow, stores the signed local session cookie, clears 
 
 ### `POST /auth/logout`
 
-Clears the signed local session cookie.
+Clears the signed local session cookie in the browser response. The server does not keep a per-session invalidation list; rotating `ATC_AUTH_SECRET` invalidates all previously issued sessions.
 
 ### `POST /ask`
 

@@ -14,6 +14,7 @@ type HttpJobManager = ServerJobManager;
 type HandlerRequestOptions = {
   method: string;
   path: string;
+  url?: string;
   headers?: Record<string, string>;
   body?: unknown;
   rawBody?: string;
@@ -431,6 +432,56 @@ describe("http-server", () => {
     expect(sessionResponse.headers["set-cookie"]).toContain("atc_session=");
     const refreshedCookie = readSetCookieValue(sessionResponse.headers["set-cookie"], "atc_session");
     expect(readSessionExpiry(refreshedCookie)).toBe(Math.floor(new Date("2026-05-02T00:00:00.000Z").getTime() / 1000));
+  });
+
+  it("matches refreshed session cookie security to the request URL", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-01T00:00:00.000Z"));
+    const manager = createAskJobManager({
+      answerQuestionFn: async () => ({
+        mode: "answer",
+        question: "ignored",
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: {
+          text: "ignored"
+        }
+      }),
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpApp({
+      env: {
+        ATC_AUTH_SECRET: "test-secret",
+        ATC_GITHUB_CLIENT_ID: "client-id",
+        ATC_GITHUB_CLIENT_SECRET: "client-secret"
+      },
+      jobManager: manager
+    });
+    const sessionCookie = createSessionCookieValue({
+      email: "user@example.com",
+      name: "User Example",
+      picture: null
+    }, "test-secret");
+
+    const httpResponse = await performRequest(handler, {
+      method: "GET",
+      path: "/auth/session",
+      headers: {
+        cookie: `atc_session=${encodeURIComponent(sessionCookie)}`
+      }
+    });
+    const httpsResponse = await performRequest(handler, {
+      method: "GET",
+      path: "/auth/session",
+      headers: {
+        cookie: `atc_session=${encodeURIComponent(sessionCookie)}`
+      },
+      url: "https://atc.example/auth/session"
+    });
+
+    expect(httpResponse.headers["set-cookie"]).not.toContain("Secure");
+    expect(httpsResponse.headers["set-cookie"]).toContain("Secure");
   });
 
   it("refreshes signed GitHub SSO sessions when creating ask jobs", async () => {
@@ -1481,7 +1532,7 @@ async function performRequest(handler: HttpApp, options: HandlerRequestOptions):
 
 function startRequest(
   handler: HttpApp,
-  { method, path, headers = {}, body, rawBody, skipAutoEndWrite = false }: HandlerRequestOptions
+  { method, path, url, headers = {}, body, rawBody, skipAutoEndWrite = false }: HandlerRequestOptions
 ): {
   response: MockResponse;
   completed: Promise<void>;
@@ -1496,7 +1547,7 @@ function startRequest(
     requestInit.body = requestBody;
   }
 
-  const completed = pumpFetchResponse(handler, new Request(`http://atc.local${path}`, requestInit), response);
+  const completed = pumpFetchResponse(handler, new Request(url ?? `http://atc.local${path}`, requestInit), response);
 
   return {
     response,
