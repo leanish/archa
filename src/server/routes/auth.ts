@@ -56,7 +56,8 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
     return redirectWithCookies(authUrl.toString(), [
       serializeCookie(OAUTH_STATE_COOKIE, state, {
         httpOnly: true,
-        maxAge: OAUTH_STATE_MAX_AGE_SECONDS
+        maxAge: OAUTH_STATE_MAX_AGE_SECONDS,
+        secure: shouldUseSecureCookies(config, c.req.url)
       })
     ]);
   });
@@ -111,17 +112,23 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
     return redirectWithCookies("/", [
       serializeCookie(SESSION_COOKIE, createSessionCookieValue(user, config.authSecret), {
         httpOnly: true,
-        maxAge: SESSION_MAX_AGE_SECONDS
+        maxAge: SESSION_MAX_AGE_SECONDS,
+        secure: shouldUseSecureCookies(config, c.req.url)
       }),
-      clearCookie(OAUTH_STATE_COOKIE)
+      clearCookie(OAUTH_STATE_COOKIE, {
+        secure: shouldUseSecureCookies(config, c.req.url)
+      })
     ]);
   });
 
-  app.post("/auth/logout", () => {
+  app.post("/auth/logout", c => {
+    const config = readGithubConfig(deps.env);
     const headers = new Headers({
       "Content-Type": "application/json"
     });
-    headers.append("Set-Cookie", clearCookie(SESSION_COOKIE));
+    headers.append("Set-Cookie", clearCookie(SESSION_COOKIE, {
+      secure: shouldUseSecureCookies(config, c.req.url)
+    }));
     return new Response(JSON.stringify({ ok: true }), {
       headers,
       status: 200
@@ -325,6 +332,10 @@ function fetchGithubApi(fetchFn: AuthFetchFn, url: string, accessToken: string):
   });
 }
 
+function shouldUseSecureCookies(config: GithubConfig, requestUrl: string): boolean {
+  return new URL(config.redirectUri ?? requestUrl).protocol === "https:";
+}
+
 function redirectWithCookies(location: string, cookies: string[]): Response {
   const headers = new Headers({
     Location: location
@@ -358,17 +369,25 @@ function parseCookies(header: string | undefined): Record<string, string> {
 function serializeCookie(
   name: string,
   value: string,
-  options: { httpOnly?: boolean; maxAge?: number } = {}
+  options: { httpOnly?: boolean; maxAge?: number; secure?: boolean } = {}
 ): string {
   return [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
     `Max-Age=${options.maxAge ?? SESSION_MAX_AGE_SECONDS}`,
     "SameSite=Lax",
+    options.secure ? "Secure" : "",
     options.httpOnly ? "HttpOnly" : ""
   ].filter(Boolean).join("; ");
 }
 
-function clearCookie(name: string): string {
-  return `${name}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly`;
+function clearCookie(name: string, options: { secure?: boolean } = {}): string {
+  return [
+    `${name}=`,
+    "Path=/",
+    "Max-Age=0",
+    "SameSite=Lax",
+    options.secure ? "Secure" : "",
+    "HttpOnly"
+  ].filter(Boolean).join("; ");
 }

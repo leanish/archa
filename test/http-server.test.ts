@@ -302,6 +302,38 @@ describe("http-server", () => {
     expect(startResponse.headers["set-cookie"]).toContain("atc_oauth_state=");
   });
 
+  it("marks GitHub SSO cookies secure when the redirect URI is HTTPS", async () => {
+    const manager = createAskJobManager({
+      answerQuestionFn: async () => ({
+        mode: "answer",
+        question: "ignored",
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: {
+          text: "ignored"
+        }
+      }),
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpApp({
+      env: {
+        ATC_AUTH_SECRET: "test-secret",
+        ATC_GITHUB_CLIENT_ID: "client-id",
+        ATC_GITHUB_CLIENT_SECRET: "client-secret",
+        ATC_GITHUB_REDIRECT_URI: "https://atc.example/auth/github/callback"
+      },
+      jobManager: manager
+    });
+
+    const startResponse = await performRequest(handler, {
+      method: "GET",
+      path: "/auth/github/start"
+    });
+
+    expect(startResponse.headers["set-cookie"]).toContain("Secure");
+  });
+
   it("returns the signed GitHub SSO session user", async () => {
     const manager = createAskJobManager({
       answerQuestionFn: async () => ({
