@@ -297,6 +297,35 @@ describe("codex-runner", () => {
     }
   });
 
+  it("reports attachment prompt truncation through status updates", async () => {
+    mocks.spawn.mockReturnValue(createChildProcess({ code: 0 }));
+    mocks.readFile.mockResolvedValue("answer");
+    const onStatus = vi.fn();
+
+    await runCodexQuestion({
+      question: "Use the large attachment.",
+      model: null,
+      reasoningEffort: null,
+      selectedRepos: [
+        {
+          name: "ask-the-code",
+          directory: "/workspace/atc/repos/ask-the-code"
+        }
+      ],
+      workspaceRoot: "/workspace/atc/repos",
+      attachments: [
+        {
+          name: "large.txt",
+          mediaType: "text/plain",
+          contentBase64: Buffer.from("x".repeat(20_001)).toString("base64")
+        }
+      ],
+      onStatus
+    });
+
+    expect(onStatus).toHaveBeenCalledWith("Attachment content truncated for: large.txt.");
+  });
+
   it("emits elapsed codex progress updates before the final completion status", async () => {
     vi.useFakeTimers();
     const child = createChildProcess({ autoCloseOnEnd: false });

@@ -66,6 +66,10 @@ export async function runCodexQuestion({
   });
   const resolvedModel = model || DEFAULT_CODEX_MODEL;
   const resolvedReasoningEffort = reasoningEffort || DEFAULT_CODEX_REASONING_EFFORT;
+  const truncatedAttachmentNames = getTruncatedAttachmentNames(attachments);
+  if (truncatedAttachmentNames.length > 0) {
+    onStatus?.(`Attachment content truncated for: ${truncatedAttachmentNames.join(", ")}.`);
+  }
 
   onStatus?.(formatCodexRunningStatus());
 
@@ -207,6 +211,18 @@ function truncatePromptContent(content: string): string {
   }
 
   return `${content.slice(0, MAX_ATTACHMENT_PROMPT_CHARS)}\n[Attachment content truncated to ${MAX_ATTACHMENT_PROMPT_CHARS} characters.]`;
+}
+
+function getTruncatedAttachmentNames(attachments: AskAttachment[]): string[] {
+  return attachments
+    .filter(attachment => {
+      const decoded = Buffer.from(attachment.contentBase64, "base64");
+      const content = isTextAttachment(attachment)
+        ? decoded.toString("utf8")
+        : attachment.contentBase64;
+      return content.length > MAX_ATTACHMENT_PROMPT_CHARS;
+    })
+    .map(attachment => attachment.name);
 }
 
 function isTextAttachment(attachment: AskAttachment): boolean {
