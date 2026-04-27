@@ -142,6 +142,29 @@ export function getProgressPanelSummary(pipeline) {
 }
 
 /**
+ * @param {{
+ *   pipeline: { stages: Record<string, { state: string, timestamp: string | null }> },
+ *   repos: Array<{ name?: string }>,
+ *   status?: string
+ * }} input
+ * @returns {{ badge: string, summary: string }}
+ */
+export function summarizeRun({ pipeline, repos, status }) {
+  const repoCount = repos.length;
+  const completedSteps = Object.values(pipeline.stages).filter(stage => stage.state === "ok").length;
+  const totalSteps = Object.keys(pipeline.stages).length;
+  const duration = formatPipelineDuration(pipeline);
+  return {
+    badge: status === "completed" ? "Completed successfully" : "",
+    summary: [
+      `${repoCount} repositor${repoCount === 1 ? "y" : "ies"} used.`,
+      duration ? `Total duration: ${duration}.` : "",
+      `Steps completed: ${completedSteps}/${totalSteps}.`
+    ].filter(Boolean).join(" ")
+  };
+}
+
+/**
  * @param {string} value
  * @returns {string}
  */
@@ -192,4 +215,35 @@ function addTrueBoolean(payload, key, value) {
   if (value === true) {
     payload[key] = true;
   }
+}
+
+/**
+ * @param {{ stages: Record<string, { timestamp: string | null }> }} pipeline
+ * @returns {string}
+ */
+function formatPipelineDuration(pipeline) {
+  const timestamps = Object.values(pipeline.stages)
+    .map(stage => stage.timestamp)
+    .filter(value => typeof value === "string")
+    .map(value => Date.parse(value));
+  if (timestamps.length < 2 || timestamps.some(Number.isNaN)) {
+    return "";
+  }
+
+  return formatDuration(Math.max(...timestamps) - Math.min(...timestamps));
+}
+
+/**
+ * @param {number} milliseconds
+ * @returns {string}
+ */
+function formatDuration(milliseconds) {
+  const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) {
+    return `${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
 }

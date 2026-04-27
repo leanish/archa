@@ -8,7 +8,8 @@ import {
   getAdvancedViewFromHash,
   getProgressPanelSummary,
   renderMarkdownHtml,
-  renderRepositoryListHtml
+  renderRepositoryListHtml,
+  summarizeRun
 } from "./client-helpers.js";
 import { createInitialPipeline, reducePipelineEvent, STAGE_ORDER } from "./stage-mapping.js";
 
@@ -165,13 +166,13 @@ function initApp() {
       eventSource = subscribeToJob(payload.links?.events ?? `/jobs/${payload.id}/events`, {
         onComplete(job) {
           setSubmitting(elements, false);
-          currentAnswer = getAnswerText(job);
-          setAnswer(elements, currentAnswer);
-          renderSelectedRepos(elements, job.result?.selectedRepos ?? []);
           pipeline = reducePipelineEvent(pipeline, {
             type: "completed",
             timestamp: new Date().toISOString()
           });
+          currentAnswer = getAnswerText(job);
+          setAnswer(elements, currentAnswer);
+          renderSelectedRepos(elements, job.result?.selectedRepos ?? [], pipeline, job.status);
           renderPipeline(elements, pipeline);
         },
         onFailed(eventPayload) {
@@ -222,6 +223,7 @@ function getElements() {
     progressSummary: document.querySelector("[data-progress-summary]"),
     question: /** @type {HTMLTextAreaElement | null} */ (document.querySelector("[data-question-input]")),
     runEmpty: document.querySelector("[data-run-empty]"),
+    runBadge: document.querySelector("[data-run-badge]"),
     runSummary: document.querySelector("[data-run-summary]"),
     selectedRepos: document.querySelector("[data-selected-repos]"),
     statusLog: /** @type {HTMLPreElement | null} */ (document.querySelector("[data-status-log]")),
@@ -628,16 +630,22 @@ function setAnswer(elements, text) {
   elements.answerContent.innerHTML = renderMarkdownHtml(text);
 }
 
-function renderSelectedRepos(elements, repos) {
+function renderSelectedRepos(elements, repos, pipeline, status) {
   if (!elements.selectedRepos || !elements.runEmpty || !elements.runSummary) {
     return;
   }
 
   elements.selectedRepos.replaceChildren();
+  const runSummary = summarizeRun({ pipeline, repos, status });
+  elements.runSummary.textContent = runSummary.summary;
+  if (elements.runBadge) {
+    elements.runBadge.textContent = runSummary.badge;
+    elements.runBadge.hidden = runSummary.badge === "";
+  }
+
   if (!repos.length) {
     elements.runEmpty.hidden = false;
     elements.selectedRepos.hidden = true;
-    elements.runSummary.textContent = "No repositories were selected.";
     return;
   }
 
@@ -648,7 +656,6 @@ function renderSelectedRepos(elements, repos) {
   }
   elements.runEmpty.hidden = true;
   elements.selectedRepos.hidden = false;
-  elements.runSummary.textContent = `${repos.length} repositor${repos.length === 1 ? "y" : "ies"} used.`;
 }
 
 function showToast(elements, message) {

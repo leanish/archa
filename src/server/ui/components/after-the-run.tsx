@@ -20,6 +20,7 @@ export function AfterTheRun({ advanced = false }: AfterTheRunProps) {
         ></button>
       </div>
       <div id="run-summary-panel-body" data-collapsible-body="run-summary" hidden>
+        <span class="success-badge" data-run-badge hidden></span>
         <div class="empty-state" data-run-empty>No repositories used yet.</div>
         <ul class="repo-result-list" data-selected-repos hidden></ul>
       </div>

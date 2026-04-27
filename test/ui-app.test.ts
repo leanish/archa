@@ -11,7 +11,8 @@ import {
   getProgressPanelSummary,
   getAdvancedViewFromHash,
   renderMarkdownHtml,
-  renderRepositoryListHtml
+  renderRepositoryListHtml,
+  summarizeRun
 } from "../src/server/ui/assets/client-helpers.js";
 import { createInitialPipeline, reducePipelineEvent } from "../src/server/ui/assets/stage-mapping.js";
 
@@ -298,6 +299,33 @@ describe("client helpers", () => {
     expect(html).toContain("ask-the-code");
     expect(html).toContain("Repo-aware Q&amp;A");
     expect(renderRepositoryListHtml([], "No repos configured.")).toContain("No repos configured.");
+  });
+
+  it("summarizes completed runs with repo count, duration, completed steps, and success badge", () => {
+    let pipeline = createInitialPipeline();
+    pipeline = reducePipelineEvent(pipeline, {
+      jobId: "job-123",
+      timestamp: "2026-04-26T12:00:00.000Z",
+      type: "job-created"
+    });
+    pipeline = reducePipelineEvent(pipeline, {
+      message: "Running Codex...",
+      timestamp: "2026-04-26T12:00:05.000Z",
+      type: "status"
+    });
+    pipeline = reducePipelineEvent(pipeline, {
+      timestamp: "2026-04-26T12:01:05.000Z",
+      type: "completed"
+    });
+
+    expect(summarizeRun({
+      pipeline,
+      repos: [{ name: "api" }, { name: "web" }],
+      status: "completed"
+    })).toEqual({
+      badge: "Completed successfully",
+      summary: "2 repositories used. Total duration: 1m 5s. Steps completed: 5/5."
+    });
   });
 
   it("escapes repository list fields", () => {

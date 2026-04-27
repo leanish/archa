@@ -35,3 +35,13 @@ export function renderRepositoryListHtml(
   }>,
   setupHint?: string | null
 ): string;
+export function summarizeRun(input: {
+  pipeline: {
+    stages: Record<string, {
+      state: string;
+      timestamp: string | null;
+    }>;
+  };
+  repos: Array<{ name?: string }>;
+  status?: string;
+}): { badge: string; summary: string };
