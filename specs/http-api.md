@@ -142,7 +142,7 @@ Rules:
 - omitted `audience` defaults to `general`
 - `model` and `reasoningEffort` are optional strings
 - omitted `model` and `reasoningEffort` use the same execution defaults as the CLI: `gpt-5.4-mini` and `low`
-- `selectionMode` is optional and must be one of `single` or `cascade`
+- `selectionMode` is optional and must be one of `single`, `cascade`, or `all`
 - omitted `selectionMode` defaults to `single`
 - `selectionShadowCompare` is an optional boolean; when `true`, the server keeps background `none`, `low`, and `high` repo-selector runs for comparison diagnostics while the main ask continues
 - `attachments` is optional and must be an array of `{ "name", "mediaType", "contentBase64" }` objects

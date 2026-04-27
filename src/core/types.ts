@@ -15,7 +15,7 @@ export const REPO_CLASSIFICATIONS = [
 
 export type RepoClassification = typeof REPO_CLASSIFICATIONS[number];
 
-export type RepoSelectionStrategy = "single" | "cascade";
+export type RepoSelectionStrategy = "single" | "cascade" | "all";
 export type RepoSelectionCodexEffort = "none" | "minimal" | "low" | "medium" | "high";
 export type RepoSelectionSource = "requested" | "codex" | "heuristic";
 
