@@ -10,7 +10,7 @@ import { cors } from "hono/cors";
 import { loadConfig } from "../core/config/config.ts";
 import { createApiAskRoutes } from "./routes/api-ask.ts";
 import { registerAskRoutes } from "./routes/ask.ts";
-import { DEFAULT_BODY_LIMIT_BYTES, HttpError, type ApiRouteDeps } from "./routes/api-helpers.ts";
+import { DEFAULT_BODY_LIMIT_BYTES, toHttpError, type ApiRouteDeps } from "./routes/api-helpers.ts";
 import { registerAuthRoutes, validateAuthConfig, type AuthFetchFn } from "./routes/auth.ts";
 import { registerHealthRoutes } from "./routes/health.ts";
 import { registerRepoRoutes } from "./routes/repos.ts";
@@ -65,12 +65,8 @@ export function createApp(
   registerHealthRoutes(app, { jobManager });
 
   app.onError((error, c) => {
-    if (error instanceof HttpError) {
-      return c.json({ error: error.message }, asStatusCode(error.statusCode));
-    }
-
-    const message = error instanceof Error ? error.message : String(error);
-    return c.json({ error: message }, 500);
+    const httpError = toHttpError(error);
+    return c.json({ error: httpError.message }, asStatusCode(httpError.statusCode));
   });
 
   app.notFound(c => c.json({

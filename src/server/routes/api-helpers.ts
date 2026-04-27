@@ -272,6 +272,15 @@ export class HttpError extends Error {
   }
 }
 
+export function toHttpError(error: unknown): HttpError {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return new HttpError(500, message);
+}
+
 function normalizeRepoNames(value: unknown): string[] | null {
   if (value == null) {
     return null;

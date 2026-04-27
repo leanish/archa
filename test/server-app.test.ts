@@ -64,6 +64,20 @@ describe("server app", () => {
     expect(body).toBe("{\"error\":\"config exploded\"}");
   });
 
+  it("normalizes explicit HTTP errors through the same error response path", async () => {
+    const app = createTestApp();
+
+    const response = await app.fetch(new Request("http://atc.local/ask", {
+      method: "POST",
+      body: "not json"
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: expect.stringContaining("Request body must be valid JSON")
+    });
+  });
+
   it("fails fast when GitHub SSO configuration is partial", () => {
     expect(() => createTestApp({
       env: {
