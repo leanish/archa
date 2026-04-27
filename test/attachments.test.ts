@@ -33,9 +33,32 @@ describe("server attachments", () => {
         mediaType: "application/octet-stream",
         size: 5
       });
-      expect(saved.refs[0]?.path).toMatch(/_notes\.txt$/u);
+      expect(saved.refs[0]?.path).toMatch(/1-__notes\.txt$/u);
       expect(await readFile(saved.refs[0]?.path ?? "", "utf8")).toBe("hello");
-      expect(saved.refs[1]?.path).toMatch(/attachment$/u);
+      expect(saved.refs[1]?.path).toMatch(/2-attachment$/u);
+    } finally {
+      await saved.cleanup();
+    }
+  });
+
+  it("keeps files distinct when sanitized names collide", async () => {
+    const saved = await saveAttachments([
+      {
+        bytes: new TextEncoder().encode("first"),
+        mediaType: "text/plain",
+        name: "dir/notes.txt"
+      },
+      {
+        bytes: new TextEncoder().encode("second"),
+        mediaType: "text/plain",
+        name: "dir\\notes.txt"
+      }
+    ]);
+
+    try {
+      expect(saved.refs[0]?.path).not.toBe(saved.refs[1]?.path);
+      expect(await readFile(saved.refs[0]?.path ?? "", "utf8")).toBe("first");
+      expect(await readFile(saved.refs[1]?.path ?? "", "utf8")).toBe("second");
     } finally {
       await saved.cleanup();
     }

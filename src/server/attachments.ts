@@ -45,8 +45,8 @@ export async function saveAttachments(incoming: IncomingAttachment[]): Promise<S
   await mkdir(directory, { recursive: true });
 
   const refs: FileAskAttachment[] = [];
-  for (const attachment of incoming) {
-    const filePath = path.join(directory, sanitizeAttachmentName(attachment.name));
+  for (const [index, attachment] of incoming.entries()) {
+    const filePath = path.join(directory, `${index + 1}-${sanitizeAttachmentName(attachment.name)}`);
     await writeFile(filePath, attachment.bytes);
     refs.push({
       name: attachment.name,
