@@ -104,7 +104,13 @@ function subscribeHistorySnapshot(
     jobId: string;
   }
 ): void {
+  let recorded = false;
+  let unsubscribe: (() => void) | null = null;
   const recordCurrentSnapshot = (): void => {
+    if (recorded) {
+      return;
+    }
+    recorded = true;
     const job = jobManager.getJob(jobId);
     if (job) {
       void historyStore.recordJobSnapshot({
@@ -114,7 +120,7 @@ function subscribeHistorySnapshot(
       });
     }
   };
-  const unsubscribe = jobManager.subscribe(jobId, event => {
+  unsubscribe = jobManager.subscribe(jobId, event => {
     if (event.type !== "completed" && event.type !== "failed") {
       return;
     }

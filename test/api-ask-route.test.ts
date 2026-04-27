@@ -192,6 +192,57 @@ describe("api ask route", () => {
     });
   });
 
+  it("records one terminal snapshot when a job finishes during history subscription", async () => {
+    const historyPath = await createTempHistoryPath();
+    const completedJob = createJobSnapshot({
+      id: "api-job-completed",
+      status: "completed",
+      finishedAt: "2026-04-26T12:00:01.000Z",
+      result: {
+        mode: "answer",
+        question: "Keep one answer",
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: {
+          text: "one answer"
+        }
+      }
+    });
+    const jobManager = createHttpJobManager({
+      createJob: vi.fn(() => completedJob),
+      getJob: vi.fn(() => completedJob),
+      subscribe: vi.fn((_jobId, listener) => {
+        listener({
+          type: "completed",
+          job: completedJob
+        });
+        return vi.fn();
+      })
+    });
+    const app = createTestApp({
+      env: createApiEnv({ ATC_HISTORY_PATH: historyPath }),
+      jobManager
+    });
+
+    const askResponse = await app.fetch(createApiAskRequest({
+      body: {
+        question: "Keep one answer"
+      }
+    }));
+    expect(askResponse.status).toBe(202);
+    const historyResponse = await app.fetch(createApiHistoryRequest({
+      conversationKey: "slack:T123:C123:171234.000001"
+    }));
+
+    expect(historyResponse.status).toBe(200);
+    const history = await historyResponse.json() as {
+      conversation: {
+        items: Array<{ type: string }>;
+      };
+    };
+    expect(history.conversation.items.filter(item => item.type === "answer")).toHaveLength(1);
+  });
+
   it("rejects API asks after the conversation history limit is reached", async () => {
     const historyPath = await createTempHistoryPath();
     let jobIndex = 0;
