@@ -331,6 +331,11 @@ No jsdom, no Playwright, no new browser test stack.
 - **Markdown trust boundary.** Answers from Codex are untrusted text. `marked` does NOT sanitize, so the client pipeline is `marked.parse(text) → DOMPurify.sanitize(html) → innerHTML`. DOMPurify is vendored alongside `marked`. A manual XSS smoke check is part of each step's verification; see Testing strategy for why we don't wire an automated DOM test into Vitest.
 - **JSX runtime and TypeScript strictness.** If `hono/jsx` types collide with the test-side TS config, Step 1 may need to split `tsconfig.json` further. Noted, not yet decided.
 
+## Verification notes
+
+- 2026-04-27: final implementation verification passed with `npm run check`.
+- 2026-04-27: XSS smoke check passed for `<script>window.__xssFired=true</script>` through the browser helper's `marked.parse(...) → DOMPurify.sanitize(...)` wrapper; the rendered HTML did not contain a script tag or `__xssFired`.
+
 ## Out-of-scope follow-ups (not part of this spec)
 
 - Other auth providers.
