@@ -97,4 +97,44 @@ describe("stage mapping", () => {
     });
     expect(pipeline.log.at(-1)?.message).toBe("ERROR: Network error");
   });
+
+  it("marks the active stage as failed when a run fails", () => {
+    const running = reducePipelineEvent(createInitialPipeline(), {
+      message: "Running Codex...",
+      timestamp: "2026-04-25T05:00:00.000Z",
+      type: "status"
+    });
+    const failed = reducePipelineEvent(running, {
+      message: "Codex exited with code 1",
+      timestamp: "2026-04-25T05:00:01.000Z",
+      type: "failed"
+    });
+
+    expect(failed.activeStage).toBe("codex-execution");
+    expect(failed.stages["codex-execution"]).toMatchObject({
+      detail: "Codex exited with code 1",
+      state: "failed"
+    });
+    expect(failed.log.at(-1)?.message).toBe("ERROR: Codex exited with code 1");
+  });
+
+  it("uses fallback messages for empty status and failed events", () => {
+    const running = reducePipelineEvent(createInitialPipeline(), {
+      timestamp: "2026-04-25T05:00:00.000Z",
+      type: "status"
+    });
+    const failed = reducePipelineEvent(createInitialPipeline(), {
+      timestamp: "2026-04-25T05:00:01.000Z",
+      type: "failed"
+    });
+
+    expect(running.stages.synthesis.detail).toBe("Running");
+    expect(failed.stages["job-created"].detail).toBe("Failed");
+  });
+
+  it("ignores unknown pipeline events", () => {
+    const pipeline = createInitialPipeline();
+
+    expect(reducePipelineEvent(pipeline, { type: "custom-event" } as never)).toEqual(pipeline);
+  });
 });

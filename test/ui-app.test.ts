@@ -112,6 +112,49 @@ describe("client helpers", () => {
     expect(renderMarkdownHtml("<b>x</b>", null)).toBe("&lt;b&gt;x&lt;/b&gt;");
   });
 
+  it("detects the markdown runtime from browser globals", () => {
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const originalWindow = globals.window;
+
+    try {
+      globals.window = {
+        DOMPurify: {
+          sanitize(value: string) {
+            return value.replace("<script>bad()</script>", "");
+          }
+        },
+        marked: {
+          parse(value: string) {
+            return `<strong>${value}</strong><script>bad()</script>`;
+          }
+        }
+      };
+
+      expect(renderMarkdownHtml("**safe**")).toBe("<strong>**safe**</strong>");
+    } finally {
+      globals.window = originalWindow;
+    }
+  });
+
+  it("falls back to escaping when browser markdown globals are incomplete", () => {
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const originalWindow = globals.window;
+
+    try {
+      globals.window = {
+        marked: {
+          parse(value: string) {
+            return value;
+          }
+        }
+      };
+
+      expect(renderMarkdownHtml("<b>x</b>")).toBe("&lt;b&gt;x&lt;/b&gt;");
+    } finally {
+      globals.window = originalWindow;
+    }
+  });
+
   it("renders markdown through marked and DOMPurify when available", () => {
     const calls: string[] = [];
     const html = renderMarkdownHtml("**safe**", {
@@ -224,6 +267,22 @@ describe("client helpers", () => {
       timestamp: "2026-04-26T12:01:00.000Z"
     });
     expect(getProgressPanelSummary(pipeline)).toBe("Answer ready.");
+  });
+
+  it("summarizes failed and touched progress stages", () => {
+    const failedPipeline = reducePipelineEvent(createInitialPipeline(), {
+      message: "Repository sync failed",
+      timestamp: "2026-04-26T12:00:00.000Z",
+      type: "failed"
+    });
+    const touchedPipeline = reducePipelineEvent(createInitialPipeline(), {
+      jobId: "job-123",
+      timestamp: "2026-04-26T12:00:00.000Z",
+      type: "job-created"
+    });
+
+    expect(getProgressPanelSummary(failedPipeline)).toBe("Repository sync failed");
+    expect(getProgressPanelSummary(touchedPipeline)).toBe("Job ID: job-123");
   });
 
   it("renders repository list HTML for the advanced repos view", () => {
