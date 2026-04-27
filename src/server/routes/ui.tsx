@@ -3,7 +3,7 @@ import type { Env, Hono } from "hono";
 import { parseCookies, serializeCookie } from "../http-cookies.ts";
 import { AppPage } from "../ui/pages/app-page.tsx";
 
-type UiMode = "simple" | "expert";
+type UiMode = "simple" | "advanced";
 const MODE_COOKIE_MAX_AGE_SECONDS = 31_536_000;
 
 export function registerUiRoutes<E extends Env>(app: Hono<E>): void {
@@ -22,7 +22,7 @@ export function registerUiRoutes<E extends Env>(app: Hono<E>): void {
 }
 
 function normalizeMode(value: string | undefined): UiMode | null {
-  return value === "simple" || value === "expert" ? value : null;
+  return value === "simple" || value === "advanced" ? value : null;
 }
 
 function formatModeCookie(mode: UiMode): string {

@@ -48,14 +48,18 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
     const result = getAuthSessionResult(c.req.header("cookie"), deps.env);
     const response = c.json(result.session);
     if (result.refreshedCookie) {
-      const config = readGithubConfig(deps.env);
-      response.headers.append("Set-Cookie", serializeSessionCookie(result.refreshedCookie, config, c.req.url));
+      response.headers.append("Set-Cookie", serializeSessionCookie(result.refreshedCookie, c.req.url));
     }
     return response;
   });
 
   app.get("/auth/github/start", c => {
     const config = requireGithubConfig(deps.env);
+    const canonicalStartUrl = resolveCanonicalAuthStartUrl(config, c.req.url);
+    if (canonicalStartUrl) {
+      return redirectWithCookies(canonicalStartUrl, []);
+    }
+
     const redirectUri = resolveRedirectUri(config, c.req.url);
     const state = createOauthState(config.authSecret);
     const authUrl = new URL("https://github.com/login/oauth/authorize");
@@ -68,7 +72,7 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
       serializeCookie(OAUTH_STATE_COOKIE, state, {
         httpOnly: true,
         maxAge: OAUTH_STATE_MAX_AGE_SECONDS,
-        secure: shouldUseSecureCookies(config, c.req.url)
+        secure: shouldUseSecureCookies(c.req.url)
       })
     ]);
   });
@@ -121,10 +125,10 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
     };
 
     return redirectWithCookies("/", [
-      serializeSessionCookie(createSessionCookieValue(user, config.authSecret), config, c.req.url),
+      serializeSessionCookie(createSessionCookieValue(user, config.authSecret), c.req.url),
       clearCookie(OAUTH_STATE_COOKIE, {
         httpOnly: true,
-        secure: shouldUseSecureCookies(config, c.req.url)
+        secure: shouldUseSecureCookies(c.req.url)
       })
     ]);
   });
@@ -136,7 +140,7 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
     });
     headers.append("Set-Cookie", clearCookie(SESSION_COOKIE, {
       httpOnly: true,
-      secure: shouldUseSecureCookies(config, c.req.url)
+      secure: shouldUseSecureCookies(c.req.url)
     }));
     return new Response(JSON.stringify({ ok: true }), {
       headers,
@@ -187,15 +191,15 @@ export function createSessionCookieValue(user: AuthUser, secret: string): string
   return `${payload}.${signature}`;
 }
 
-export function serializeRefreshedSessionCookie(cookieValue: string, env: Environment, requestUrl: string): string {
-  return serializeSessionCookie(cookieValue, readGithubConfig(env), requestUrl);
+export function serializeRefreshedSessionCookie(cookieValue: string, _env: Environment, requestUrl: string): string {
+  return serializeSessionCookie(cookieValue, requestUrl);
 }
 
-function serializeSessionCookie(cookieValue: string, config: GithubConfig, requestUrl: string): string {
+function serializeSessionCookie(cookieValue: string, requestUrl: string): string {
   return serializeCookie(SESSION_COOKIE, cookieValue, {
     httpOnly: true,
     maxAge: SESSION_MAX_AGE_SECONDS,
-    secure: shouldUseSecureCookies(config, requestUrl)
+    secure: shouldUseSecureCookies(requestUrl)
   });
 }
 
@@ -309,6 +313,20 @@ function resolveRedirectUri(config: GithubConfig, requestUrl: string): string {
   return new URL("/auth/github/callback", requestUrl).toString();
 }
 
+function resolveCanonicalAuthStartUrl(config: GithubConfig, requestUrl: string): string | null {
+  if (!config.redirectUri) {
+    return null;
+  }
+
+  const request = new URL(requestUrl);
+  const redirect = new URL(config.redirectUri);
+  if (request.origin === redirect.origin) {
+    return null;
+  }
+
+  return new URL("/auth/github/start", redirect.origin).toString();
+}
+
 async function resolveGithubEmail(
   fetchFn: AuthFetchFn,
   accessToken: string,
@@ -361,8 +379,8 @@ function fetchGithubApi(fetchFn: AuthFetchFn, url: string, accessToken: string):
   });
 }
 
-function shouldUseSecureCookies(config: GithubConfig, requestUrl: string): boolean {
-  return new URL(config.redirectUri ?? requestUrl).protocol === "https:";
+function shouldUseSecureCookies(requestUrl: string): boolean {
+  return new URL(requestUrl).protocol === "https:";
 }
 
 function redirectWithCookies(location: string, cookies: string[]): Response {

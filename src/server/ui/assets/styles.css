@@ -85,6 +85,7 @@ button {
 .header-actions,
 .panel-heading,
 .answer-actions,
+.ask-action-row,
 .drop-zone {
   display: flex;
   align-items: center;
@@ -96,9 +97,10 @@ button {
 }
 
 .logo-mark {
-  width: 44px;
-  height: 44px;
+  width: 92px;
+  height: 52px;
   flex: 0 0 auto;
+  object-fit: contain;
 }
 
 h1,
@@ -125,6 +127,10 @@ h2 {
 .run-column p {
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.drop-zone p {
+  font-size: 0.78rem;
 }
 
 .header-actions {
@@ -180,27 +186,27 @@ h2 {
   background: color-mix(in srgb, var(--panel) 72%, var(--bg));
 }
 
-.expert-sidebar,
-.expert-topbar,
-[data-expert-only] {
+.advanced-sidebar,
+.advanced-topbar,
+[data-advanced-only] {
   display: none;
 }
 
-body[data-mode="expert"] .simple-only {
+body[data-mode="advanced"] .simple-only {
   display: none;
 }
 
-body[data-mode="expert"] [data-expert-only],
-body[data-mode="expert"] .expert-topbar {
+body[data-mode="advanced"] [data-advanced-only],
+body[data-mode="advanced"] .advanced-topbar {
   display: flex;
 }
 
-body[data-mode="expert"] .options-panel,
-body[data-mode="expert"] .previous-question {
+body[data-mode="advanced"] .options-panel,
+body[data-mode="advanced"] .previous-question {
   display: block;
 }
 
-body[data-mode="expert"] .app-shell {
+body[data-mode="advanced"] .app-shell {
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
   width: 100%;
@@ -209,12 +215,12 @@ body[data-mode="expert"] .app-shell {
   padding: 0;
 }
 
-body[data-mode="expert"] .app-content {
+body[data-mode="advanced"] .app-content {
   min-width: 0;
   padding: 14px 24px 28px;
 }
 
-body[data-mode="expert"] .expert-sidebar {
+body[data-mode="advanced"] .advanced-sidebar {
   position: sticky;
   top: 0;
   display: grid;
@@ -233,7 +239,7 @@ body[data-mode="expert"] .expert-sidebar {
 }
 
 .sidebar-brand .logo-mark {
-  width: 150px;
+  width: 180px;
   height: auto;
 }
 
@@ -298,7 +304,7 @@ body[data-mode="expert"] .expert-sidebar {
   font-size: 0.78rem;
 }
 
-.expert-topbar {
+.advanced-topbar {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -326,7 +332,7 @@ body[data-mode="expert"] .expert-sidebar {
   font-weight: 700;
 }
 
-body[data-mode="expert"] .app-layout {
+body[data-mode="advanced"] .app-layout {
   grid-template-columns: minmax(0, 1fr) minmax(260px, min(34vw, 420px));
   align-items: start;
   padding: 0;
@@ -335,7 +341,7 @@ body[data-mode="expert"] .app-layout {
   box-shadow: none;
 }
 
-body[data-mode="expert"] .panel {
+body[data-mode="advanced"] .panel {
   box-shadow: none;
 }
 
@@ -439,16 +445,16 @@ body[data-mode="expert"] .panel {
   font-size: 0.78rem;
 }
 
-.expert-view-panels {
+.advanced-view-panels {
   display: none;
 }
 
-body[data-mode="expert"] .expert-view-panels {
+body[data-mode="advanced"] .advanced-view-panels {
   display: grid;
   gap: 18px;
 }
 
-.expert-view-panel[hidden],
+.advanced-view-panel[hidden],
 [data-new-ask-panel][hidden] {
   display: none;
 }
@@ -512,6 +518,24 @@ body[data-mode="expert"] .expert-view-panels {
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 16px;
+}
+
+.ask-action-row {
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.ask-action-row .drop-zone {
+  flex: 1 1 auto;
+  margin-top: 0;
+}
+
+.ask-action-row .primary-button {
+  align-self: flex-start;
+  width: auto;
+  min-width: 96px;
+  min-height: 42px;
 }
 
 .panel-heading.compact {
@@ -763,16 +787,16 @@ textarea:focus {
     padding: 10px;
   }
 
-  body[data-mode="expert"] .app-shell {
+  body[data-mode="advanced"] .app-shell {
     grid-template-columns: 1fr;
   }
 
-  body[data-mode="expert"] .expert-sidebar {
+  body[data-mode="advanced"] .advanced-sidebar {
     position: static;
     height: auto;
   }
 
-  body[data-mode="expert"] .app-layout {
+  body[data-mode="advanced"] .app-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -789,9 +813,17 @@ textarea:focus {
     justify-content: flex-start;
   }
 
-  .primary-button,
   .secondary-button,
   .log-toggle {
+    width: 100%;
+  }
+
+  .ask-action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ask-action-row .primary-button {
     width: 100%;
   }
 }

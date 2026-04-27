@@ -10,7 +10,7 @@ Serves the built-in web UI.
 
 Mode resolution:
 
-- `?mode=simple` or `?mode=expert` selects the first-byte render and writes the `atc_mode` cookie
+- `?mode=simple` or `?mode=advanced` selects the first-byte render and writes the `atc_mode` cookie
 - `atc_mode` cookie is used when no query mode is present
 - default mode is `simple`
 
@@ -109,7 +109,7 @@ Legacy note:
 
 - `POST /jobs` is no longer accepted; clients must use `POST /ask`
 
-Request body:
+JSON request body:
 
 ```json
 {
@@ -148,6 +148,8 @@ Rules:
 - `attachments` is optional and must be an array of `{ "name", "mediaType", "contentBase64" }` objects
 - uploaded attachments are included in the Codex prompt as untrusted data; text-like files are decoded as UTF-8, and binary files are passed as base64 text
 - attachment limits are 8 files, 1 MiB decoded per file, and 3 MiB decoded total
+- multipart requests are also accepted with a `payload` field containing the same ask JSON plus `file_<i>` file fields; multipart files are written to temporary files, exposed to Codex as file paths, and removed after the job reaches a terminal state
+- multipart upload limits are 8 files and 100 MiB per file
 - when GitHub SSO is configured, clients must have a valid signed local session cookie; otherwise the endpoint returns `401`
 - `noSync` and `noSynthesis` are optional booleans
 
@@ -215,7 +217,7 @@ Rules:
 - the bearer token must match `ATC_API_TOKEN`
 - the HMAC secret is `ATC_API_SIGNING_SECRET`
 - timestamp skew must be five minutes or less
-- the request body accepts only `question` and `attachments`
+- the request body accepts only `question` and JSON/base64 `attachments`
 - advanced fields such as `repoNames`, `audience`, `model`, `reasoningEffort`, `selectionMode`, `noSync`, and `noSynthesis` are rejected
 - server-side defaults are equivalent to Simple mode
 - successful asks are recorded in local API conversation history
@@ -311,7 +313,7 @@ Event types:
 - completed jobs expire after a retention timeout
 - job execution concurrency is bounded per process and defaults to 3 concurrent jobs
 - repo sync coordination is per process and deduplicates overlapping syncs for the same repo directory
-- the built-in web UI uses `GET /repos` for the Expert mode repositories view
-- Expert mode serializes audience, model, reasoning, repo-selection, sync, synthesis, and selector comparison controls into `POST /ask`; Simple mode uses backend defaults
-- API-only integrations use `POST /api/v1/ask`, cannot set Expert-mode fields, and persist local JSON conversation history
+- the built-in web UI uses `GET /repos` for the Advanced mode repositories view
+- Advanced mode serializes audience, model, reasoning, repo-selection, sync, synthesis, and selector comparison controls into `POST /ask`; Simple mode uses backend defaults
+- API-only integrations use `POST /api/v1/ask`, cannot set Advanced-mode fields, and persist local JSON conversation history
 - API history defaults to `~/.local/share/atc/history.json`, can be overridden with `ATC_HISTORY_PATH`, keeps 24 items per conversation plus one limit-reached status, rejects the next ask for a full conversation with `409`, keeps the newest 500 conversations, and stores attachment metadata without attachment contents

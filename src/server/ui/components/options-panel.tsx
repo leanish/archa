@@ -1,6 +1,6 @@
 export function OptionsPanel() {
   return (
-    <section class="panel options-panel collapsible-panel" data-expert-only data-collapsible-panel="options">
+    <section class="panel options-panel collapsible-panel" data-advanced-only data-collapsible-panel="options">
       <div class="panel-heading compact collapsible-heading">
         <div>
           <h2>Options</h2>
@@ -28,14 +28,14 @@ export function OptionsPanel() {
         </fieldset>
         <label>
           <span>Model</span>
-          <select name="model" data-expert-option>
+          <select name="model" data-advanced-option>
             <option value="gpt-5.4">gpt-5.4</option>
             <option value="gpt-5.4-mini" selected>gpt-5.4-mini</option>
           </select>
         </label>
         <label>
           <span>Reasoning effort</span>
-          <select name="reasoningEffort" data-expert-option>
+          <select name="reasoningEffort" data-advanced-option>
             <option value="low" selected>Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
@@ -43,7 +43,7 @@ export function OptionsPanel() {
         </label>
         <label>
           <span>Repo selection mode</span>
-          <select name="selectionMode" data-expert-option>
+          <select name="selectionMode" data-advanced-option>
             <option value="single">Single</option>
             <option value="cascade">Cascade (Smart)</option>
             <option value="all">All</option>
@@ -51,15 +51,15 @@ export function OptionsPanel() {
         </label>
         <label class="toggle-row">
           <span>Skip repository sync</span>
-          <input type="checkbox" name="noSync" data-expert-option />
+          <input type="checkbox" name="noSync" data-advanced-option />
         </label>
         <label class="toggle-row">
           <span>No synthesis (raw results)</span>
-          <input type="checkbox" name="noSynthesis" data-expert-option />
+          <input type="checkbox" name="noSynthesis" data-advanced-option />
         </label>
         <label class="toggle-row">
           <span>Selection shadow compare</span>
-          <input type="checkbox" name="selectionShadowCompare" data-expert-option />
+          <input type="checkbox" name="selectionShadowCompare" data-advanced-option />
         </label>
       </div>
     </section>

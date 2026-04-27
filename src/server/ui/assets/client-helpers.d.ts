@@ -2,20 +2,21 @@ export type MarkdownRuntime = {
   marked: { parse(input: string): string };
   DOMPurify: { sanitize(input: string, options?: unknown): string };
 };
-export const DEFAULT_EXPERT_VIEW: string;
-export const DEFAULT_EXPERT_MODEL: string;
-export const DEFAULT_EXPERT_REASONING_EFFORT: string;
+export const DEFAULT_ADVANCED_VIEW: string;
+export const DEFAULT_ADVANCED_MODEL: string;
+export const DEFAULT_ADVANCED_REASONING_EFFORT: string;
 export const MODE_COOKIE_MAX_AGE_SECONDS: number;
-export const EXPERT_VIEW_IDS: string[];
+export const ADVANCED_VIEW_IDS: string[];
 export function createAskPayload(
   question: string,
-  mode: "simple" | "expert",
+  mode: "simple" | "advanced",
   options?: Record<string, unknown>,
   attachments?: Array<{ name: string; mediaType: string; contentBase64: string }>
 ): Record<string, unknown>;
+export function createAskFormData(payload: Record<string, unknown>, files: File[]): FormData;
 export function escapeHtml(value: string): string;
-export function formatModeCookie(mode: "simple" | "expert"): string;
-export function getExpertViewFromHash(hash: string): string;
+export function formatModeCookie(mode: "simple" | "advanced"): string;
+export function getAdvancedViewFromHash(hash: string): string;
 export function getProgressPanelSummary(pipeline: {
   stages: Record<string, {
     state: string;

@@ -1,34 +1,105 @@
 import { describe, expect, it } from "vitest";
+import { pathToFileURL } from "node:url";
 
 import {
+  createAskFormData,
   createAskPayload,
-  DEFAULT_EXPERT_VIEW,
+  DEFAULT_ADVANCED_VIEW,
   escapeHtml,
-  EXPERT_VIEW_IDS,
+  ADVANCED_VIEW_IDS,
   formatModeCookie,
   getProgressPanelSummary,
-  getExpertViewFromHash,
+  getAdvancedViewFromHash,
   renderMarkdownHtml,
   renderRepositoryListHtml
 } from "../src/server/ui/assets/client-helpers.js";
 import { createInitialPipeline, reducePipelineEvent } from "../src/server/ui/assets/stage-mapping.js";
 
 describe("client helpers", () => {
-  it("returns the default expert view for empty and unknown hashes", () => {
-    expect(getExpertViewFromHash("")).toBe(DEFAULT_EXPERT_VIEW);
-    expect(getExpertViewFromHash("#")).toBe(DEFAULT_EXPERT_VIEW);
-    expect(getExpertViewFromHash("#unknown")).toBe(DEFAULT_EXPERT_VIEW);
+  it("loads the browser app module without parse errors", async () => {
+    const appUrl = pathToFileURL("src/server/ui/assets/app.js");
+
+    await expect(import(`${appUrl.href}?load-test=${Date.now()}`)).resolves.toBeDefined();
   });
 
-  it("accepts every known expert view id", () => {
-    for (const id of EXPERT_VIEW_IDS) {
-      expect(getExpertViewFromHash(`#${id}`)).toBe(id);
-      expect(getExpertViewFromHash(id)).toBe(id);
+  it("binds every theme toggle so the visible Simple-mode header button works", async () => {
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const originalDocument = globals.document;
+    const originalLocalStorage = globals.localStorage;
+    const originalWindow = globals.window;
+    const advancedToggle = createFakeElement();
+    const simpleToggle = createFakeElement();
+    const advancedIcon = createFakeElement();
+    const simpleIcon = createFakeElement();
+    const documentElement = { dataset: { theme: "dark" } };
+    const body = { dataset: { mode: "simple" } };
+    const storage = new Map<string, string>();
+    const fakeDocument = {
+      body,
+      documentElement,
+      createElement: () => createFakeElement(),
+      querySelector: () => null,
+      querySelectorAll(selector: string) {
+        if (selector === "[data-theme-toggle]") {
+          return [advancedToggle, simpleToggle];
+        }
+        if (selector === "[data-theme-icon]") {
+          return [advancedIcon, simpleIcon];
+        }
+        return [];
+      }
+    };
+
+    try {
+      Object.assign(globals, {
+        document: fakeDocument,
+        localStorage: {
+          getItem(key: string) {
+            return storage.get(key) ?? null;
+          },
+          setItem(key: string, value: string) {
+            storage.set(key, value);
+          }
+        },
+        window: {
+          addEventListener() {},
+          location: { hash: "", href: "http://atc.local/?mode=simple" },
+          matchMedia: () => ({ matches: true })
+        }
+      });
+
+      const appUrl = pathToFileURL("src/server/ui/assets/app.js");
+      await import(`${appUrl.href}?theme-test=${Date.now()}`);
+      simpleToggle.click();
+
+      expect(documentElement.dataset.theme).toBe("light");
+      expect(storage.get("atc:theme")).toBe("light");
+      expect(advancedIcon.textContent).toBe("☀");
+      expect(simpleIcon.textContent).toBe("☀");
+    } finally {
+      Object.assign(globals, {
+        document: originalDocument,
+        localStorage: originalLocalStorage,
+        window: originalWindow
+      });
+    }
+  });
+
+  it("returns the default advanced view for empty and unknown hashes", () => {
+    expect(getAdvancedViewFromHash("")).toBe(DEFAULT_ADVANCED_VIEW);
+    expect(getAdvancedViewFromHash("#")).toBe(DEFAULT_ADVANCED_VIEW);
+    expect(getAdvancedViewFromHash("#unknown")).toBe(DEFAULT_ADVANCED_VIEW);
+  });
+
+  it("accepts every known advanced view id", () => {
+    for (const id of ADVANCED_VIEW_IDS) {
+      expect(getAdvancedViewFromHash(`#${id}`)).toBe(id);
+      expect(getAdvancedViewFromHash(id)).toBe(id);
     }
   });
 
   it("formats the sticky mode cookie", () => {
-    expect(formatModeCookie("expert")).toBe("atc_mode=expert; Path=/; Max-Age=31536000; SameSite=Lax");
+    expect(formatModeCookie("advanced")).toBe("atc_mode=advanced; Path=/; Max-Age=31536000; SameSite=Lax");
   });
 
   it("escapes the five HTML metacharacters", () => {
@@ -65,7 +136,7 @@ describe("client helpers", () => {
     ]);
   });
 
-  it("omits expert options from simple-mode ask payloads", () => {
+  it("omits advanced options from simple-mode ask payloads", () => {
     expect(createAskPayload("What changed?", "simple", {
       audience: "codebase",
       model: "gpt-5.4",
@@ -90,8 +161,19 @@ describe("client helpers", () => {
     });
   });
 
-  it("serializes non-default expert options into ask payloads", () => {
-    expect(createAskPayload("What changed?", "expert", {
+  it("builds multipart ask data with payload JSON and file fields", async () => {
+    const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+    const formData = createAskFormData({ question: "What changed?" }, [file]);
+    const fileField = formData.get("file_0");
+
+    expect(formData.get("payload")).toBe(JSON.stringify({ question: "What changed?" }));
+    expect(fileField).toBeInstanceOf(File);
+    expect((fileField as File).name).toBe("notes.txt");
+    expect(await (fileField as File).text()).toBe("hello");
+  });
+
+  it("serializes non-default advanced options into ask payloads", () => {
+    expect(createAskPayload("What changed?", "advanced", {
       audience: "codebase",
       model: "gpt-5.4",
       noSynthesis: true,
@@ -111,8 +193,8 @@ describe("client helpers", () => {
     });
   });
 
-  it("omits expert options that match defaults", () => {
-    expect(createAskPayload("What changed?", "expert", {
+  it("omits advanced options that match defaults", () => {
+    expect(createAskPayload("What changed?", "advanced", {
       audience: "general",
       model: "gpt-5.4-mini",
       noSynthesis: false,
@@ -144,7 +226,7 @@ describe("client helpers", () => {
     expect(getProgressPanelSummary(pipeline)).toBe("Answer ready.");
   });
 
-  it("renders repository list HTML for the expert repos view", () => {
+  it("renders repository list HTML for the advanced repos view", () => {
     const html = renderRepositoryListHtml([
       {
         aliases: ["atc"],
@@ -175,3 +257,46 @@ describe("client helpers", () => {
     expect(html).toContain("&lt;alias&gt;");
   });
 });
+
+function createFakeElement() {
+  const listeners = new Map<string, Array<() => void>>();
+  return {
+    classList: {
+      add() {},
+      remove() {},
+      toggle() {}
+    },
+    dataset: {},
+    hidden: false,
+    textContent: "",
+    addEventListener(type: string, listener: () => void) {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+    },
+    append() {},
+    click() {
+      for (const listener of listeners.get("click") ?? []) {
+        listener();
+      }
+    },
+    cloneNode() {
+      return createFakeElement();
+    },
+    getAttribute() {
+      return null;
+    },
+    hasAttribute() {
+      return false;
+    },
+    matches() {
+      return false;
+    },
+    querySelector() {
+      return null;
+    },
+    removeAttribute() {},
+    replaceChildren() {},
+    replaceWith() {},
+    setAttribute() {},
+    toggleAttribute() {}
+  };
+}

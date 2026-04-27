@@ -6,17 +6,16 @@ type SidebarProps = {
 
 export function Sidebar({ version }: SidebarProps) {
   return (
-    <aside class="expert-sidebar" data-expert-sidebar>
+    <aside class="advanced-sidebar" data-advanced-sidebar>
       <div class="sidebar-brand">
         <Logo />
         <div>
-          <h1>ask-the-code (ATC)</h1>
-          <p>Repo-aware · Local</p>
+          <h1>ask-the-code</h1>
         </div>
       </div>
-      <nav class="sidebar-nav" aria-label="Expert navigation">
+      <nav class="sidebar-nav" aria-label="Advanced navigation">
         <SidebarSection title="ASK" items={[
-          ["#new-ask", "New Ask", null, true],
+          ["#new-ask", "Ask", null, true],
           ["#history", "History", null, false]
         ]} />
         <SidebarSection title="REPOSITORIES" items={[

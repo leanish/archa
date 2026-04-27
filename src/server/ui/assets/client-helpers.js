@@ -1,10 +1,10 @@
 // @ts-check
 
-export const DEFAULT_EXPERT_VIEW = "new-ask";
-export const DEFAULT_EXPERT_MODEL = "gpt-5.4-mini";
-export const DEFAULT_EXPERT_REASONING_EFFORT = "low";
+export const DEFAULT_ADVANCED_VIEW = "new-ask";
+export const DEFAULT_ADVANCED_MODEL = "gpt-5.4-mini";
+export const DEFAULT_ADVANCED_REASONING_EFFORT = "low";
 export const MODE_COOKIE_MAX_AGE_SECONDS = 31_536_000;
-export const EXPERT_VIEW_IDS = [
+export const ADVANCED_VIEW_IDS = [
   "new-ask",
   "history",
   "repos",
@@ -16,7 +16,7 @@ export const EXPERT_VIEW_IDS = [
   "add-repository"
 ];
 
-const EXPERT_VIEWS = new Set(EXPERT_VIEW_IDS);
+const ADVANCED_VIEWS = new Set(ADVANCED_VIEW_IDS);
 
 /**
  * @typedef {{ marked: { parse(input: string): string }, DOMPurify: { sanitize(input: string, options?: unknown): string } }} MarkdownRuntime
@@ -39,7 +39,7 @@ export function renderMarkdownHtml(text, runtime = getMarkdownRuntime()) {
 
 /**
  * @param {string} question
- * @param {"simple" | "expert"} mode
+ * @param {"simple" | "advanced"} mode
  * @param {Record<string, unknown>} [options]
  * @param {Array<{ name: string, mediaType: string, contentBase64: string }>} [attachments]
  * @returns {Record<string, unknown>}
@@ -49,13 +49,13 @@ export function createAskPayload(question, mode, options = {}, attachments = [])
   if (attachments.length > 0) {
     payload.attachments = attachments;
   }
-  if (mode !== "expert") {
+  if (mode !== "advanced") {
     return payload;
   }
 
   addNonDefaultString(payload, "audience", options.audience, "general");
-  addNonDefaultString(payload, "model", options.model, DEFAULT_EXPERT_MODEL);
-  addNonDefaultString(payload, "reasoningEffort", options.reasoningEffort, DEFAULT_EXPERT_REASONING_EFFORT);
+  addNonDefaultString(payload, "model", options.model, DEFAULT_ADVANCED_MODEL);
+  addNonDefaultString(payload, "reasoningEffort", options.reasoningEffort, DEFAULT_ADVANCED_REASONING_EFFORT);
   addNonDefaultString(payload, "selectionMode", options.selectionMode, "single");
   addTrueBoolean(payload, "noSync", options.noSync);
   addTrueBoolean(payload, "noSynthesis", options.noSynthesis);
@@ -64,16 +64,30 @@ export function createAskPayload(question, mode, options = {}, attachments = [])
 }
 
 /**
- * @param {string} hash
- * @returns {string}
+ * @param {Record<string, unknown>} payload
+ * @param {File[]} files
+ * @returns {FormData}
  */
-export function getExpertViewFromHash(hash) {
-  const view = hash.replace(/^#/u, "");
-  return EXPERT_VIEWS.has(view) ? view : DEFAULT_EXPERT_VIEW;
+export function createAskFormData(payload, files) {
+  const formData = new FormData();
+  formData.set("payload", JSON.stringify(payload));
+  files.forEach((file, index) => {
+    formData.set(`file_${index}`, file, file.name);
+  });
+  return formData;
 }
 
 /**
- * @param {"simple" | "expert"} mode
+ * @param {string} hash
+ * @returns {string}
+ */
+export function getAdvancedViewFromHash(hash) {
+  const view = hash.replace(/^#/u, "");
+  return ADVANCED_VIEWS.has(view) ? view : DEFAULT_ADVANCED_VIEW;
+}
+
+/**
+ * @param {"simple" | "advanced"} mode
  * @returns {string}
  */
 export function formatModeCookie(mode) {

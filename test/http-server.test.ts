@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { createHmac } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAskJobManager } from "../src/core/jobs/ask-job-manager.ts";
@@ -126,6 +127,67 @@ describe("http-server", () => {
     });
   });
 
+  it("stores multipart ask attachments as temporary files for the job", async () => {
+    let attachmentPath = "";
+    const manager = createAskJobManager({
+      answerQuestionFn: async ({ attachments = [] }) => {
+        expect(attachments).toHaveLength(1);
+        const [attachment] = attachments;
+        expect(attachment).toMatchObject({
+          name: "requirements.txt",
+          mediaType: "text/plain",
+          size: 23
+        });
+        if (!attachment || !("path" in attachment)) {
+          throw new Error("Expected multipart upload to create an attachment file reference.");
+        }
+        attachmentPath = attachment.path;
+        expect(await readFile(attachment.path, "utf8")).toBe("Need temp file uploads.");
+
+        return {
+          mode: "answer",
+          question: "Use the uploaded file.",
+          selectedRepos: [{ name: "ask-the-code" }],
+          syncReport: [{ name: "ask-the-code", action: "skipped" }],
+          synthesis: {
+            text: "Final answer"
+          }
+        };
+      },
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpApp({ jobManager: manager });
+    const form = new FormData();
+    form.set("payload", JSON.stringify({
+      question: "Use the uploaded file.",
+      repoNames: ["ask-the-code"],
+      noSync: true
+    }));
+    form.set("file_0", new File(["Need temp file uploads."], "requirements.txt", { type: "text/plain" }));
+
+    const createResponse = await handler.fetch(new Request("http://atc.local/ask", {
+      body: form,
+      method: "POST"
+    }));
+    const createdJob = await createResponse.json() as { links: { self: string } };
+
+    expect(createResponse.status).toBe(202);
+    await waitFor(async () => {
+      const jobResponse = await handler.fetch(new Request(`http://atc.local${createdJob.links.self}`));
+      const job = await jobResponse.json() as { status: string };
+      return job.status === "completed";
+    });
+    await waitFor(async () => {
+      try {
+        await readFile(attachmentPath, "utf8");
+        return false;
+      } catch {
+        return true;
+      }
+    });
+  });
+
   it("serves the index, health, and options endpoints", async () => {
     const manager = createAskJobManager({
       answerQuestionFn: async () => ({
@@ -161,7 +223,7 @@ describe("http-server", () => {
 
     expect(indexResponse.statusCode).toBe(200);
     expect(indexResponse.headers["content-type"]).toContain("text/html");
-    expect(indexResponse.body).toContain("ask-the-code (ATC)");
+    expect(indexResponse.body).toContain("ask-the-code");
     expect(healthResponse.statusCode).toBe(200);
     expect(JSON.parse(healthResponse.body)).toEqual({
       status: "ok",
@@ -309,7 +371,53 @@ describe("http-server", () => {
     expect(startResponse.headers["set-cookie"]).toContain("atc_oauth_state=");
   });
 
-  it("marks GitHub SSO cookies secure when the redirect URI is HTTPS", async () => {
+  it("moves GitHub SSO start to the configured redirect origin before setting state", async () => {
+    const manager = createAskJobManager({
+      answerQuestionFn: async () => ({
+        mode: "answer",
+        question: "ignored",
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: {
+          text: "ignored"
+        }
+      }),
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpApp({
+      env: {
+        ATC_AUTH_SECRET: "test-secret",
+        ATC_GITHUB_CLIENT_ID: "client-id",
+        ATC_GITHUB_CLIENT_SECRET: "client-secret",
+        ATC_GITHUB_REDIRECT_URI: "http://localhost:8787/auth/github/callback"
+      },
+      jobManager: manager
+    });
+
+    const hostSwitchResponse = await performRequest(handler, {
+      method: "GET",
+      path: "/auth/github/start",
+      url: "http://127.0.0.1:8787/auth/github/start"
+    });
+    const canonicalStartResponse = await performRequest(handler, {
+      method: "GET",
+      path: "/auth/github/start",
+      url: "http://localhost:8787/auth/github/start"
+    });
+
+    expect(hostSwitchResponse.statusCode).toBe(302);
+    expect(hostSwitchResponse.headers.location).toBe("http://localhost:8787/auth/github/start");
+    expect(hostSwitchResponse.headers["set-cookie"]).toBeUndefined();
+    expect(canonicalStartResponse.statusCode).toBe(302);
+    expect(canonicalStartResponse.headers.location).toContain("https://github.com/login/oauth/authorize");
+    expect(canonicalStartResponse.headers.location).toContain(
+      `redirect_uri=${encodeURIComponent("http://localhost:8787/auth/github/callback")}`
+    );
+    expect(canonicalStartResponse.headers["set-cookie"]).toContain("atc_oauth_state=");
+  });
+
+  it("moves GitHub SSO start to HTTPS before setting state when the redirect URI is HTTPS", async () => {
     const manager = createAskJobManager({
       answerQuestionFn: async () => ({
         mode: "answer",
@@ -336,6 +444,39 @@ describe("http-server", () => {
     const startResponse = await performRequest(handler, {
       method: "GET",
       path: "/auth/github/start"
+    });
+
+    expect(startResponse.headers.location).toBe("https://atc.example/auth/github/start");
+    expect(startResponse.headers["set-cookie"]).toBeUndefined();
+  });
+
+  it("marks GitHub SSO cookies secure when the current request is HTTPS", async () => {
+    const manager = createAskJobManager({
+      answerQuestionFn: async () => ({
+        mode: "answer",
+        question: "ignored",
+        selectedRepos: [],
+        syncReport: [],
+        synthesis: {
+          text: "ignored"
+        }
+      }),
+      jobRetentionMs: 60_000
+    });
+    managers.push(manager);
+    const handler = createHttpApp({
+      env: {
+        ATC_AUTH_SECRET: "test-secret",
+        ATC_GITHUB_CLIENT_ID: "client-id",
+        ATC_GITHUB_CLIENT_SECRET: "client-secret"
+      },
+      jobManager: manager
+    });
+
+    const startResponse = await performRequest(handler, {
+      method: "GET",
+      path: "/auth/github/start",
+      url: "https://atc.example/auth/github/start"
     });
 
     expect(startResponse.headers["set-cookie"]).toContain("Secure");
@@ -915,7 +1056,7 @@ describe("http-server", () => {
     expect(htmlResponse.body).toContain("/ui/assets/app.js");
     expect(htmlResponse.body).toContain("Ask a question");
     expect(htmlResponse.body).toContain("Progress");
-    expect(htmlResponse.body).toContain("Attach files");
+    expect(htmlResponse.body).toContain("Drop files here or browse.");
   });
 
   it("serves the web UI at / when the client does not accept text/html", async () => {
@@ -940,7 +1081,7 @@ describe("http-server", () => {
 
     expect(jsonResponse.statusCode).toBe(200);
     expect(jsonResponse.headers["content-type"]).toContain("text/html");
-    expect(jsonResponse.body).toContain("ask-the-code (ATC)");
+    expect(jsonResponse.body).toContain("ask-the-code");
   });
 
   it("streams job events over server-sent events", async () => {

@@ -160,7 +160,7 @@ describe("api ask route", () => {
     });
   });
 
-  it("rejects API ask requests that include expert-only fields", async () => {
+  it("rejects API ask requests that include advanced-only fields", async () => {
     const jobManager = createHttpJobManager();
     const app = createTestApp({
       env: createApiEnv(),

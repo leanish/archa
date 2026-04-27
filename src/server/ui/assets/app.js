@@ -1,10 +1,11 @@
 // @ts-check
 
 import {
+  createAskFormData,
   createAskPayload,
   escapeHtml,
   formatModeCookie,
-  getExpertViewFromHash,
+  getAdvancedViewFromHash,
   getProgressPanelSummary,
   renderMarkdownHtml,
   renderRepositoryListHtml
@@ -13,7 +14,7 @@ import { createInitialPipeline, reducePipelineEvent, STAGE_IDS } from "./stage-m
 
 const THEME_STORAGE_KEY = "atc:theme";
 const MAX_CLIENT_ATTACHMENTS = 8;
-const MAX_CLIENT_ATTACHMENT_BYTES = 1024 * 1024;
+const MAX_CLIENT_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
 if (typeof document !== "undefined") {
   initApp();
@@ -24,7 +25,7 @@ function initApp() {
   let pipeline = createInitialPipeline();
   let currentAnswer = "";
   let askBlockedByAuth = false;
-  /** @type {Array<{ name: string, mediaType: string, contentBase64: string, size: number }>} */
+  /** @type {File[]} */
   let attachedFiles = [];
   /** @type {EventSource | null} */
   let eventSource = null;
@@ -32,7 +33,7 @@ function initApp() {
   applyInitialTheme(elements);
   bindCollapsiblePanels();
   bindModeSwitch(elements);
-  bindExpertViews(elements);
+  bindAdvancedViews(elements);
   elements.onAuthSession = session => {
     askBlockedByAuth = session.githubConfigured && !session.authenticated;
     setAskAuthState(elements, askBlockedByAuth);
@@ -40,10 +41,12 @@ function initApp() {
   void initAuth(elements);
   renderPipeline(elements, pipeline);
 
-  elements.themeToggle?.addEventListener("click", () => {
-    const currentTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-    setTheme(currentTheme, elements);
-  });
+  for (const themeToggle of elements.themeToggles) {
+    themeToggle.addEventListener("click", () => {
+      const currentTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      setTheme(currentTheme, elements);
+    });
+  }
 
   elements.browseFiles?.addEventListener("click", () => {
     elements.fileInput?.click();
@@ -133,14 +136,23 @@ function initApp() {
     renderPipeline(elements, pipeline);
 
     try {
-      const response = await fetch("/ask", {
-        body: JSON.stringify(createAskPayload(question, getCurrentMode(), readExpertOptions(), attachedFiles.map(({ size: _size, ...attachment }) => attachment))),
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json"
-        },
-        method: "POST"
-      });
+      const askPayload = createAskPayload(question, getCurrentMode(), readAdvancedOptions());
+      const response = attachedFiles.length > 0
+        ? await fetch("/ask", {
+          body: createAskFormData(askPayload, attachedFiles),
+          headers: {
+            Accept: "application/json"
+          },
+          method: "POST"
+        })
+        : await fetch("/ask", {
+          body: JSON.stringify(askPayload),
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          method: "POST"
+        });
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || `Request failed with ${response.status}`);
@@ -216,8 +228,8 @@ function getElements() {
     selectedRepos: document.querySelector("[data-selected-repos]"),
     statusLog: /** @type {HTMLPreElement | null} */ (document.querySelector("[data-status-log]")),
     submitButton: /** @type {HTMLButtonElement | null} */ (document.querySelector("[data-submit-button]")),
-    themeIcon: document.querySelector("[data-theme-icon]"),
-    themeToggle: document.querySelector("[data-theme-toggle]"),
+    themeIcons: Array.from(document.querySelectorAll("[data-theme-icon]")),
+    themeToggles: Array.from(document.querySelectorAll("[data-theme-toggle]")),
     toastRegion: document.querySelector("[data-toast-region]")
   };
 }
@@ -226,7 +238,7 @@ function bindModeSwitch(elements) {
   document.querySelectorAll("[data-mode-target]").forEach(button => {
     button.addEventListener("click", () => {
       const mode = button.getAttribute("data-mode-target");
-      if (mode !== "simple" && mode !== "expert") {
+      if (mode !== "simple" && mode !== "advanced") {
         return;
       }
 
@@ -237,24 +249,24 @@ function bindModeSwitch(elements) {
       url.searchParams.set("mode", mode);
       history.replaceState(null, "", url);
       updateModeSwitch(mode);
-      activateExpertView(getExpertViewFromHash(window.location.hash));
-      showToast(elements, `${mode === "expert" ? "Expert" : "Simple"} mode`);
+      activateAdvancedView(getAdvancedViewFromHash(window.location.hash));
+      showToast(elements, `${mode === "advanced" ? "Advanced" : "Simple"} mode`);
     });
   });
   updateModeSwitch(getCurrentMode());
 }
 
-function bindExpertViews(elements) {
+function bindAdvancedViews(elements) {
   window.addEventListener("hashchange", () => {
-    activateExpertView(getExpertViewFromHash(window.location.hash));
+    activateAdvancedView(getAdvancedViewFromHash(window.location.hash));
   });
   document.querySelectorAll("[data-view-link]").forEach(link => {
     link.addEventListener("click", () => {
       const view = link.getAttribute("data-view-link") ?? "new-ask";
-      activateExpertView(getExpertViewFromHash(`#${view}`));
+      activateAdvancedView(getAdvancedViewFromHash(`#${view}`));
     });
   });
-  activateExpertView(getExpertViewFromHash(window.location.hash));
+  activateAdvancedView(getAdvancedViewFromHash(window.location.hash));
 }
 
 function bindCollapsiblePanels() {
@@ -277,8 +289,8 @@ function bindCollapsiblePanels() {
   });
 }
 
-function activateExpertView(view) {
-  if (getCurrentMode() !== "expert") {
+function activateAdvancedView(view) {
+  if (getCurrentMode() !== "advanced") {
     showNewAskView();
     return;
   }
@@ -347,10 +359,10 @@ function updateModeSwitch(mode) {
 }
 
 function getCurrentMode() {
-  return document.body.dataset.mode === "expert" ? "expert" : "simple";
+  return document.body.dataset.mode === "advanced" ? "advanced" : "simple";
 }
 
-function readExpertOptions() {
+function readAdvancedOptions() {
   const form = document.querySelector("[data-ask-form]");
   const audience = document.querySelector('input[name="audience"]:checked')?.getAttribute("value") ?? "general";
   return {
@@ -383,8 +395,8 @@ function applyInitialTheme(elements) {
 function setTheme(theme, elements) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem(THEME_STORAGE_KEY, theme);
-  if (elements.themeIcon) {
-    elements.themeIcon.textContent = theme === "dark" ? "☾" : "☀";
+  for (const themeIcon of elements.themeIcons) {
+    themeIcon.textContent = theme === "dark" ? "☾" : "☀";
   }
 }
 
@@ -483,34 +495,14 @@ async function addAttachedFiles(elements, existingFiles, files) {
     }
 
     if (file.size > MAX_CLIENT_ATTACHMENT_BYTES) {
-      showToast(elements, `${file.name} exceeds the 1 MB attachment limit.`);
+      showToast(elements, `${file.name} exceeds the 100 MB attachment limit.`);
       continue;
     }
 
-    nextFiles.push(await readAttachment(file));
+    nextFiles.push(file);
   }
 
   return nextFiles;
-}
-
-async function readAttachment(file) {
-  const buffer = await file.arrayBuffer();
-  return {
-    name: file.name,
-    mediaType: file.type || "application/octet-stream",
-    contentBase64: arrayBufferToBase64(buffer),
-    size: file.size
-  };
-}
-
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return btoa(binary);
 }
 
 function renderAttachedFiles(elements, files, onChange) {

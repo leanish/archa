@@ -1,7 +1,8 @@
 import type { Env, Hono } from "hono";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 
-import type { AskJobEvent, AskJobSnapshot } from "../../core/types.ts";
+import type { AskJobEvent, AskJobSnapshot, AskRequest } from "../../core/types.ts";
+import { saveAttachments, type IncomingAttachment, type SavedAttachments } from "../attachments.ts";
 import {
   HttpError,
   isTerminalStatus,
@@ -18,8 +19,25 @@ const SSE_RETRY_MS = 1000;
 export function registerAskRoutes<E extends Env>(app: Hono<E>, deps: Pick<ApiRouteDeps, "bodyLimitBytes" | "env" | "jobManager">): void {
   app.post("/ask", async c => {
     const refreshedSessionCookie = requireAuthenticatedAsk(c.req.header("cookie"), deps.env);
-    const payload = normalizeAskRequest(await readJsonBody(c.req.raw, deps.bodyLimitBytes));
-    const response = c.json(withJobLinks(deps.jobManager.createJob(payload)), 202);
+    const contentType = c.req.header("content-type") ?? "";
+    const multipartRequest = contentType.toLowerCase().startsWith("multipart/form-data")
+      ? await readMultipartAskRequest(c.req.raw)
+      : null;
+    const payload = multipartRequest?.request
+      ?? normalizeAskRequest(await readJsonBody(c.req.raw, deps.bodyLimitBytes));
+    let job: AskJobSnapshot;
+    try {
+      job = deps.jobManager.createJob(payload);
+    } catch (error) {
+      if (multipartRequest) {
+        await multipartRequest.saved.cleanup();
+      }
+      throw error;
+    }
+    if (multipartRequest) {
+      scheduleAttachmentCleanup(deps.jobManager, job.id, multipartRequest.saved);
+    }
+    const response = c.json(withJobLinks(job), 202);
     if (refreshedSessionCookie) {
       response.headers.append("Set-Cookie", serializeRefreshedSessionCookie(refreshedSessionCookie, deps.env, c.req.url));
     }
@@ -51,6 +69,95 @@ function requireAuthenticatedAsk(cookieHeader: string | undefined, env: ApiRoute
     throw new HttpError(401, "Sign in with GitHub before asking a question.");
   }
   return refreshedCookie;
+}
+
+type MultipartAskRequest = {
+  request: AskRequest;
+  saved: SavedAttachments;
+};
+
+async function readMultipartAskRequest(request: Request): Promise<MultipartAskRequest> {
+  const formData = await request.formData();
+  const payload = formData.get("payload");
+  if (typeof payload !== "string") {
+    throw new HttpError(400, 'Multipart request must include a "payload" string field with the ask request JSON.');
+  }
+
+  let parsedPayload: unknown;
+  try {
+    parsedPayload = JSON.parse(payload) as unknown;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new HttpError(400, `Multipart "payload" is not valid JSON: ${message}`);
+  }
+
+  const incoming: IncomingAttachment[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("file_") || !(value instanceof File)) {
+      continue;
+    }
+
+    incoming.push({
+      name: value.name || key,
+      mediaType: value.type || "application/octet-stream",
+      bytes: new Uint8Array(await value.arrayBuffer())
+    });
+  }
+
+  const normalized = normalizeAskRequest(parsedPayload);
+  const saved = await saveAttachments(incoming).catch(error => {
+    const statusCode = typeof (error as { statusCode?: unknown }).statusCode === "number"
+      ? (error as { statusCode: number }).statusCode
+      : 400;
+    throw new HttpError(statusCode, error instanceof Error ? error.message : String(error));
+  });
+
+  return {
+    request: {
+      ...normalized,
+      ...(saved.refs.length > 0 ? { attachments: saved.refs } : {})
+    },
+    saved
+  };
+}
+
+function scheduleAttachmentCleanup(
+  jobManager: Pick<ApiRouteDeps["jobManager"], "getJob" | "subscribe">,
+  jobId: string,
+  saved: SavedAttachments
+): void {
+  if (saved.refs.length === 0) {
+    return;
+  }
+
+  let cleaned = false;
+  let fallbackCleanupTimer: NodeJS.Timeout | null = null;
+  const cleanup = (): void => {
+    if (cleaned) {
+      return;
+    }
+
+    cleaned = true;
+    if (fallbackCleanupTimer) {
+      clearTimeout(fallbackCleanupTimer);
+    }
+    void saved.cleanup().catch(() => {});
+  };
+  fallbackCleanupTimer = setTimeout(cleanup, 10 * 60 * 1000);
+  fallbackCleanupTimer.unref?.();
+  const unsubscribe = jobManager.subscribe(jobId, event => {
+    if (!isTerminalStatus(event.type)) {
+      return;
+    }
+
+    cleanup();
+    unsubscribe?.();
+  });
+  const currentJob = jobManager.getJob(jobId);
+  if (!unsubscribe || (currentJob && isTerminalStatus(currentJob.status))) {
+    cleanup();
+    unsubscribe?.();
+  }
 }
 
 function decodeJobId(jobId: string): string {

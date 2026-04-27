@@ -365,7 +365,9 @@ function toHistoryAttachment(attachment: AskAttachment): ApiHistoryAttachment {
   return {
     name: attachment.name,
     mediaType: attachment.mediaType,
-    bytes: Buffer.from(attachment.contentBase64, "base64").byteLength
+    bytes: "contentBase64" in attachment
+      ? Buffer.from(attachment.contentBase64, "base64").byteLength
+      : attachment.size
   };
 }
 

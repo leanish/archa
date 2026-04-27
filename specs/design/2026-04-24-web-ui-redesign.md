@@ -6,7 +6,7 @@ Scope: `src/server/` — the `atc-server` HTTP adapter and its built-in web UI
 
 ## Goal
 
-Replace the previous hand-rolled single-string web UI with a redesigned interface that matches the provided mocks (Simple mode + Expert mode), built on Hono. Keep behavior local-only during development: no PRs, no git commits initiated from this work unless the user explicitly asks later.
+Replace the previous hand-rolled single-string web UI with a redesigned interface that matches the provided mocks (Simple mode + Advanced mode), built on Hono. Keep behavior local-only during development: no PRs, no git commits initiated from this work unless the user explicitly asks later.
 
 The redesign is visually close to the mocks but not pixel-perfect. This capabilities copy promotes file attachments and GitHub sign-in from visual stubs into local server-backed functionality.
 
@@ -61,18 +61,18 @@ src/server/
     ui.ts                       GET /, GET /ui/assets/*
   ui/
     pages/
-      app-page.tsx              root layout; renders Simple or Expert based on query/header
+      app-page.tsx              root layout; renders Simple or Advanced based on query/header
     components/
       header.tsx
-      logo.tsx                  inline rainbow ATC SVG
-      sidebar.tsx               expert-mode left nav
-      mode-switch.tsx           Simple/Expert tabs
+      logo.tsx                  shared ATC logo image
+      sidebar.tsx               advanced-mode left nav
+      mode-switch.tsx           Simple/Advanced tabs
       ask-card.tsx              question + drop zone + submit
       drop-zone.tsx
       file-list.tsx
       progress-panel.tsx        5-stage pipeline
       after-the-run.tsx         repos used + run summary
-      options-panel.tsx         expert-only: audience/model/etc.
+      options-panel.tsx         advanced-only: audience/model/etc.
       answer-card.tsx
       empty-state.tsx           reused by stub pages
     assets/
@@ -156,19 +156,19 @@ Trade-off considered: a listener-level dispatcher (Hono vs legacy by path prefix
 
 ### Routes served by the UI
 
-- `GET /` — single app page. Mode (Simple | Expert) is selected **on the server** from two inputs, in priority order:
-  1. `?mode=simple` or `?mode=expert` query string — highest priority; the response also sets the `atc_mode` cookie to match so future loads stick.
+- `GET /` — single app page. Mode (Simple | Advanced) is selected **on the server** from two inputs, in priority order:
+  1. `?mode=simple` or `?mode=advanced` query string — highest priority; the response also sets the `atc_mode` cookie to match so future loads stick.
   2. `atc_mode` cookie — read from `Cookie` header.
   3. Default: `simple`.
-  Client-side localStorage is NOT part of this resolution. When the user flips the Simple/Expert switch in the UI, the client writes the `atc_mode` cookie via `document.cookie` with attributes `Path=/; Max-Age=31536000; SameSite=Lax` (one year, so mode survives browser restarts), updates the DOM to the new mode without reloading, and updates the URL's `?mode=` via `history.replaceState` so reloads are consistent. The server sets the same attributes when it writes the cookie in response to a `?mode=` query. This keeps the server's first-byte render correct and avoids a client-side hydration flip.
+  Client-side localStorage is NOT part of this resolution. When the user flips the Simple/Advanced switch in the UI, the client writes the `atc_mode` cookie via `document.cookie` with attributes `Path=/; Max-Age=31536000; SameSite=Lax` (one year, so mode survives browser restarts), updates the DOM to the new mode without reloading, and updates the URL's `?mode=` via `history.replaceState` so reloads are consistent. The server sets the same attributes when it writes the cookie in response to a `?mode=` query. This keeps the server's first-byte render correct and avoids a client-side hydration flip.
 - `GET /ui/assets/*` — static assets.
-- Sidebar nav in Expert mode uses hash-based view state: `/#new-ask` (default), `/#history`, `/#repos`, `/#sync-status`, `/#config-path`, `/#edit-config`, `/#init-config`, `/#discover`, `/#add-repository`.
+- Sidebar nav in Advanced mode uses hash-based view state: `/#new-ask` (default), `/#history`, `/#repos`, `/#sync-status`, `/#config-path`, `/#edit-config`, `/#init-config`, `/#discover`, `/#add-repository`.
 
 ### Simple mode
 
 Header:
 - Rainbow ATC logo.
-- Title line "ask-the-code (ATC)", subtitle "Repo-aware · Codex".
+- Title line "ask-the-code".
 - Theme toggle (sun/moon icon).
 - "Sign in with GitHub" button.
 
@@ -180,19 +180,19 @@ Right column (~1/3 width):
 - Progress panel: 5 stages (Job Created, Repo Selection, Repository Sync, Codex Execution, Synthesis), each with a state (waiting/running/ok/failed), optional timestamp, and subtext. "View Full Log" button expands the raw status log inline.
 - After-the-run panel: empty state initially; on completion, shows selected repos with paths.
 
-### Expert mode
+### Advanced mode
 
 Left sidebar (dark):
-- Header area: rainbow ATC logo, "ask-the-code (ATC)", subtitle "Repo-aware · Local".
+- Header area: rainbow ATC logo, "ask-the-code".
 - Sections:
-  - ASK — New Ask (active), History (count, stub empty state).
+  - ASK — Ask (active), History (count, stub empty state).
   - REPOSITORIES — All Repositories (functional, lists from `/repos`), Sync Status (stub).
   - CONFIG — Config Path, Edit Config, Init Config (all stubs).
   - TOOLS — Discover GitHub, Add Repository (stubs).
 - Footer: `ATC v{version}`.
 
 Top row of main area:
-- Simple/Expert tab switch.
+- Simple/Advanced tab switch.
 
 Main column:
 - Ask card (same as Simple).
@@ -200,7 +200,7 @@ Main column:
 - Previous question strip below — empty state (stub; shows nothing when no history).
 
 Right column:
-- Options panel (collapsible): Audience (General/Codebase), Model select, Reasoning effort select, Repo selection mode select, Skip repository sync toggle, No synthesis toggle. **These are functional, not stubs.** When Expert mode is active, every non-default value is serialized into the `POST /ask` request body (`audience`, `model`, `reasoningEffort`, `selectionMode`, `noSync`, `noSynthesis`) — the backend already accepts all of these fields. In Simple mode, the Options panel is not rendered and the request uses backend defaults. The existing `selectionShadowCompare` diagnostic checkbox stays in Expert's Options panel and is serialized the same way.
+- Options panel (collapsible): Audience (General/Codebase), Model select, Reasoning effort select, Repo selection mode select, Skip repository sync toggle, No synthesis toggle. **These are functional, not stubs.** When Advanced mode is active, every non-default value is serialized into the `POST /ask` request body (`audience`, `model`, `reasoningEffort`, `selectionMode`, `noSync`, `noSynthesis`) — the backend already accepts all of these fields. In Simple mode, the Options panel is not rendered and the request uses backend defaults. The existing `selectionShadowCompare` diagnostic checkbox stays in Advanced's Options panel and is serialized the same way.
 - Progress panel (same as Simple, with Job ID visible in the Job Created row).
 - Run summary: Repositories used (count + names), Total duration, Steps completed, plus a "Completed successfully" badge on success.
 
@@ -220,8 +220,8 @@ Right column:
 | Run summary | Functional where data exists: repositories used (from `job.result.selectedRepos`), total duration (from event timestamps), steps completed (count of stages reaching `ok`). "Completed successfully" only when `job.status === "completed"`. |
 | Progress timestamps | Functional — derived from SSE `status` event timestamps. |
 | Theme toggle | Functional — CSS custom props, `localStorage` key `atc:theme`, system default on first visit. Theme is client-only; no server involvement. |
-| Simple/Expert toggle | Functional — `atc_mode` cookie (read by server for first-byte render) and `?mode=` query override. Toggle writes the cookie and updates the URL via `history.replaceState`. |
-| Expert Options panel | Functional — values serialized into `POST /ask` as described in the Expert mode section. Not a stub. |
+| Simple/Advanced toggle | Functional — `atc_mode` cookie (read by server for first-byte render) and `?mode=` query override. Toggle writes the cookie and updates the URL via `history.replaceState`. |
+| Advanced Options panel | Functional — values serialized into `POST /ask` as described in the Advanced mode section. Not a stub. |
 
 ### Stage mapping
 
@@ -276,7 +276,7 @@ Acceptance: `npm run check` passes; `atc-server` runs; `curl http://127.0.0.1:87
 - Add `src/server/ui/pages/app-page.tsx` and components for header/logo/ask-card/drop-zone/file-list/progress-panel/after-the-run/answer-card/empty-state.
 - Add `src/server/ui/assets/styles.css` (CSS custom props for light/dark, responsive two-column layout).
 - Add `src/server/ui/assets/stage-mapping.js` as the single source of truth. Plain ES module with `// @ts-check`, usable directly by the browser. Ships a `stage-mapping.d.ts` sidecar so server-side `.tsx` components (if any need the type) can import it. Vitest tests import the `.js` file directly — no transpilation of this file.
-- Add `src/server/ui/assets/app.js` implementing: SSE subscription, `stage-mapping.js` integration, theme toggle, mode toggle read (Expert mode rendered in Step 3), drop-zone UI state, submit flow.
+- Add `src/server/ui/assets/app.js` implementing: SSE subscription, `stage-mapping.js` integration, theme toggle, mode toggle read (Advanced mode rendered in Step 3), drop-zone UI state, submit flow.
 - Answer rendering is fully client-side in `app.js`: it imports nothing on the server side. It reads `window.marked` and `window.DOMPurify` (loaded once at page load via `<script>` tags), then calls `marked.parse(text)` → `DOMPurify.sanitize(...)` → `answerEl.innerHTML = ...`. No `src/server/ui/markdown.ts` — the wrapping is a 5-line client helper inside `app.js`.
 - Add route `GET /` in `src/server/routes/ui.ts`, rendering `app-page.tsx` in Simple mode. Register it in `app.ts` ahead of the `app.all("*", ...)` catch-all so `/` is now owned by Hono and no longer falls through to the legacy handler.
 - Keep the old single-string UI on disk but unreachable via HTTP (the new route shadows it).
@@ -284,16 +284,16 @@ Acceptance: `npm run check` passes; `atc-server` runs; `curl http://127.0.0.1:87
 
 Acceptance: opening the server in a browser shows the new Simple UI with theme toggle, drop zone stub, progress panel that animates through stages during a real Codex run, and a markdown-rendered answer. **XSS smoke check (mandatory):** manually feed an answer string containing `<script>window.__xssFired=true</script>` and confirm in DevTools that `window.__xssFired` is `undefined` after the answer renders. Record the result in the commit message or PR notes.
 
-### Step 3 — Expert mode + sidebar
+### Step 3 — Advanced mode + sidebar
 
 - Add `sidebar.tsx`, `mode-switch.tsx`, `options-panel.tsx`, run-summary rendering inside `after-the-run.tsx`.
-- Extend `app.js` with: mode toggle write path, hash-based view routing for sidebar sections, run-summary computation from SSE events, Expert-only stub views rendered into the main column.
-- Extend `styles.css` with sidebar theme and expert layout.
+- Extend `app.js` with: mode toggle write path, hash-based view routing for sidebar sections, run-summary computation from SSE events, Advanced-only stub views rendered into the main column.
+- Extend `styles.css` with sidebar theme and advanced layout.
 - Wire the All Repositories view to the existing `/repos` endpoint (reused from current client).
 - Stubs rendered via `empty-state.tsx` with the messages specified in the Stub behaviors table.
-- Tests: snapshot test for `app-page.tsx` in Expert mode; stage-mapping tests unchanged; no new backend tests.
+- Tests: snapshot test for `app-page.tsx` in Advanced mode; stage-mapping tests unchanged; no new backend tests.
 
-Acceptance: Simple/Expert switch works both directions, persists, and supports `?mode=expert`. Sidebar nav swaps the main panel without a page reload. All stub pages render their messages. Run summary updates during and after a real run.
+Acceptance: Simple/Advanced switch works both directions, persists, and supports `?mode=advanced`. Sidebar nav swaps the main panel without a page reload. All stub pages render their messages. Run summary updates during and after a real run.
 
 ### Step 4 — Port API routes to Hono
 
@@ -319,7 +319,7 @@ Acceptance: the old single-string UI module is gone; docs describe the current s
 - **Stage mapping** — unit tests with at least one example per stage plus edge cases (unknown message, messages mentioning multiple stages, codex prefix detection).
 - **Markdown rendering** — since parsing and sanitization run in the browser, tests for this piece use a tiny Node harness that loads the vendored `marked` and `DOMPurify` scripts against a `happy-dom` (or `jsdom`) instance created ad-hoc in the test. Alternative: skip automated tests for the vendored scripts and rely on manual verification of the rendered answer plus a single XSS smoke check (`<script>alert(1)</script>` in the answer string must not produce a `<script>` tag in the DOM). Pragmatic default: go with the manual smoke check; adding a DOM environment just for two assertions isn't worth the test-time complexity. Flag this in the PR body.
 - **HTTP contract** — port existing `http-server` tests to Hono in Step 4 without changing their expectations.
-- **UI snapshots** — one per mode (Simple, Expert). Regenerate whenever layout intentionally changes.
+- **UI snapshots** — one per mode (Simple, Advanced). Regenerate whenever layout intentionally changes.
 - **Manual verification** — each step ends with `npm run server`, browser open, the flows listed under each step's Acceptance.
 
 No jsdom, no Playwright, no new browser test stack.

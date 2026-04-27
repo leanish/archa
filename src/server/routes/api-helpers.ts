@@ -10,6 +10,7 @@ import type {
   AskJobSnapshot,
   AskRequest,
   Environment,
+  InlineAskAttachment,
   LoadedConfig,
   ManagedRepoDefinition,
   RepoSelectionStrategy
@@ -151,7 +152,7 @@ export function normalizeApiAskRequest(body: unknown): Partial<AskRequest> & Pic
   };
 }
 
-function normalizeAttachments(value: unknown): AskAttachment[] {
+function normalizeAttachments(value: unknown): InlineAskAttachment[] {
   if (value == null) {
     return [];
   }
@@ -177,7 +178,7 @@ function normalizeAttachments(value: unknown): AskAttachment[] {
   return attachments;
 }
 
-function normalizeAttachment(value: unknown, index: number): AskAttachment {
+function normalizeAttachment(value: unknown, index: number): InlineAskAttachment {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new HttpError(400, `"attachments[${index}]" must be a JSON object.`);
   }

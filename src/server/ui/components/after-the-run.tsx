@@ -1,13 +1,13 @@
 type AfterTheRunProps = {
-  expert?: boolean;
+  advanced?: boolean;
 };
 
-export function AfterTheRun({ expert = false }: AfterTheRunProps) {
+export function AfterTheRun({ advanced = false }: AfterTheRunProps) {
   return (
     <section class="panel after-run-panel collapsible-panel" data-collapsible-panel="run-summary">
       <div class="panel-heading compact collapsible-heading">
         <div>
-          <h2>{expert ? "Run summary" : "After The Run"}</h2>
+          <h2>{advanced ? "Run summary" : "After The Run"}</h2>
           <p data-run-summary data-collapsible-summary="run-summary">No repositories used yet.</p>
         </div>
         <button
@@ -15,7 +15,7 @@ export function AfterTheRun({ expert = false }: AfterTheRunProps) {
           type="button"
           aria-expanded="false"
           aria-controls="run-summary-panel-body"
-          aria-label={expert ? "Toggle Run summary" : "Toggle After The Run"}
+          aria-label={advanced ? "Toggle Run summary" : "Toggle After The Run"}
           data-collapsible-trigger="run-summary"
         ></button>
       </div>

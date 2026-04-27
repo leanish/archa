@@ -2,7 +2,7 @@ import { AfterTheRun } from "../components/after-the-run.tsx";
 import { AnswerCard } from "../components/answer-card.tsx";
 import { AskCard } from "../components/ask-card.tsx";
 import { Header, HeaderActions } from "../components/header.tsx";
-import { ExpertViewPanels } from "../components/expert-view-panels.tsx";
+import { AdvancedViewPanels } from "../components/advanced-view-panels.tsx";
 import { ModeSwitch } from "../components/mode-switch.tsx";
 import { OptionsPanel } from "../components/options-panel.tsx";
 import { PreviousQuestionStrip } from "../components/previous-question-strip.tsx";
@@ -11,7 +11,7 @@ import { Sidebar } from "../components/sidebar.tsx";
 import { resolvePackageVersion } from "../package-version.ts";
 
 type AppPageProps = {
-  mode: "simple" | "expert";
+  mode: "simple" | "advanced";
 };
 
 export function AppPage({ mode }: AppPageProps) {
@@ -22,7 +22,7 @@ export function AppPage({ mode }: AppPageProps) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>ask-the-code (ATC)</title>
+        <title>ask-the-code</title>
         <link rel="icon" type="image/svg+xml" href="/ui/assets/logo.svg" />
         <link rel="stylesheet" href="/ui/assets/styles.css" />
         <script src="/ui/assets/vendor/marked.min.js"></script>
@@ -33,26 +33,26 @@ export function AppPage({ mode }: AppPageProps) {
         <div class="app-shell" data-app-root data-mode={mode}>
           <Sidebar version={version} />
           <div class="app-content">
-            <div class="expert-topbar" data-expert-only>
+            <div class="advanced-topbar" data-advanced-only>
               <ModeSwitch mode={mode} />
               <div class="header-actions">
                 <HeaderActions />
               </div>
             </div>
             <div class="simple-only">
-              <Header />
+              <Header mode={mode} />
             </div>
             <main class="app-layout">
               <section class="workbench" aria-label="Ask the code">
                 <AskCard />
                 <AnswerCard />
                 <PreviousQuestionStrip />
-                <ExpertViewPanels />
+                <AdvancedViewPanels />
               </section>
               <aside class="run-column" aria-label="Run details">
                 <OptionsPanel />
                 <ProgressPanel />
-                <AfterTheRun expert={mode === "expert"} />
+                <AfterTheRun advanced={mode === "advanced"} />
               </aside>
             </main>
           </div>

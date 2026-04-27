@@ -1,16 +1,21 @@
 import { Logo } from "./logo.tsx";
+import { ModeSwitch } from "./mode-switch.tsx";
 
-export function Header() {
+type HeaderProps = {
+  mode: "simple" | "advanced";
+};
+
+export function Header({ mode }: HeaderProps) {
   return (
     <header class="app-header">
       <div class="brand-lockup">
         <Logo />
         <div>
-          <h1>ask-the-code (ATC)</h1>
-          <p>Repo-aware · Codex</p>
+          <h1>ask-the-code</h1>
         </div>
       </div>
       <div class="header-actions">
+        <ModeSwitch mode={mode} />
         <HeaderActions />
       </div>
     </header>

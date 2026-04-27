@@ -203,10 +203,19 @@ export interface CodexScopeRepo {
   branch?: string;
 }
 
-export interface AskAttachment {
+export type AskAttachment = InlineAskAttachment | FileAskAttachment;
+
+export interface InlineAskAttachment {
   name: string;
   mediaType: string;
   contentBase64: string;
+}
+
+export interface FileAskAttachment {
+  name: string;
+  mediaType: string;
+  path: string;
+  size: number;
 }
 
 export interface RunCodexQuestionInput {

@@ -46,7 +46,7 @@ flowchart LR
 8. Codex runs against either the single selected repo or the managed repos root.
 9. The adapter renders the result:
    - CLI: text to stdout plus status to stderr
-   - HTTP: async job state plus SSE status events, with the web UI rendering Simple and Expert modes on top of the same endpoints
+   - HTTP: async job state plus SSE status events, with the web UI rendering Simple and Advanced modes on top of the same endpoints
 
 ## HTTP ask flow
 
@@ -59,7 +59,7 @@ sequenceDiagram
   participant Sync as "Sync coordinator"
   participant Codex as "Codex runner"
 
-  Client->>Server: POST /ask (+ optional attachments)
+  Client->>Server: POST /ask (+ optional JSON or multipart attachments)
   Server->>Jobs: create job
   Jobs-->>Client: 202 Accepted + job links
 
@@ -69,7 +69,7 @@ sequenceDiagram
   Jobs->>Core: run answerQuestion()
   Core->>Sync: sync selected repos
   Sync-->>Core: sync report
-  Core->>Codex: run codex exec with question + attachments or skip with noSynthesis
+  Core->>Codex: run codex exec with question + attachment content/paths or skip with noSynthesis
   Codex-->>Core: synthesis result
   Core-->>Jobs: final result + status messages
   Jobs-->>Server: completed job state
@@ -132,7 +132,7 @@ Within one `atc-server` process, concurrent jobs share repo sync work by repo di
 - `src/core/jobs/ask-job-manager.ts`
   Maintains in-memory async jobs, per-job event history, and bounded execution concurrency.
 - `src/server/routes/ask.ts`
-  Exposes `POST /ask`, `GET /jobs/:id`, `GET /jobs/:id/events`, and the removed `POST /jobs` compatibility error using Hono route handlers.
+  Exposes `POST /ask`, `GET /jobs/:id`, `GET /jobs/:id/events`, and the removed `POST /jobs` compatibility error using Hono route handlers. Browser multipart uploads are saved as temporary file attachments and cleaned up after terminal job events.
 - `src/server/routes/api-ask.ts`
   Exposes API-only `POST /api/v1/ask` and `GET /api/v1/history`, enforcing bearer-token plus signed interaction headers and accepting only Simple-mode ask bodies.
 - `src/server/api-history-store.ts`
@@ -140,11 +140,11 @@ Within one `atc-server` process, concurrent jobs share repo sync work by repo di
 - `src/server/routes/auth.ts`
   Exposes GitHub SSO session, login, callback, and logout endpoints for the built-in web UI. Sessions are local signed cookies with a 30-day sliding expiry and no per-session server-side invalidation list; GitHub OAuth credentials come from environment variables.
 - `src/server/routes/repos.ts`
-  Exposes the configured repo catalog consumed by the Expert mode repositories view.
+  Exposes the configured repo catalog consumed by the Advanced mode repositories view.
 - `src/server/routes/health.ts`
   Exposes the server health and in-memory job counts.
 - `src/server/routes/ui.tsx`
-  Renders the built-in web UI at `GET /`, resolving Simple or Expert mode from `?mode=` and the `atc_mode` cookie.
+  Renders the built-in web UI at `GET /`, resolving Simple or Advanced mode from `?mode=` and the `atc_mode` cookie.
 - `src/server/ui/pages/` and `src/server/ui/components/`
   Contain the Hono JSX page and component tree for the built-in web UI.
 - `src/server/ui/assets/`

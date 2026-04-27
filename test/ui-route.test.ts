@@ -15,8 +15,9 @@ describe("UI route", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(html).toContain("ask-the-code (ATC)");
+    expect(html).toContain("ask-the-code");
     expect(html).toContain("data-mode=\"simple\"");
+    expect(html).toContain("Advanced");
     expect(html).toContain("/ui/assets/logo.svg");
     expect(html).toContain("/ui/assets/styles.css");
     expect(html).toContain("/ui/assets/app.js");
@@ -24,10 +25,10 @@ describe("UI route", () => {
     expect(html).toContain("/ui/assets/vendor/purify.min.js");
   });
 
-  it("serves expert mode from the query string and stores it in a cookie", async () => {
+  it("serves advanced mode from the query string and stores it in a cookie", async () => {
     const app = createTestApp();
 
-    const response = await app.fetch(new Request("http://atc.local/?mode=expert", {
+    const response = await app.fetch(new Request("http://atc.local/?mode=advanced", {
       headers: {
         Accept: "text/html"
       }
@@ -35,11 +36,11 @@ describe("UI route", () => {
     const html = await response.text();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("atc_mode=expert");
-    expect(html).toContain("data-mode=\"expert\"");
+    expect(response.headers.get("set-cookie")).toContain("atc_mode=advanced");
+    expect(html).toContain("data-mode=\"advanced\"");
     expect(html).toContain("ATC v0.1.0");
     expect(html).toContain("Simple");
-    expect(html).toContain("Expert");
+    expect(html).toContain("Advanced");
     expect(html).toContain("All Repositories");
     expect(html).not.toContain("sidebar-count");
     expect(html).toContain("Options");
@@ -60,18 +61,18 @@ describe("UI route", () => {
     expect(html).toContain("data-view-panel=\"repos\"");
   });
 
-  it("serves expert mode from the mode cookie when no query mode is present", async () => {
+  it("serves advanced mode from the mode cookie when no query mode is present", async () => {
     const app = createTestApp();
 
     const response = await app.fetch(new Request("http://atc.local/", {
       headers: {
         Accept: "text/html",
-        Cookie: "atc_mode=expert"
+        Cookie: "atc_mode=advanced"
       }
     }));
     const html = await response.text();
 
-    expect(html).toContain("data-mode=\"expert\"");
+    expect(html).toContain("data-mode=\"advanced\"");
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 });
