@@ -1,13 +1,15 @@
 import type { Env, Hono } from "hono";
 
+import { parseCookies, serializeCookie } from "../http-cookies.ts";
 import { AppPage } from "../ui/pages/app-page.tsx";
 
 type UiMode = "simple" | "expert";
+const MODE_COOKIE_MAX_AGE_SECONDS = 31_536_000;
 
 export function registerUiRoutes<E extends Env>(app: Hono<E>): void {
   app.get("/", c => {
     const urlMode = normalizeMode(c.req.query("mode"));
-    const mode = urlMode ?? normalizeMode(readCookie(c.req.header("Cookie"), "atc_mode")) ?? "simple";
+    const mode = urlMode ?? normalizeMode(parseCookies(c.req.header("Cookie")).atc_mode) ?? "simple";
 
     if (urlMode) {
       c.header("Set-Cookie", formatModeCookie(urlMode));
@@ -23,21 +25,8 @@ function normalizeMode(value: string | undefined): UiMode | null {
   return value === "simple" || value === "expert" ? value : null;
 }
 
-function readCookie(header: string | undefined, name: string): string | undefined {
-  if (!header) {
-    return undefined;
-  }
-
-  for (const part of header.split(";")) {
-    const [rawName, ...rawValue] = part.trim().split("=");
-    if (rawName === name) {
-      return decodeURIComponent(rawValue.join("="));
-    }
-  }
-
-  return undefined;
-}
-
 function formatModeCookie(mode: UiMode): string {
-  return `atc_mode=${mode}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  return serializeCookie("atc_mode", mode, {
+    maxAge: MODE_COOKIE_MAX_AGE_SECONDS
+  });
 }

@@ -3,6 +3,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Env, Hono } from "hono";
 
 import type { Environment } from "../../core/types.ts";
+import { clearCookie, parseCookies, serializeCookie } from "../http-cookies.ts";
 import { HttpError } from "./api-helpers.ts";
 
 const SESSION_COOKIE = "atc_session";
@@ -116,6 +117,7 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
         secure: shouldUseSecureCookies(config, c.req.url)
       }),
       clearCookie(OAUTH_STATE_COOKIE, {
+        httpOnly: true,
         secure: shouldUseSecureCookies(config, c.req.url)
       })
     ]);
@@ -127,6 +129,7 @@ export function registerAuthRoutes<E extends Env>(app: Hono<E>, deps: AuthRouteD
       "Content-Type": "application/json"
     });
     headers.append("Set-Cookie", clearCookie(SESSION_COOKIE, {
+      httpOnly: true,
       secure: shouldUseSecureCookies(config, c.req.url)
     }));
     return new Response(JSON.stringify({ ok: true }), {
@@ -348,46 +351,4 @@ function redirectWithCookies(location: string, cookies: string[]): Response {
     headers,
     status: 302
   });
-}
-
-function parseCookies(header: string | undefined): Record<string, string> {
-  if (!header) {
-    return {};
-  }
-
-  const cookies: Record<string, string> = {};
-  for (const part of header.split(";")) {
-    const [name, ...valueParts] = part.trim().split("=");
-    if (!name || valueParts.length === 0) {
-      continue;
-    }
-    cookies[name] = decodeURIComponent(valueParts.join("="));
-  }
-  return cookies;
-}
-
-function serializeCookie(
-  name: string,
-  value: string,
-  options: { httpOnly?: boolean; maxAge?: number; secure?: boolean } = {}
-): string {
-  return [
-    `${name}=${encodeURIComponent(value)}`,
-    "Path=/",
-    `Max-Age=${options.maxAge ?? SESSION_MAX_AGE_SECONDS}`,
-    "SameSite=Lax",
-    options.secure ? "Secure" : "",
-    options.httpOnly ? "HttpOnly" : ""
-  ].filter(Boolean).join("; ");
-}
-
-function clearCookie(name: string, options: { secure?: boolean } = {}): string {
-  return [
-    `${name}=`,
-    "Path=/",
-    "Max-Age=0",
-    "SameSite=Lax",
-    options.secure ? "Secure" : "",
-    "HttpOnly"
-  ].filter(Boolean).join("; ");
 }

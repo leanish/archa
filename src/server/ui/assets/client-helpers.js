@@ -3,6 +3,7 @@
 export const DEFAULT_EXPERT_VIEW = "new-ask";
 export const DEFAULT_EXPERT_MODEL = "gpt-5.4-mini";
 export const DEFAULT_EXPERT_REASONING_EFFORT = "low";
+export const MODE_COOKIE_MAX_AGE_SECONDS = 31_536_000;
 export const EXPERT_VIEW_IDS = [
   "new-ask",
   "history",
@@ -69,6 +70,14 @@ export function createAskPayload(question, mode, options = {}, attachments = [])
 export function getExpertViewFromHash(hash) {
   const view = hash.replace(/^#/u, "");
   return EXPERT_VIEWS.has(view) ? view : DEFAULT_EXPERT_VIEW;
+}
+
+/**
+ * @param {"simple" | "expert"} mode
+ * @returns {string}
+ */
+export function formatModeCookie(mode) {
+  return `atc_mode=${mode}; Path=/; Max-Age=${MODE_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
 }
 
 /**

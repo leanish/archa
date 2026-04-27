@@ -5,6 +5,7 @@ export type MarkdownRuntime = {
 export const DEFAULT_EXPERT_VIEW: string;
 export const DEFAULT_EXPERT_MODEL: string;
 export const DEFAULT_EXPERT_REASONING_EFFORT: string;
+export const MODE_COOKIE_MAX_AGE_SECONDS: number;
 export const EXPERT_VIEW_IDS: string[];
 export function createAskPayload(
   question: string,
@@ -13,6 +14,7 @@ export function createAskPayload(
   attachments?: Array<{ name: string; mediaType: string; contentBase64: string }>
 ): Record<string, unknown>;
 export function escapeHtml(value: string): string;
+export function formatModeCookie(mode: "simple" | "expert"): string;
 export function getExpertViewFromHash(hash: string): string;
 export function getProgressPanelSummary(pipeline: {
   stages: Record<string, {

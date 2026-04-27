@@ -5,6 +5,7 @@ import {
   DEFAULT_EXPERT_VIEW,
   escapeHtml,
   EXPERT_VIEW_IDS,
+  formatModeCookie,
   getProgressPanelSummary,
   getExpertViewFromHash,
   renderMarkdownHtml,
@@ -24,6 +25,10 @@ describe("client helpers", () => {
       expect(getExpertViewFromHash(`#${id}`)).toBe(id);
       expect(getExpertViewFromHash(id)).toBe(id);
     }
+  });
+
+  it("formats the sticky mode cookie", () => {
+    expect(formatModeCookie("expert")).toBe("atc_mode=expert; Path=/; Max-Age=31536000; SameSite=Lax");
   });
 
   it("escapes the five HTML metacharacters", () => {

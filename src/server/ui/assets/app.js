@@ -3,6 +3,7 @@
 import {
   createAskPayload,
   escapeHtml,
+  formatModeCookie,
   getExpertViewFromHash,
   getProgressPanelSummary,
   renderMarkdownHtml,
@@ -231,7 +232,7 @@ function bindModeSwitch(elements) {
 
       document.body.dataset.mode = mode;
       document.querySelector("[data-app-root]")?.setAttribute("data-mode", mode);
-      document.cookie = `atc_mode=${mode}; Path=/; Max-Age=31536000; SameSite=Lax`;
+      document.cookie = formatModeCookie(mode);
       const url = new URL(window.location.href);
       url.searchParams.set("mode", mode);
       history.replaceState(null, "", url);
