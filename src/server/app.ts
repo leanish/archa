@@ -11,7 +11,7 @@ import { loadConfig } from "../core/config/config.ts";
 import { registerApiAskRoutes } from "./routes/api-ask.ts";
 import { registerAskRoutes } from "./routes/ask.ts";
 import { DEFAULT_BODY_LIMIT_BYTES, HttpError, type ApiRouteDeps } from "./routes/api-helpers.ts";
-import { registerAuthRoutes, type AuthFetchFn } from "./routes/auth.ts";
+import { registerAuthRoutes, validateAuthConfig, type AuthFetchFn } from "./routes/auth.ts";
 import { registerHealthRoutes } from "./routes/health.ts";
 import { registerRepoRoutes } from "./routes/repos.ts";
 import { registerUiRoutes } from "./routes/ui.tsx";
@@ -34,6 +34,7 @@ export function createApp(
     authFetchFn
   }: CreateAppOptions
 ): Hono<ServerAppBindings> {
+  validateAuthConfig(env);
   const app = new Hono<ServerAppBindings>();
 
   app.use("*", cors({

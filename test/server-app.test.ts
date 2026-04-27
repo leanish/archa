@@ -63,6 +63,14 @@ describe("server app", () => {
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(body).toBe("{\"error\":\"config exploded\"}");
   });
+
+  it("fails fast when GitHub SSO configuration is partial", () => {
+    expect(() => createTestApp({
+      env: {
+        ATC_AUTH_SECRET: "test-secret"
+      }
+    })).toThrow(/Set all GitHub SSO env vars or none of them/u);
+  });
 });
 
 function createTestApp(

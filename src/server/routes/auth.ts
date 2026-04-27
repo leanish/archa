@@ -142,6 +142,16 @@ export function getAuthSession(cookieHeader: string | undefined, env: Environmen
   };
 }
 
+export function validateAuthConfig(env: Environment): void {
+  const config = readGithubConfig(env);
+  const configuredCount = [config.clientId, config.clientSecret, config.authSecret]
+    .filter(value => value !== "")
+    .length;
+  if (configuredCount !== 0 && configuredCount !== 3) {
+    throw new Error("Set all GitHub SSO env vars or none of them: ATC_GITHUB_CLIENT_ID, ATC_GITHUB_CLIENT_SECRET, and ATC_AUTH_SECRET.");
+  }
+}
+
 export function createSessionCookieValue(user: AuthUser, secret: string): string {
   const issuedAt = Math.floor(Date.now() / 1000);
   const payload = Buffer.from(JSON.stringify({

@@ -461,7 +461,7 @@ Open `http://127.0.0.1:8787` in a browser to use the built-in web UI. The UI str
 
 The default Simple mode focuses on asking a question, watching progress, and reading the answer. Expert mode is available with `?mode=expert`, for example `http://127.0.0.1:8787/?mode=expert`, or through the Simple/Expert switch in the UI. Expert mode adds the sidebar, repositories view, and controls for audience, model, reasoning effort, repo selection mode, sync, synthesis, and optional background shadow comparison. The selected mode is stored in the `atc_mode` cookie.
 
-File attachment controls read selected files in the browser and send them with `/ask` so the model can use them during synthesis. GitHub sign-in uses local OAuth endpoints when `ATC_GITHUB_CLIENT_ID`, `ATC_GITHUB_CLIENT_SECRET`, and `ATC_AUTH_SECRET` are configured; otherwise the UI leaves the button visible but reports that SSO is not configured.
+File attachment controls read selected files in the browser and send them with `/ask` so the model can use them during synthesis. GitHub sign-in uses local OAuth endpoints when `ATC_GITHUB_CLIENT_ID`, `ATC_GITHUB_CLIENT_SECRET`, and `ATC_AUTH_SECRET` are configured; otherwise the UI leaves the button visible but reports that SSO is not configured. If any one of those GitHub SSO env vars is set, all three must be set or the server fails fast at startup.
 
 ## Configuration overrides
 
